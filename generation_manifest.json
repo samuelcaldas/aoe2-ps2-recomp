@@ -1,0 +1,22 @@
+{
+  "target_id": "SLES-50282",
+  "elf_sha1": "f478e19f2059d52899b691483ef5c7522e30e17c",
+  "function_map_source": "ghidra_export",
+  "ps2recomp_commit": "eb8688b2fd191129f103a39543002c005b33409c",
+  "ghidra_version": "ghidra_12.1.4_PUBLIC",
+  "java_version": "openjdk version \"25.0.4.1\" 2026-08-18",
+  "exporter_script": "third_party/PS2Recomp/ps2xRecomp/tools/ghidra/ExportPS2Functions.java",
+  "exporter_script_sha256": "9302f951e52e507d400eca02707e45b6da3b9c4ed55cdffbe600eea6e557081e",
+  "function_map_sha256": "78c450bc1fdfd60846ea6682d68602d1ba4fc0f8ac9f38205b284e30e7ee5d1a",
+  "toml_sha256": "a55b70e8fcc456ba16d5cd9c1fb4c27c3542e37767d135753a8f9d12d2676c56",
+  "timestamp": "2026-10-19T16:44:40.260032+00:00",
+  "exported_function_count": 17420,
+  "generated_cpp_file_count": 17421,
+  "generated_output_dir": "generated/SLES-50282",
+  "artifact_paths": [
+    "analysis/generated/function_map.csv",
+    "analysis/generated/SLES-50282.toml",
+    "analysis/ghidra",
+    "generated/SLES-50282"
+  ]
+}

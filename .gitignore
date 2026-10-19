@@ -15,9 +15,37 @@ tmp/*
 coverage/
 dist/
 build/
+build-*/
 node_modules/
 vendor/
 .venv/
 venv/
 __pycache__/
 *.py[cod]
+
+# Game assets, binaries, and local ISO/disc dumps
+game/
+*.ELF
+*.elf
+*.ISO
+*.iso
+*.BIN
+*.bin
+
+# Third-party repositories (cloned, tracked via lock file)
+third_party/
+
+# Analysis outputs and Ghidra work
+analysis/generated/
+analysis/ghidra/
+analysis/ghidra_projects/
+analysis/exploratory_fallback/
+*.gzf
+*.rep/
+
+# Recompilation outputs
+recomp/generated/
+recomp/build/
+generated/
+*.recomp.cpp
+*.recomp.h
