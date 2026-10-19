@@ -18,7 +18,8 @@ python3 -m unittest tests.test_diagnostic_classifier.TestDiagnosticClassifier.te
 
 # C++ host scaffolding (C++20, CMake >= 3.20, Ninja)
 cmake -B build -G Ninja && cmake --build build
-ctest --test-dir build --output-on-failure        # single test: smoke_test
+ctest --test-dir build --output-on-failure        # tests: smoke_test, input_tests
+ctest --test-dir build -R input_tests --output-on-failure  # single test
 
 # Dependencies / provenance
 python3 tools/bootstrap_dependencies.py [--check]  # clone third_party/ at lockfile SHAs
@@ -40,7 +41,7 @@ Layers (C++ namespaces `aoe2::<layer>`, headers under `<layer>/include/aoe2/<lay
 - `core/` — single source of truth for target metadata. `core/target.py` (`SINGLE_TARGET`) is imported by every Python tool; `core/include/aoe2/core/target.hpp` mirrors it for C++. Keep both in sync. No host OS dependencies.
 - `runtime/` — `GuestMemory` (32 MB EE RAM) and the abstract `PlatformServices` (logging, clock).
 - `platform/desktop/` — concrete `PlatformServices` + `ActionRecorderInputSink`; `src/main.cpp` is the `aoe2_smoke_test` ctest executable. Future `platform/switch/`.
-- `input/` — platform-neutral `ActionType`/`ActionEvent`/`InputSink` (pointer + menu actions; Switch touch/controller maps onto these later).
+- `input/` — platform-neutral `ActionType`/`ActionEvent`/`InputSink`. The PS2 game supports a USB mouse; on Switch it is replaced by the touchscreen: `TouchGestureTranslator` (+ `SurfaceMapping`, host → 640x480 guest pixels) turns touches into pointer actions, and `GuestMouseAdapter` folds them into the per-frame mouse state the recompiled game polls. No USB/IOP/SIF emulation for the mouse (see `docs/architecture.md` §6).
 - `renderer/` — `IRenderer` + `NullRenderer` (headless). Design mandate: replace rendering at the high level (sprite/tile/UI draws mapped to `IRenderer`), **not** low-level GS emulation.
 - `tools/` — Python 3 stdlib-only, fail-fast scripts; each resolves `REPO_ROOT` and inserts it into `sys.path` to import `core.target`.
 

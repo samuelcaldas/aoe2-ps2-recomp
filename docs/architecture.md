@@ -47,6 +47,8 @@ To ensure separation of concerns and portability across systems, the project is 
     * Pointer actions: `PointerDown`, `PointerMove`, `PointerUp`, `PrimaryClick`, `SecondaryClick`, `Pan`, `Zoom`.
     * Menu/Game actions: `MenuAccept`, `MenuBack`, `Pause`.
   * `InputSink` interface abstracting event emission from event handling.
+  * `TouchGestureTranslator` + `SurfaceMapping`: touchscreen contacts → pointer actions in guest framebuffer coordinates.
+  * `GuestMouseAdapter`: folds pointer actions into the per-frame USB-mouse state the recompiled game polls (see §6).
 
 * **`renderer/`**:
   * Abstract graphics interface (`IRenderer`: `Initialize`, `BeginFrame`, `EndFrame`, `Shutdown`).
@@ -111,18 +113,94 @@ A key architectural mandate of this project is:
 
 ---
 
-## 6. Input Mapping and Future Switch Behavior
+## 6. Input: Replacing the PS2 USB Mouse with Switch Touch
 
-Age of Empires II is fundamentally designed for pointer-driven real-time strategy. The project decouples input through the `aoe2::input::ActionType` model:
+### 6.1 Background
 
-* **Desktop Host**:
-  * Mouse movement and clicks map directly to `PointerMove`, `PointerDown`, `PointerUp`, `PrimaryClick`, and `SecondaryClick`.
-  * Keyboard navigation and scroll wheel map to `Pan`, `Zoom`, `MenuAccept`, `MenuBack`, and `Pause`.
+The PS2 release of Age of Empires II supports a **USB mouse** in addition to the DualShock 2. On real hardware the mouse is serviced by an IOP-side USB driver and its state reaches the EE over SIF; the game polls it and draws its own cursor. The Switch port **replaces that mouse with the Switch touchscreen**: touch drives the same pointer path the game already uses for the mouse, so menus, unit selection, and commands keep their original PS2 mouse behavior.
 
-* **Nintendo Switch Homebrew (Future Architecture)**:
-  * **Handheld Mode**:
-    * Direct touchscreen interaction: tapping and dragging on the capacitive touch screen emit native `PointerDown`, `PointerMove`, `PointerUp`, and `PrimaryClick` events, providing an intuitive RTS control experience.
-    * Multi-touch gestures translate to `Pan` (two-finger scroll) and `Zoom` (pinch).
-  * **Docked Mode**:
-    * Full physical game controller operation: Left Stick controls an accelerated virtual cursor; Right Stick controls map panning; face buttons (A/B) handle `MenuAccept`/`MenuBack` and selection actions; triggers handle quick commands.
-    * Optional USB mouse and keyboard support enabled via libnx HID services when connected to the dock.
+Consistent with §5, this is a **high-level replacement**: the runtime does not emulate USB HID, the IOP USB stack, or SIF transport for the mouse. Instead the guest's mouse-state read is serviced directly from `GuestMouseAdapter`. The exact guest seam (the SIF RPC to the IOP mouse module vs. the game's own input-poll wrapper) is not yet identified in the recompiled output; it must be located without adding speculative stubs.
+
+### 6.2 Pipeline
+
+```
+Switch touchscreen (libnx HID, 1280x720)        Desktop mouse / touch (SDL)
+            │ TouchContact                                │ ActionEvent
+            ▼                                             │
+  TouchGestureTranslator ── SurfaceMapping ──▶ ActionEvent (guest pixels)
+                                                          │
+                                                          ▼
+                                                 GuestMouseAdapter
+                                                          │ GuestMouseState per frame
+                                                          ▼
+                                         recompiled game's mouse poll
+```
+
+* **`SurfaceMapping`** maps host coordinates onto the guest framebuffer (640x480 by default), assuming the 4:3 image is aspect-fit and centered. On the 1280x720 handheld screen that is a 960x720 image with 160 px pillarbox bars; touches on the bars clamp to the nearest edge.
+* **`TouchGestureTranslator`** (platform-neutral, unit-tested on desktop) turns contacts into pointer actions:
+
+  | Touch gesture | Action(s) | Guest mouse equivalent |
+  | :--- | :--- | :--- |
+  | Tap (< 500 ms, < 8 guest px movement) | `PointerMove` + `PrimaryClick` | Move cursor, left click |
+  | Long press (≥ 500 ms, stationary) | `PointerMove` + `SecondaryClick` | Move cursor, right click |
+  | One-finger drag | `PointerDown` → `PointerMove`… → `PointerUp` | Left-button drag (box select) |
+  | Two-finger drag | `Pan` (delta in guest px) | None — routed to a high-level camera hook |
+
+  Touch has no hover, so the cursor jumps to the contact point. Thresholds live in `GestureConfig`. Pinch is not mapped: the original game has no camera zoom.
+* **`GuestMouseAdapter`** keeps the cursor position and button state and queues every button transition, so a tap that presses and releases within one host frame is still observed by the guest as one pressed poll followed by one released poll. `Pan`, `Zoom`, and menu actions do not touch the guest mouse.
+
+### 6.3 Platform behavior
+
+* **Switch handheld**: the touchscreen is the primary pointer, via the pipeline above. A future `platform/switch/` only converts libnx touch states into `TouchContact`s.
+* **Switch docked** (no touchscreen): Left Stick drives an accelerated virtual cursor that emits the same pointer actions; Right Stick emits `Pan`; A/B map to `MenuAccept`/`MenuBack`. An optional USB mouse connected to the dock can feed `GuestMouseAdapter` directly.
+* **Desktop host**: the host mouse emits pointer actions straight into `GuestMouseAdapter`; touch input can be exercised through the same translator for testing.
+
+---
+
+## 7. Widescreen (Future Option)
+
+> **Status:** design note only. It is out of scope for the bootstrap phase (see README non-goals: no asset upscaling and no gameplay-visible changes). Nothing here is implemented.
+
+### 7.1 How PC widescreen mods work (reference)
+
+On PC, the community patch AoE2Wide patches the resolution constants (`1280`, `1024`, …) inside `age2_x1.exe` and rebuilds the fixed-size interface SLPs in `interfac.drs` at the new size. The engine is a 2D isometric renderer with no camera zoom. A wider viewport therefore shows more of the map instead of stretching it. What breaks at new resolutions is hard-coded constants and pre-sized interface bitmaps, not the world renderer. Age of Empires II (2013), formerly the HD Edition, supports arbitrary resolutions natively.
+
+### 7.2 Widescreen playfield
+
+Because rendering is replaced at a high level (§5), widescreen does not need GS changes:
+
+1. Locate the guest's viewport and screen-size values in the recompiled code. These are the PS2 equivalent of the constants AoE2Wide patches: map view rectangle, scroll limits, visible-tile culling bounds, cursor clamp. Override them through runtime hooks, not by editing generated sources.
+2. Widen the guest extent (e.g. 640x480 → 854x480 for 16:9) so the game simulates and culls a wider view, and `IRenderer` draws it at native host resolution.
+3. Input keeps working unchanged: `SurfaceMapping` takes the guest extent as a parameter, so a 16:9 guest fills the 1280x720 Switch screen without pillarbox bars. `GuestMouseAdapter` clamps to the new extent.
+
+Gameplay impact (more of the map visible) matches the PC widescreen mods. It must be an optional setting, and the default stays 4:3 for parity with the original PS2 game.
+
+### 7.3 HD and widescreen assets from Age of Empires II (2013)
+
+Age of Empires II (2013) is the planned optional source of higher-resolution and widescreen-ready assets. Its openage converter ID is `HD`. Rationale:
+
+* It is the closest data lineage to the original game: the same SLP sprite format, the same graphic/unit identifiers, and it is supported by the openage converter. That keeps a PS2 → PC asset correlation tractable. Definitive Edition (`DE2`) has redrawn art in a different format (SMX) and is a later, separate option.
+* Its interface is built for arbitrary and widescreen resolutions, which gives a reference for a widescreen HUD instead of stretching 4:3 bitmaps the way AoE2Wide does.
+
+Rules, following the same provenance model as `AOK.ELF`:
+
+* The user must own the 2013 edition. Its files are supplied and extracted locally, never committed or distributed. Place them under `game/` (already gitignored). Record only hashes, counts and versions in tracked metadata.
+* Add an import/verify tool equivalent to `tools/import_owned_game.py` (fail-fast, checksum-verified), and an untracked asset-manifest entry.
+* PS2 assets remain the baseline. The HD set is an override layer: the renderer resolves each guest asset reference through a correlation table (PS2 asset → 2013-edition asset). It falls back to the PS2 asset whenever no verified match exists.
+* No code or data from unofficial disassembly projects (clean-room rule). Asset correlation must be derived from the user's own files.
+
+### 7.4 Widescreen HUD
+
+The PS2 HUD (top resource bar, bottom command and minimap panel) is laid out for a 4:3 screen. Options, in order of preference:
+
+1. **Re-laid-out HUD.** The renderer anchors HUD panels to the screen edges and fills the extra width with panel graphics from the 2013 edition's widescreen interface.
+2. **Centered 4:3 HUD.** The original HUD stays 4:3 and centered over a widescreen playfield, with filler art on the sides. This needs no new assets.
+3. **Stretched HUD.** Not acceptable, because it distorts sprites and fonts.
+
+**Input constraint:** the game's own logic still hit-tests HUD buttons in its original HUD coordinates. If the renderer moves HUD panels, the input path must apply the inverse transform: a HUD-layout mapping between `SurfaceMapping` and `GuestMouseAdapter` that maps a touch on a relocated panel back to that panel's original guest coordinates. Playfield touches map directly to the widened world view. Every relocated HUD region therefore needs a matching entry in both the render layout and the input layout.
+
+### 7.5 Open questions
+
+* Where the PS2 build stores its viewport, scroll-limit and culling constants, and whether all of them are runtime-overridable without touching generated code.
+* How the PS2 sprite/graphic identifiers correspond to those in the 2013 edition, and how much of the PS2 interface differs from the PC interface.
+* How the 2013 edition composes its HUD at arbitrary widths (tiled filler vs. per-resolution assets). This must be verified against the user's own installation before choosing HUD option 1.

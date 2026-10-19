@@ -51,14 +51,18 @@ class DiagnosticClassifier:
         if any(term in line_lower for term in ["requires compiler and library support", "iso c++", "c++20", "-std=c++", "unsupported compiler"]):
             return BlockerCategory.HOST_COMPILER_OR_STANDARD_LIBRARY_INCOMPATIBILITY
 
-        # 5. Missing PS2Recomp runtime API (members on PS2Runtime, missing runtime macros)
-        if ("'class ps2runtime'" in line_lower or "ps2runtime" in line_lower) and any(term in line_lower for term in ["has no member", "not declared in this scope", "undefined member"]):
+        # 5. Missing PS2Recomp runtime API (members on PS2Runtime, missing runtime macros, undefined reference to PS2Runtime::*)
+        if ("'class ps2runtime'" in line_lower or "ps2runtime" in line_lower) and any(term in line_lower for term in ["has no member", "not declared in this scope", "undefined member", "undefined reference to `ps2runtime::", "undefined reference to \"ps2runtime::", "referência não definida para \"ps2runtime::", "referência não definida para `ps2runtime::"]):
             return BlockerCategory.MISSING_PS2RECOMP_RUNTIME_API
 
         # 6. Unresolved generated symbol (undefined reference to FUN_, entry_, sub_)
         if any(term in line_lower for term in ["undefined reference", "referência não definida"]):
             if any(prefix in line for prefix in ["FUN_", "entry_", "sub_", "func_", "j_func_"]):
                 return BlockerCategory.UNRESOLVED_GENERATED_SYMBOL
+            if "ps2runtime::" in line_lower:
+                return BlockerCategory.MISSING_PS2RECOMP_RUNTIME_API
+            if "g_ps2recompiledfunctiontable" in line_lower:
+                return BlockerCategory.MISSING_PS2RECOMP_RUNTIME_API
             if "main" in line_lower or "collect2" in line_lower or "_start" in line_lower:
                 return BlockerCategory.LINKER_OR_BUILD_GRAPH
             return BlockerCategory.UNRESOLVED_GENERATED_SYMBOL

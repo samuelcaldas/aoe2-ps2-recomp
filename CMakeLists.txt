@@ -8,6 +8,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Platform-neutral interface library
 add_library(aoe2_interfaces STATIC
     input/src/actions.cpp
+    input/src/guest_mouse.cpp
+    input/src/surface_mapping.cpp
+    input/src/touch_gestures.cpp
     renderer/src/null_renderer.cpp
     runtime/src/guest_memory.cpp
 )
@@ -71,3 +74,11 @@ endif()
 # Focused C++ interface link and behavior test
 enable_testing()
 add_test(NAME smoke_test COMMAND aoe2_smoke_test)
+
+# Touch-to-guest-mouse input translation tests
+add_executable(aoe2_input_tests
+    tests/cpp/input_tests.cpp
+)
+
+target_link_libraries(aoe2_input_tests PRIVATE aoe2_interfaces)
+add_test(NAME input_tests COMMAND aoe2_input_tests)
