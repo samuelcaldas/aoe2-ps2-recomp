@@ -42,11 +42,13 @@ Layers (C++ namespaces `aoe2::<layer>`, headers under `<layer>/include/aoe2/<lay
 - `core/` — single source of truth for target metadata. `core/target.py` (`SINGLE_TARGET`) is imported by every Python tool; `core/include/aoe2/core/target.hpp` mirrors it for C++. Keep both in sync. No host OS dependencies.
 - `runtime/` — `GuestMemory` (32 MB EE RAM) and the abstract `PlatformServices` (logging, clock).
 - `platform/desktop/` — concrete `PlatformServices` + `ActionRecorderInputSink`; `src/main.cpp` is the `aoe2_smoke_test` ctest executable. Future `platform/switch/`.
-- `input/` — platform-neutral `ActionType`/`ActionEvent`/`InputSink`. The PS2 game supports a USB mouse; on Switch it is replaced by the touchscreen: `TouchGestureTranslator` (+ `SurfaceMapping`, host → 640x480 guest pixels) turns touches into pointer actions, and `GuestMouseAdapter` folds them into the per-frame mouse state the recompiled game polls. No USB/IOP/SIF emulation for the mouse (see `docs/architecture.md` §6).
+- `input/` — platform-neutral `ActionType`/`ActionEvent`/`InputSink`. The PS2 game supports a USB mouse; on Switch handheld it is replaced by the touchscreen: `TouchGestureTranslator` (+ `SurfaceMapping`, host → 640x480 guest pixels) turns touches into pointer actions, and `GuestMouseAdapter` folds them into the per-frame mouse state the recompiled game polls. Docked, a USB mouse and keyboard on the dock mirror the PS2 peripherals: `UsbMouseTranslator` (relative reports → the same pointer actions) and `GuestKeyboardAdapter` (USB HID boot-protocol reports); `SourcesFor(OperationMode)` picks the sources per mode. No USB/IOP/SIF emulation (see `docs/architecture.md` §6).
 - `renderer/` — `IRenderer` + `NullRenderer` (headless). Design mandate: replace rendering at the high level (sprite/tile/UI draws mapped to `IRenderer`), **not** low-level GS emulation.
 - `tools/` — Python 3 stdlib-only, fail-fast scripts; each resolves `REPO_ROOT` and inserts it into `sys.path` to import `core.target`.
 
 See `docs/architecture.md` (layer rationale, EE/VU/GS/IOP notes) and `docs/ghidra-ps2recomp-workflow.md` (exact pipeline commands, TOML config, manifest schema).
+
+`docs/sot/prior-art-and-reuse.md` is the source of truth for prior art and what may be reused: PS2Recomp already supports ARM through sse2neon (`USE_SSE2NEON`; the ARM64 gate should reuse it, not add a SIMD layer), the God of War native runtime (AOT VU1/IRX, native GS) via the GPL-3.0 `KIexster/god-of-war-recomp`, and `SwitchWakerHD` (MPL-2.0, libnx + deko3d) as the Switch backend model. Check each source's license there before copying code.
 
 ## Legal / provenance rules (enforced by tooling — do not weaken)
 
@@ -54,6 +56,6 @@ See `docs/architecture.md` (layer rationale, EE/VU/GS/IOP notes) and `docs/ghidr
 - Tracked metadata (`generation_manifest.json`, reports from `classify_diagnostics.py`) must contain only hashes/counts/versions — no disassembly, function names, hex addresses, or code snippets.
 - The ELF is stripped and loads code and data in one RWX segment. `tools/ghidra/MarkDataRegions.java` runs before the exporter and makes return-free regions (> 64 KiB without `jr $ra`) non-executable; `tools/verify_function_map.py` must report zero violations before generation. Fix oversized or data-spanning entries in the Ghidra step, never by editing generated C++ or adding TOML skips.
 - The function map must come from Ghidra (`function_map_source: "ghidra_export"`). The PS2Recomp `ps2_analyzer` fallback is for local bring-up only; the manifest verifier rejects `fallback_analyzer`, and `run_ps2recomp_pipeline.py` stops if Ghidra is missing rather than substituting it.
-- Clean-room: no code, headers, or symbols from unofficial disassembly projects.
+- Clean-room: no code, headers, or symbols from unofficial disassembly projects. **Exception authorized by the owner:** their matching AoE2 decompilation (`samuelcaldas/age-of-empires-2-decomp`, local `../aoe`) may be used when needed, e.g. to locate and hook mouse, keyboard, and other peripheral handling or engine behavior. Do not modify it from here, and tracked files still must not contain game function names, addresses, or code snippets (rules in `docs/sot/prior-art-and-reuse.md` §3).
 - Third-party deps are pinned in `third_party_provenance.lock.json` (PS2Recomp is GPL-3.0 — runtime code linking it inherits GPL obligations; libnx ISC; deko3d Zlib). Bump SHAs only via `bootstrap_dependencies.py`.
 - The PS2Recomp TOML stays minimal: no speculative `stubs`, `skip`, or instruction patches.

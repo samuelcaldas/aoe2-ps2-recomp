@@ -1,6 +1,9 @@
+#include <aoe2/input/guest_keyboard.hpp>
 #include <aoe2/input/guest_mouse.hpp>
+#include <aoe2/input/input_routing.hpp>
 #include <aoe2/input/surface_mapping.hpp>
 #include <aoe2/input/touch_gestures.hpp>
+#include <aoe2/input/usb_mouse.hpp>
 
 #include <cmath>
 #include <cstdlib>
@@ -150,6 +153,148 @@ void TestGuestMouseLongPressIsRightButton() {
     CHECK(!mouse.NextFrame().right);
 }
 
+HostMouseReport MouseReport(float dx, float dy, uint32_t buttons, uint64_t t = 0) {
+    return HostMouseReport{dx, dy, buttons, t};
+}
+
+void TestUsbMouseMotionMovesCursorWithinGuest() {
+    RecordingSink sink;
+    UsbMouseTranslator mouse(sink, kGuestFramebuffer, GuestPoint{320.0f, 240.0f}, MouseConfig{2.0f});
+    mouse.Submit(MouseReport(10.0f, -5.0f, 0));
+    CHECK(sink.events.size() == 1);
+    CHECK(sink.events[0].type == ActionType::PointerMove);
+    CHECK(Near(sink.events[0].x, 340.0f) && Near(sink.events[0].y, 230.0f));
+    mouse.Submit(MouseReport(10000.0f, 10000.0f, 0));
+    CHECK(Near(sink.events.back().x, 639.0f) && Near(sink.events.back().y, 479.0f));
+}
+
+void TestUsbMouseIdleReportEmitsNothing() {
+    RecordingSink sink;
+    UsbMouseTranslator mouse(sink, kGuestFramebuffer, GuestPoint{});
+    mouse.Submit(MouseReport(0.0f, 0.0f, 0));
+    CHECK(sink.events.empty());
+}
+
+void TestUsbMouseLeftButtonDrags() {
+    RecordingSink sink;
+    UsbMouseTranslator mouse(sink, kGuestFramebuffer, GuestPoint{100.0f, 100.0f});
+    mouse.Submit(MouseReport(0.0f, 0.0f, kMouseButtonLeft));
+    mouse.Submit(MouseReport(5.0f, 0.0f, kMouseButtonLeft));
+    mouse.Submit(MouseReport(0.0f, 0.0f, 0));
+    CHECK(sink.events.size() == 3);
+    CHECK(sink.events[0].type == ActionType::PointerDown);
+    CHECK(sink.events[1].type == ActionType::PointerMove);
+    CHECK(sink.events[2].type == ActionType::PointerUp);
+    CHECK(Near(sink.events[2].x, 105.0f));
+}
+
+void TestUsbMouseRightButtonIsSecondaryClickOnPress() {
+    RecordingSink sink;
+    UsbMouseTranslator mouse(sink, kGuestFramebuffer, GuestPoint{50.0f, 60.0f});
+    mouse.Submit(MouseReport(0.0f, 0.0f, kMouseButtonRight));
+    mouse.Submit(MouseReport(0.0f, 0.0f, 0));
+    CHECK(sink.events.size() == 1);
+    CHECK(sink.events[0].type == ActionType::SecondaryClick);
+    CHECK(Near(sink.events[0].x, 50.0f) && Near(sink.events[0].y, 60.0f));
+}
+
+void TestUsbMouseFeedsGuestMouseAdapter() {
+    GuestMouseAdapter guest(GuestPoint{10.0f, 10.0f});
+    UsbMouseTranslator mouse(guest, kGuestFramebuffer, GuestPoint{10.0f, 10.0f});
+    mouse.Submit(MouseReport(0.0f, 0.0f, kMouseButtonLeft));
+    mouse.Submit(MouseReport(0.0f, 0.0f, 0));
+    CHECK(guest.NextFrame().left);
+    CHECK(!guest.NextFrame().left);
+}
+
+void TestUsbMouseRejectsNonPositiveSensitivity() {
+    RecordingSink sink;
+    bool threw = false;
+    try {
+        UsbMouseTranslator(sink, kGuestFramebuffer, GuestPoint{}, MouseConfig{0.0f});
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    CHECK(threw);
+}
+
+constexpr uint8_t kUsageA = 0x04;
+constexpr uint8_t kUsageB = 0x05;
+constexpr uint8_t kUsageLeftShift = 0xE1;
+
+void TestKeyboardReportsHeldKeysInPressOrder() {
+    GuestKeyboardAdapter keyboard;
+    keyboard.Submit(KeyEvent{kUsageB, true});
+    keyboard.Submit(KeyEvent{kUsageA, true});
+    keyboard.NextFrame();
+    const GuestKeyboardState state = keyboard.NextFrame();
+    CHECK(state.keys[0] == kUsageB && state.keys[1] == kUsageA && state.keys[2] == 0);
+    CHECK(state.modifiers == 0);
+}
+
+void TestKeyboardModifiersUseBitsNotSlots() {
+    GuestKeyboardAdapter keyboard;
+    keyboard.Submit(KeyEvent{kUsageLeftShift, true});
+    const GuestKeyboardState state = keyboard.NextFrame();
+    CHECK(state.modifiers == 0x02);
+    CHECK(state.keys[0] == 0);
+}
+
+void TestKeyboardQuickTapVisibleForOnePoll() {
+    GuestKeyboardAdapter keyboard;
+    keyboard.Submit(KeyEvent{kUsageA, true});
+    keyboard.Submit(KeyEvent{kUsageA, false});
+    CHECK(keyboard.NextFrame().keys[0] == kUsageA);
+    CHECK(keyboard.NextFrame().keys[0] == 0);
+    CHECK(keyboard.NextFrame().keys[0] == 0);
+}
+
+void TestKeyboardSeventhKeyReportsRollOver() {
+    GuestKeyboardAdapter keyboard;
+    for (uint8_t usage = kUsageA; usage < kUsageA + 7; ++usage) {
+        keyboard.Submit(KeyEvent{usage, true});
+    }
+    GuestKeyboardState last;
+    for (int poll = 0; poll < 7; ++poll) {
+        last = keyboard.NextFrame();
+    }
+    for (uint8_t key : last.keys) {
+        CHECK(key == kUsageErrorRollOver);
+    }
+}
+
+void TestKeyboardIgnoresRepeatsAndUnknownReleases() {
+    GuestKeyboardAdapter keyboard;
+    keyboard.Submit(KeyEvent{kUsageA, true});
+    keyboard.Submit(KeyEvent{kUsageA, true});
+    keyboard.Submit(KeyEvent{kUsageB, false});
+    keyboard.Submit(KeyEvent{0, true});
+    CHECK(keyboard.NextFrame().keys[0] == kUsageA);
+    const GuestKeyboardState steady = keyboard.NextFrame();
+    CHECK(steady.keys[0] == kUsageA && steady.keys[1] == 0);
+}
+
+void TestDiffPressedKeysReportsReleasesThenPresses() {
+    std::bitset<256> previous;
+    std::bitset<256> current;
+    previous.set(kUsageA);
+    current.set(kUsageB);
+    const std::vector<KeyEvent> events = DiffPressedKeys(previous, current);
+    CHECK(events.size() == 2);
+    CHECK(events[0].usage == kUsageA && !events[0].pressed);
+    CHECK(events[1].usage == kUsageB && events[1].pressed);
+    CHECK(DiffPressedKeys(current, current).empty());
+}
+
+void TestRoutingHandheldUsesTouchDockedUsesUsb() {
+    const InputSources handheld = SourcesFor(OperationMode::Handheld);
+    CHECK(handheld.touchscreen && handheld.controller);
+    CHECK(!handheld.usb_mouse && !handheld.usb_keyboard);
+    const InputSources docked = SourcesFor(OperationMode::Docked);
+    CHECK(!docked.touchscreen && docked.controller);
+    CHECK(docked.usb_mouse && docked.usb_keyboard);
+}
+
 } // namespace
 
 int main() {
@@ -163,6 +308,19 @@ int main() {
     TestGuestMouseSeesTapAcrossTwoFrames();
     TestGuestMouseHoldsButtonDuringDrag();
     TestGuestMouseLongPressIsRightButton();
+    TestUsbMouseMotionMovesCursorWithinGuest();
+    TestUsbMouseIdleReportEmitsNothing();
+    TestUsbMouseLeftButtonDrags();
+    TestUsbMouseRightButtonIsSecondaryClickOnPress();
+    TestUsbMouseFeedsGuestMouseAdapter();
+    TestUsbMouseRejectsNonPositiveSensitivity();
+    TestKeyboardReportsHeldKeysInPressOrder();
+    TestKeyboardModifiersUseBitsNotSlots();
+    TestKeyboardQuickTapVisibleForOnePoll();
+    TestKeyboardSeventhKeyReportsRollOver();
+    TestKeyboardIgnoresRepeatsAndUnknownReleases();
+    TestDiffPressedKeysReportsReleasesThenPresses();
+    TestRoutingHandheldUsesTouchDockedUsesUsb();
     if (g_failures != 0) {
         std::cerr << g_failures << " check(s) failed" << std::endl;
         return EXIT_FAILURE;

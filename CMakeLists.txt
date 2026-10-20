@@ -8,9 +8,12 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Platform-neutral interface library
 add_library(aoe2_interfaces STATIC
     input/src/actions.cpp
+    input/src/guest_keyboard.cpp
     input/src/guest_mouse.cpp
+    input/src/input_routing.cpp
     input/src/surface_mapping.cpp
     input/src/touch_gestures.cpp
+    input/src/usb_mouse.cpp
     renderer/src/null_renderer.cpp
     runtime/src/guest_memory.cpp
 )

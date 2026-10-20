@@ -152,7 +152,10 @@ Switch touchscreen (libnx HID, 1280x720)        Desktop mouse / touch (SDL)
 ### 6.3 Platform behavior
 
 * **Switch handheld**: the touchscreen is the primary pointer, via the pipeline above. A future `platform/switch/` only converts libnx touch states into `TouchContact`s.
-* **Switch docked** (no touchscreen): Left Stick drives an accelerated virtual cursor that emits the same pointer actions; Right Stick emits `Pan`; A/B map to `MenuAccept`/`MenuBack`. An optional USB mouse connected to the dock can feed `GuestMouseAdapter` directly.
+* **Switch docked** (no touchscreen): Left Stick drives an accelerated virtual cursor that emits the same pointer actions; Right Stick emits `Pan`; A/B map to `MenuAccept`/`MenuBack`. A USB mouse and keyboard plugged into the dock mirror the PS2's USB peripherals (`SourcesFor(OperationMode::Docked)` enables them; handheld uses touch + Joy-Cons):
+  * **`UsbMouseTranslator`** takes libnx-style relative reports (`HostMouseReport`: motion in counts plus a button mask), keeps an absolute cursor clamped to the guest framebuffer (sensitivity in `MouseConfig`), and emits the same actions as touch: left button `PointerDown`/`PointerMove`/`PointerUp`, right button `SecondaryClick` on press. Its sink is normally `GuestMouseAdapter`. The wheel is not mapped.
+  * **`GuestKeyboardAdapter`** produces the USB HID boot-protocol report a USB keyboard gives the PS2 (modifier bits for usages `0xE0`–`0xE7`, up to six keys in press order, `ErrorRollOver` in every slot beyond six) and queues every transition so a sub-frame tap is seen for one poll. `DiffPressedKeys` turns two host key snapshots indexed by HID usage (libnx `HidKeyboardState` uses the same indexing) into transitions.
+  * As with the mouse, there is no USB HID, IOP USB stack, or SIF emulation; the guest seam where the game reads its keyboard is located through the owner's AoE2 decompilation (see `docs/sot/prior-art-and-reuse.md` §3).
 * **Desktop host**: the host mouse emits pointer actions straight into `GuestMouseAdapter`; touch input can be exercised through the same translator for testing.
 
 ---

@@ -10,7 +10,7 @@
 ### Objective
 To build a clean, reproducible, and legally sound foundation for a native recompilation port of **Age of Empires II: The Age of Kings** (PlayStation 2 PAL edition, serial `SLES-50282`), initially targeting desktop x86-64/Linux, followed by an ARM64 portability gate, and ultimately a Nintendo Switch homebrew backend.
 
-The PS2 release supports a USB mouse; on Switch that mouse input is replaced by the **touchscreen** (tap = left click, long press = right click, drag = box select, two-finger drag = pan) through a high-level input adapter rather than USB/IOP emulation. See `docs/architecture.md` §6.
+The PS2 release supports a USB mouse; on Switch that mouse input is replaced by the **touchscreen** (tap = left click, long press = right click, drag = box select, two-finger drag = pan) through a high-level input adapter rather than USB/IOP emulation. Docked, a USB mouse and keyboard plugged into the dock work like the PS2 USB peripherals. See `docs/architecture.md` §6.
 
 ### Explicit Non-Goals
 - No distribution or inclusion of copyrighted game code, binary executables, ISO images, or proprietary assets.
@@ -61,7 +61,7 @@ aoe2-ps2-recomp/
 ├── platform/                      # Host platform implementations
 │   └── desktop/                   # Desktop Linux x86-64 platform layer & smoke test
 ├── input/                         # Platform-neutral input actions & interfaces
-│   ├── include/aoe2/input/        # Pointer/menu actions, touch gestures, guest mouse adapter
+│   ├── include/aoe2/input/        # Pointer/menu actions, touch gestures, USB mouse/keyboard, guest adapters
 │   └── src/                       # Action utilities
 ├── renderer/                      # Graphics abstraction interfaces
 │   ├── include/aoe2/renderer/     # IRenderer, FramebufferInfo
@@ -71,7 +71,7 @@ aoe2-ps2-recomp/
 │   ├── verify_owned_game.py       # Local game validation tool
 │   ├── bootstrap_dependencies.py  # Dependency cloner & lockfile manager
 │   └── validate_ghidra_env.py     # GHIDRA_HOME validation script
-├── docs/                          # Documentation & technical specifications
+├── docs/                          # Documentation & technical specifications (docs/sot: prior art & reuse rules)
 │   └── architecture.md            # System layers and technical rationale
 └── tests/                         # Automated unit & behavioral tests
 ```
