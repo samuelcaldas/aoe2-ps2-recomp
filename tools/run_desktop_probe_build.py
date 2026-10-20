@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+import os
 import re
 import subprocess
 import sys
@@ -72,6 +73,11 @@ def build_command(args: argparse.Namespace) -> list[str]:
     return scope + ["--", "nice", "-n", "10", "ionice", "-c3"] + ninja
 
 
+def build_environment() -> dict:
+    """Return the build environment with the C locale, so diagnostics match the classifier's English patterns."""
+    return {**os.environ, "LC_ALL": "C"}
+
+
 def check_preflight(args: argparse.Namespace) -> None:
     """Fail fast before any heavy work; raises PreflightError."""
     for tool in ("systemd-run", "ninja", "pgrep", "nice", "ionice"):
@@ -119,7 +125,8 @@ def stream_build(command: list[str]) -> tuple[int, str]:
     """Run the build, tee full output to the ignored log, print a compact digest."""
     last_progress = ""
     with LOG_PATH.open("w", buffering=1) as log, subprocess.Popen(
-        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace"
+        command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace",
+        env=build_environment(),
     ) as process:
         for line in process.stdout:
             log.write(line)

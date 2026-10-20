@@ -16,6 +16,11 @@ class TestRunDesktopProbeBuild(unittest.TestCase):
         self.assertIn("-l3", command)
         self.assertIn("--scope", command)
 
+    def test_build_environment_forces_english_diagnostics(self):
+        environment = runner.build_environment()
+        self.assertEqual(environment["LC_ALL"], "C")
+        self.assertIn("PATH", environment)
+
     def test_preflight_fails_when_not_enough_memory(self):
         args = runner.parse_args(["--min-available-gib", "1000"])
         with self.assertRaises(runner.PreflightError):
