@@ -4,6 +4,8 @@
 
 This project is a native recompilation port of **Age of Empires II: The Age of Kings** (PlayStation 2 PAL edition, serial `SLES-50282`), targeting modern platforms without emulating an entire PS2 hardware stack in software at runtime.
 
+**Primary target: Nintendo Switch (homebrew, libnx + deko3d).** The shipped product is the Switch build. Desktop x86-64/Linux is the host where the runtime is developed, debugged, and validated first; ARM64 is the portability gate in between (§3). The work order does not change.
+
 The pipeline architecture proceeds as follows:
 
 ```
@@ -73,7 +75,7 @@ Developing a native recompilation requires rapid iterative debugging: inspecting
 
 1. **Development Velocity**: Desktop Linux x86-64 provides immediate compilation, standard debuggers (`gdb`, `lldb`, `valgrind`, AddressSanitizer, UBSan), and instantaneous iteration cycles.
 2. **Deterministic Baseline**: Once the game loops and memory behavior are proven sound and deterministic on desktop x86-64, porting to ARM64 validates endianness assumptions, alignment constraints, and instruction behavior on weakly ordered memory architectures.
-3. **Switch as a Downstream Target**: Homebrew targets (Nintendo Switch via libnx/deko3d) require cross-compilation toolchains (devkitPro), specialized deployment setups, and hardware/emulator debugging. Attempting a Switch target before stabilizing runtime abstractions on desktop results in compounded failure modes.
+3. **Switch as the Primary Target, Reached Last**: Nintendo Switch homebrew (libnx/deko3d) is the shipping target, but it requires cross-compilation toolchains (devkitPro), specialized deployment setups, and hardware/emulator debugging. Attempting it before stabilizing runtime abstractions on desktop results in compounded failure modes, so it is built after the desktop and ARM64 gates pass.
 
 ---
 

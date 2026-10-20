@@ -8,7 +8,7 @@
 ## 1. Project Objective & Non-Goals
 
 ### Objective
-To build a clean, reproducible, and legally sound foundation for a native recompilation port of **Age of Empires II: The Age of Kings** (PlayStation 2 PAL edition, serial `SLES-50282`), initially targeting desktop x86-64/Linux, followed by an ARM64 portability gate, and ultimately a Nintendo Switch homebrew backend.
+To build a clean, reproducible, and legally sound foundation for a native recompilation port of **Age of Empires II: The Age of Kings** (PlayStation 2 PAL edition, serial `SLES-50282`), with **Nintendo Switch homebrew as the primary target**. Desktop x86-64/Linux is the validation host where the port is developed and tested first, followed by an ARM64 portability gate and then the Switch backend.
 
 The PS2 release supports a USB mouse; on Switch that mouse input is replaced by the **touchscreen** (tap = left click, long press = right click, drag = box select, two-finger drag = pan) through a high-level input adapter rather than USB/IOP emulation. Docked, a USB mouse and keyboard plugged into the dock work like the PS2 USB peripherals. See `docs/architecture.md` §6.
 
