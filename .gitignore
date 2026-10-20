@@ -49,3 +49,6 @@ recomp/build/
 generated/
 *.recomp.cpp
 *.recomp.h
+
+# Screenshots and captures from validation runs
+.playwright-mcp/
