@@ -102,6 +102,11 @@ class TestViolationDetection(GuardrailFixture):
         start = LOAD_ADDRESS + 32 + 512 * 4
         self.assertEqual(self.violations_for([("real_function", start, start + 32)], self.policy()), [])
 
+    def test_tail_call_thunk_right_after_data_is_allowed(self):
+        self.write_image(code_words(1, 8) + [DATA_WORD] * 512 + [NOP] * 4 + code_words(1, 8))
+        start = LOAD_ADDRESS + 32 + 512 * 4
+        self.assertEqual(self.violations_for([("thunk", start, start + 16)], self.policy()), [])
+
     def test_small_entry_without_return_is_allowed(self):
         self.write_image([DATA_WORD] * 16 + code_words(1, 8))
         rows = [("tail_call_stub", LOAD_ADDRESS, LOAD_ADDRESS + 16)]

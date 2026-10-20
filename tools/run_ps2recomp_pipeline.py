@@ -32,6 +32,7 @@ from tools import install_ghidra_ee_extension as ee_extension
 from tools import verify_function_map as function_map_guardrail
 
 DATA_REGION_SCRIPT = REPO_ROOT / "tools" / "ghidra" / "MarkDataRegions.java"
+BODY_TRIM_SCRIPT = REPO_ROOT / "tools" / "ghidra" / "TrimDisjointFunctionBodies.java"
 
 def compute_sha1(filepath: Path) -> str:
     h = hashlib.sha1()
@@ -78,6 +79,7 @@ def build_ghidra_command(analyze_headless: Path, project_dir: Path, elf_path: Pa
         "-import", str(elf_path), "-overwrite",
         "-processor", ee_extension.LANGUAGE_ID,
         "-scriptPath", script_path,
+        "-postScript", BODY_TRIM_SCRIPT.name,
         "-postScript", DATA_REGION_SCRIPT.name, max_return_gap,
         "-postScript", exporter_script.name, str(toml_config), str(csv_map),
     ]
@@ -187,6 +189,10 @@ def main():
         )
         sys.exit(1)
 
+    if not BODY_TRIM_SCRIPT.exists():
+        sys.stderr.write(f"Error: Body trim script missing: {BODY_TRIM_SCRIPT}\n")
+        sys.exit(1)
+
     if not DATA_REGION_SCRIPT.exists():
         sys.stderr.write(f"Error: Data region script missing: {DATA_REGION_SCRIPT}\n")
         sys.exit(1)
@@ -255,6 +261,7 @@ def main():
         "generated_output_dir": str(output_cpp_dir.relative_to(REPO_ROOT)),
         "data_region_script": str(DATA_REGION_SCRIPT.relative_to(REPO_ROOT)),
         "data_region_script_sha256": compute_sha256(DATA_REGION_SCRIPT),
+        "body_trim_script_sha256": compute_sha256(BODY_TRIM_SCRIPT),
         "function_map_guardrail": guardrail_record,
         "ghidra_language": ee_extension.LANGUAGE_ID,
         "ghidra_extension_sha256": ee_extension.installed_digest(extensions_dir),

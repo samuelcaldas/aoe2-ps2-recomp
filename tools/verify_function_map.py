@@ -8,8 +8,9 @@ Every entry is checked against the owned ELF:
 - it must not exceed a maximum size;
 - it must not contain a stretch without any `jr $ra` return longer than a
   maximum (real code returns far more often than that);
-- an entry without any return must not sit inside such a return-free region
-  (catches small entries created from data words that look like pointers).
+- an entry without any return must reach one within that maximum (catches
+  small entries created from data words that look like pointers, while
+  allowing tail-call thunks right before real code).
 
 Exit codes: 0 map ok, 1 violations found, 2 invalid input.
 Output reports counts and entry names only; it never prints code bytes.
@@ -123,15 +124,18 @@ class LoadImage:
             cursor = return_address + RETURN_SEQUENCE_BYTES
         return max(longest, end - cursor)
 
-    def enclosing_return_free_span(self, start: int, end: int) -> int:
-        """Return the size of the return-free region around [start, end), or 0 if the range holds a return."""
+    def distance_to_next_return(self, start: int, end: int) -> int:
+        """Return how far code starting at `start` runs before a return, or 0 if [start, end) holds one.
+
+        Data rarely contains the `jr $ra` word, so an entry that is far from any
+        return is data; a tail-call thunk just before real code is close to one.
+        """
         first = bisect.bisect_left(self._return_addresses, start)
         if first < len(self._return_addresses) and self._return_addresses[first] < end:
             return 0
         segment = next(segment for segment in self._segments if segment.start <= start < segment.end)
-        region_start = self._return_addresses[first - 1] + RETURN_SEQUENCE_BYTES if first > 0 else segment.start
-        region_end = self._return_addresses[first] if first < len(self._return_addresses) else segment.end
-        return min(region_end, segment.end) - max(region_start, segment.start)
+        next_return = self._return_addresses[first] if first < len(self._return_addresses) else segment.end
+        return min(next_return, segment.end) - start
 
     @staticmethod
     def _scan_returns(segments: list) -> list:
@@ -204,9 +208,9 @@ def _check_entry(entry: FunctionMapEntry, image: LoadImage, policy: GuardrailPol
     return_free_span = image.longest_return_free_span(entry.start, entry.end)
     if return_free_span > policy.max_return_gap_bytes:
         return Violation(entry, REASON_RETURN_GAP, return_free_span)
-    enclosing_span = image.enclosing_return_free_span(entry.start, entry.end)
-    if enclosing_span > policy.max_return_gap_bytes:
-        return Violation(entry, REASON_INSIDE_DATA, enclosing_span)
+    run_to_return = image.distance_to_next_return(entry.start, entry.end)
+    if run_to_return > policy.max_return_gap_bytes:
+        return Violation(entry, REASON_INSIDE_DATA, run_to_return)
     return None
 
 
