@@ -118,7 +118,7 @@ class MemoryWatchdog(threading.Thread):
 def stream_build(command: list[str]) -> tuple[int, str]:
     """Run the build, tee full output to the ignored log, print a compact digest."""
     last_progress = ""
-    with LOG_PATH.open("w") as log, subprocess.Popen(
+    with LOG_PATH.open("w", buffering=1) as log, subprocess.Popen(
         command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace"
     ) as process:
         for line in process.stdout:

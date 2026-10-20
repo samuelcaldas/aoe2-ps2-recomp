@@ -50,6 +50,19 @@ if(AOE2_BUILD_DESKTOP_PROBE)
     list(LENGTH GENERATED_CPP_SOURCES GENERATED_COUNT)
     message(STATUS "Discovered ${GENERATED_COUNT} generated C++ translation units.")
 
+    # Generated VU0 code may call SSE4.1 intrinsics; enable SSE4.1 only for the units that do,
+    # detected by content so no generated file names are tracked here.
+    set(AOE2_SSE41_INTRINSICS_REGEX "_mm_blendv_ps")
+    set(SSE41_UNIT_COUNT 0)
+    foreach(generated_source IN LISTS GENERATED_CPP_SOURCES)
+        file(STRINGS "${generated_source}" sse41_match REGEX "${AOE2_SSE41_INTRINSICS_REGEX}" LIMIT_COUNT 1)
+        if(sse41_match)
+            set_source_files_properties("${generated_source}" PROPERTIES COMPILE_OPTIONS "-msse4.1")
+            math(EXPR SSE41_UNIT_COUNT "${SSE41_UNIT_COUNT} + 1")
+        endif()
+    endforeach()
+    message(STATUS "Enabled SSE4.1 for ${SSE41_UNIT_COUNT} generated translation units.")
+
     # We do NOT include the upstream runner placeholder ps2xRuntime/src/runner/register_functions.cpp
     # because generated/SLES-50282/register_functions.cpp provides the authoritative table.
     add_library(aoe2_generated_game_code OBJECT
