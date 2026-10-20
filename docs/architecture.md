@@ -209,3 +209,7 @@ The PS2 HUD (top resource bar, bottom command and minimap panel) is laid out for
 * Where the PS2 build stores its viewport, scroll-limit and culling constants, and whether all of them are runtime-overridable without touching generated code.
 * How the PS2 sprite/graphic identifiers correspond to those in the 2013 edition, and how much of the PS2 interface differs from the PC interface.
 * How the 2013 edition composes its HUD at arbitrary widths (tiled filler vs. per-resolution assets). This must be verified against the user's own installation before choosing HUD option 1.
+
+## 8. KCET Boundary for High-Level Replacement
+
+The PS2 port routes nearly all hardware access through KCET (Konami Computer Entertainment Tokyo) modules: mouse, keyboard, pad, CD/DVD, files, memory card, GS dispatch, and kernel objects. High-level replacements hook that boundary: a KCET function is replaced by a host implementation through the runtime's function-replacement mechanism, and nothing below it is emulated. Mouse and keyboard come first (host reports written in the KCET packet format, so the game's own cursor logic runs unchanged); `kt_gpu` is the seam for the high-level renderer. Guest addresses for hooks are resolved from the owner's decompilation into ignored local files, never tracked. Decision, module table, and rules: `docs/adr/0001-kcet-boundary-replacement.md`.

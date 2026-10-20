@@ -74,6 +74,7 @@ The owner's matching decompilation (`samuelcaldas/age-of-empires-2-decomp` @ `d8
 Rules:
 - Use it when needed to understand or hook peripherals and engine behavior, such as where and how the game polls the mouse and keyboard.
 - Matched C/C++ from it may be used in host-side override hooks when that is simpler than reverse-engineering the generated code again.
+- **Authorized for KCET replacement (2026-10-20):** it is the reference for replacing the game's KCET hardware layer (mouse, keyboard, pad, CD/DVD, files, memory card, GS dispatch); see `docs/adr/0001-kcet-boundary-replacement.md`.
 - Tracked files in this repository still must not contain game function names, hex addresses, disassembly, or code snippets taken from the binary. Keep address-specific glue in ignored or generated locations, or derive it at build time.
 - Do not modify the decomp repository from here.
 
