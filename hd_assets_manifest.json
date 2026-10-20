@@ -1,0 +1,19 @@
+{
+  "counts": {
+    "by_category": {
+      "interface": 354
+    },
+    "by_format": {
+      "riff": 50,
+      "slp-2.0N": 170,
+      "unknown": 134
+    },
+    "total": 354
+  },
+  "digests": {
+    "interface": "17aca4dc6bbffa16d54f03d70f1852aee7444312777cad7e46c63225a807cff3"
+  },
+  "edition": "HD_2013",
+  "schema": 1,
+  "tool_version": "1.0.0"
+}

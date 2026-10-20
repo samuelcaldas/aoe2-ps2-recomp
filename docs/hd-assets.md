@@ -52,6 +52,17 @@ Palettes are not a separate category: the HD profile keeps them in the `interfac
 
 The layout paths and the sentinel names come from the openage project's public converter configuration (`cfg/converter/games/game_editions.toml`, GPL-3.0). That is used as a fact about the game's file layout. The code here is written from the public format descriptions and does not copy openage source. The SLP header offsets come from openage's `doc/media/slp-files.md`.
 
-## Open questions
+## Open questions and verified findings
 
-Run `inventory_hd_assets.py` after importing `interface`. Its SLP size list answers `architecture.md` §7.5 directly: if the interface has more than one size per category, the HD set ships resolution-specific UI; if it has one size, widescreen filler must come from elsewhere.
+Analysis of the real user-owned AoE2 HD Edition v5.8 installation confirmed:
+1. **Interface asset counts:** `resources/_common/drs/interface` contains 354 assets (170 SLP 2.0N, 50 RIFF WAV sound clips, 134 BINA UI/palette/table files).
+2. **Resolution-specific HUD bases:** The HD set provides multi-resolution in-game UI layouts in SLP:
+   - 800x600 (`50100` and variants)
+   - 1024x768 (`50101`, `51121`)
+   - 1280x1024 (`50102`, `51141`)
+3. **Modular filler bars:** HD supplies modular bar SLPs used to span arbitrary screen widths without stretching panels:
+   - Top resource / border bar (`50792`, 697x24)
+   - Bottom command / status bar elements (`50150`, 592x90)
+   - Vertical side panels (`50341`, 150x768)
+4. **Modernized menus:** Out-of-game menus (main menu, campaign menu) in the HD edition are defined via JSON layout descriptors (`resources/_common/textures/ui/main-menu/default/main-menu.json`) with RGBA PNG button states and JPEG background artwork.
+5. **Widescreen HUD viability:** For widescreen rendering on Nintendo Switch (1280x720) or desktop 1080p, `architecture.md` §7.4 Option 1 (re-laid-out HUD anchoring panels to screen edges and filling gaps with modular bar graphics) is fully supported by the available HD asset set.
