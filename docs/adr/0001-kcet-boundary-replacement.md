@@ -5,6 +5,26 @@
 
 ## Context
 
+### The Three Independent Native Input Channels in AoE2 PS2
+A common misconception is that console RTS ports merely emulate mouse movement with a joystick, or that keyboards are remapped to controller buttons. The PS2 edition of Age of Empires II implements **three separate, concurrent, fully native input channels** designed specifically for console play:
+
+1. **Native Gamepad Subsystem (`kt_libpad` -> Game Engine):**
+   The Konami/KCET development team engineered a comprehensive, native DualShock 2 interface directly into the simulation and tactical AI engine:
+   - *Controller Action Engine* (`func_0032A060`): State machine executing contextual actions on units and buildings.
+   - *Command Router & Order Dispatch* (`func_0032E220`, `func_0032E6B0`): Direct assignment of patrol, attack-move, formation, and stance orders mapped to face buttons and triggers.
+   - *Analog Camera Navigation* (`func_0032BCE0`, `func_0032BE50`): Smooth velocity-based panning, acceleration curves, and coordinate clamping driven by the analog sticks.
+   - *Box Selection & Target Queries* (`func_003299F0`, `func_0032D400`, `func_0032DA90`): Screen-space entity pick queries and area-drag selection tailored for stick and button precision.
+   - *Controller Context & Pulse* (`func_0032BF70`, `func_0032C320`): Ring/radial menus, button hold/repeat timing, and HUD prompts.
+   This channel reads DualShock 2 data via `kt_libpad` and `libpad.h`. Host gamepads (PC controllers, Switch Joy-Cons/Pro Controller, Android Bluetooth gamepads) feed directly into this native console subsystem 1:1 without synthetic translation.
+
+2. **Native USB Mouse Subsystem (`kt_mouse` -> Game Engine):**
+   The PS2 release natively supported a USB mouse (PS2 mouse protocol over SIF RPC `0x80000210`). The game engine contains its own authentic PS2 mouse pointer renderer, hover states, right-click command dispatch, and rectangular drag box. We hook `kt_mouse` so host mice (PC mouse, Switch docked USB mouse) and the Switch handheld touchscreen feed raw 8-byte USB packets directly into this pipeline.
+
+3. **Native USB Keyboard Subsystem (`kt_keybd`, `kt_usbkeybd_drv` -> Game Engine):**
+   The PS2 release natively supported a USB keyboard for hotkeys, cheat codes, chat, and text entry. We hook `kt_keybd` so host keyboards feed standard USB HID boot reports. (Keyboard-to-pad button emulation in `ps2_pad.cpp` is strictly an optional fallback for headless test or keyboard-only desktop play without a gamepad, not the architectural design).
+
+## Context (KCET Hardware Layer)
+
 The PS2 port of Age of Empires II puts a hardware layer from Konami Computer Entertainment Tokyo (KCET) between the PC-derived game code and the Sony libraries and hardware. Almost all contact between the game and the console goes through the KCET modules, which the owner's matching decompilation (`samuelcaldas/age-of-empires-2-decomp`, `docs/kcet_hardware_analysis.md`) identifies by their source-file assert strings:
 
 | KCET module | Responsibility |
@@ -55,3 +75,9 @@ Order of work: input (`kt_mouse`, `kt_keybd`) first, because joystick, keyboard,
 - Mouse and keyboard work identically on desktop, Android, and Switch without USB/IOP emulation, and the game keeps its original PS2 cursor behavior.
 - Each hook depends on a matched decompilation function; today only `kt_mouse` has fully matched functions, so `kt_keybd` and `kt_gpu` need matching work first.
 - The address-resolution step is a new local artifact that `tools/` must generate and verify, in the same way the function map is verified.
+
+## Implementation status
+
+- `kt_mouse`: implemented. `tools/resolve_kcet_hooks.py` finds the RPC bind (USB mouse service SID `0x80000210`) and the three RPC wrappers (functions 1 info, 2 read events, 3 device info) in the decompilation by structure and writes their addresses to the ignored `game/SLES-50282/kcet_hooks.ini`. `game_hooks/src/kcet_mouse_overrides.cpp` registers a game override that replaces them with host functions answering from `aoe2::input::UsbMouseRpcModel`, sampled from the platform mouse through raylib once per game poll. Without the hooks file the bind loop has no IOP service to reach, so the file is required to boot past mouse initialization.
+- `kt_keybd`: not yet; the decompilation has not matched it. Keyboard input reaches the game through the runtime's pad emulation (keys mapped to DualShock buttons) meanwhile.
+- `kt_gpu` and the rest: not started.
