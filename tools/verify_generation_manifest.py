@@ -10,6 +10,7 @@ Verifies:
 - Exporter script path and SHA-256 hash are present.
 - Function map SHA-256 and TOML SHA-256 hashes are present.
 - Generated output directory is present and non-empty.
+- Data-region marking script hash and a zero-violation function map guardrail are recorded.
 - All artifact paths are strictly within git-ignored paths.
 - No proprietary content (disassembly, addresses, code snippets) is present.
 """
@@ -99,6 +100,28 @@ def main():
 
     if not data.get("toml_sha256"):
         sys.stderr.write("Error: Manifest missing mandatory field 'toml_sha256'\n")
+        sys.exit(1)
+
+    if not data.get("data_region_script_sha256"):
+        sys.stderr.write(
+            "Error: Manifest missing mandatory field 'data_region_script_sha256'.\n"
+            "The Ghidra export must run tools/ghidra/MarkDataRegions.java before the exporter.\n"
+        )
+        sys.exit(1)
+
+    guardrail = data.get("function_map_guardrail")
+    if not isinstance(guardrail, dict) or "violations" not in guardrail:
+        sys.stderr.write(
+            "Error: Manifest missing mandatory field 'function_map_guardrail'.\n"
+            "Run tools/verify_function_map.py on the exported map before generation.\n"
+        )
+        sys.exit(1)
+
+    if guardrail["violations"] != 0:
+        sys.stderr.write(
+            f"Error: Function map guardrail recorded {guardrail['violations']} violation(s).\n"
+            "Entries spanning data must be fixed in the Ghidra export before generation.\n"
+        )
         sys.exit(1)
 
     # 5. PS2Recomp commit check against lockfile

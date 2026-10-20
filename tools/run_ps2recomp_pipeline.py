@@ -6,10 +6,13 @@ Workflow:
 2. Verify PS2Recomp build and commit against lockfile.
 3. Validate Ghidra installation (GHIDRA_HOME and support/analyzeHeadless).
    STOPS FAST IF GHIDRA IS MISSING. Does not substitute fallback analyzer.
-4. Execute headless Ghidra analysis & export using ExportPS2Functions.java.
-5. Create minimal clean PS2Recomp TOML configuration without stubs/skips/patches.
-6. Run PS2Recomp generation into generated/SLES-50282/.
-7. Write and verify authoritative generation_manifest.json.
+4. Execute headless Ghidra analysis, mark return-free data regions as
+   non-executable (tools/ghidra/MarkDataRegions.java), then export using
+   ExportPS2Functions.java.
+5. Reject the export if tools/verify_function_map.py finds entries spanning data.
+6. Create minimal clean PS2Recomp TOML configuration without stubs/skips/patches.
+7. Regenerate generated/SLES-50282/ from scratch with PS2Recomp.
+8. Write and verify authoritative generation_manifest.json.
 """
 import argparse
 import datetime
@@ -25,6 +28,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from core.target import SINGLE_TARGET
+from tools import verify_function_map as function_map_guardrail
+
+DATA_REGION_SCRIPT = REPO_ROOT / "tools" / "ghidra" / "MarkDataRegions.java"
 
 def compute_sha1(filepath: Path) -> str:
     h = hashlib.sha1()
@@ -60,6 +66,50 @@ def get_java_version() -> str:
         return first_line.strip()
     except Exception as e:
         return f"unknown ({e})"
+
+def build_ghidra_command(analyze_headless: Path, project_dir: Path, elf_path: Path,
+                         exporter_script: Path, toml_config: Path, csv_map: Path) -> list:
+    """Compose the headless Ghidra run: import + analysis, data-region marking, then export."""
+    script_path = f"{DATA_REGION_SCRIPT.parent};{exporter_script.parent}"
+    max_return_gap = str(function_map_guardrail.DEFAULT_MAX_RETURN_GAP_BYTES)
+    return [
+        str(analyze_headless), str(project_dir), "SLES_50282_Project",
+        "-import", str(elf_path), "-overwrite",
+        "-processor", "MIPS:LE:64:64-32addr",
+        "-scriptPath", script_path,
+        "-postScript", DATA_REGION_SCRIPT.name, max_return_gap,
+        "-postScript", exporter_script.name, str(toml_config), str(csv_map),
+    ]
+
+def enforce_function_map_guardrail(csv_map: Path, elf_path: Path) -> dict:
+    """Fail the pipeline before code generation if any entry spans data; return the guardrail record."""
+    policy = function_map_guardrail.GuardrailPolicy(
+        function_map_guardrail.DEFAULT_MAX_ENTRY_BYTES,
+        function_map_guardrail.DEFAULT_MAX_RETURN_GAP_BYTES,
+    )
+    entries = function_map_guardrail.load_function_map(csv_map)
+    image = function_map_guardrail.LoadImage.from_elf(elf_path)
+    violations = function_map_guardrail.find_violations(entries, image, policy)
+    if function_map_guardrail.report(entries, violations) != function_map_guardrail.EXIT_OK:
+        sys.stderr.write("Error: function map guardrail failed; refusing to generate code from data.\n")
+        sys.exit(1)
+    return {
+        "max_entry_bytes": policy.max_entry_bytes,
+        "max_return_gap_bytes": policy.max_return_gap_bytes,
+        "violations": 0,
+    }
+
+def reset_generated_output(output_cpp_dir: Path) -> None:
+    """Remove stale generated sources so the output reflects only the current map."""
+    expected_dir = (REPO_ROOT / "generated" / SINGLE_TARGET.serial).resolve()
+    if output_cpp_dir.resolve() != expected_dir:
+        sys.stderr.write(f"Error: refusing to clear unexpected directory {output_cpp_dir}\n")
+        sys.exit(1)
+    if subprocess.run(["git", "check-ignore", "-q", str(expected_dir)], cwd=REPO_ROOT).returncode != 0:
+        sys.stderr.write(f"Error: refusing to clear {expected_dir}: it is not git-ignored\n")
+        sys.exit(1)
+    shutil.rmtree(expected_dir, ignore_errors=True)
+    expected_dir.mkdir(parents=True)
 
 def main():
     parser = argparse.ArgumentParser(description="Authoritative Ghidra export and PS2Recomp code generation.")
@@ -126,6 +176,10 @@ def main():
         sys.stderr.write(f"Error: Exporter script missing: {exporter_script}\n")
         sys.exit(1)
 
+    if not DATA_REGION_SCRIPT.exists():
+        sys.stderr.write(f"Error: Data region script missing: {DATA_REGION_SCRIPT}\n")
+        sys.exit(1)
+
     analysis_dir = REPO_ROOT / "analysis"
     ghidra_proj_dir = analysis_dir / "ghidra"
     generated_analysis_dir = analysis_dir / "generated"
@@ -140,27 +194,14 @@ def main():
 
     # 4. Execute Ghidra headless analysis & export
     print(f"Executing authoritative headless Ghidra export using {exporter_script}...")
-    cmd = [
-        str(analyze_headless),
-        str(ghidra_proj_dir),
-        "SLES_50282_Project",
-        "-import",
-        str(elf_path),
-        "-overwrite",
-        "-processor",
-        "MIPS:LE:64:64-32addr",
-        "-scriptPath",
-        str(exporter_script.parent),
-        "-postScript",
-        "ExportPS2Functions.java",
-        str(toml_config),
-        str(csv_map),
-    ]
+    cmd = build_ghidra_command(analyze_headless, ghidra_proj_dir, elf_path, exporter_script, toml_config, csv_map)
     subprocess.run(cmd, check=True)
 
     if not csv_map.exists() or not toml_config.exists():
         sys.stderr.write("Error: Ghidra export script did not produce expected output files!\n")
         sys.exit(1)
+
+    guardrail_record = enforce_function_map_guardrail(csv_map, elf_path)
 
     # 5. Verify TOML configuration output path
     toml_content = toml_config.read_text(encoding="utf-8")
@@ -179,6 +220,7 @@ def main():
 
     # 6. Execute PS2Recomp code generation
     print("Executing PS2Recomp code generation from authoritative Ghidra map...")
+    reset_generated_output(output_cpp_dir)
     subprocess.run([str(ps2_recomp_bin), str(toml_config)], check=True)
 
     # 7. Write authoritative generation manifest
@@ -200,6 +242,9 @@ def main():
         "exported_function_count": exported_count,
         "generated_cpp_file_count": cpp_count,
         "generated_output_dir": str(output_cpp_dir.relative_to(REPO_ROOT)),
+        "data_region_script": str(DATA_REGION_SCRIPT.relative_to(REPO_ROOT)),
+        "data_region_script_sha256": compute_sha256(DATA_REGION_SCRIPT),
+        "function_map_guardrail": guardrail_record,
         "artifact_paths": [
             str(csv_map.relative_to(REPO_ROOT)),
             str(toml_config.relative_to(REPO_ROOT)),

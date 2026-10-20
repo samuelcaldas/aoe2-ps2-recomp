@@ -71,7 +71,9 @@ git check-ignore -v analysis/ghidra/SLES-50282.gpr analysis/generated/function_m
 
 ### Step 1: Headless Ghidra Analysis and Function Export
 
-Using Ghidra's `analyzeHeadless` processor, we import `game/SLES-50282/AOK.ELF` with the PS2 MIPS R5900 language profile (`MIPS:LE:64:64-32addr`) and run the exporter script provided in the pinned PS2Recomp tree: `third_party/PS2Recomp/ps2xRecomp/tools/ghidra/ExportPS2Functions.java`.
+Using Ghidra's `analyzeHeadless` processor, we import `game/SLES-50282/AOK.ELF` with the PS2 MIPS R5900 language profile (`MIPS:LE:64:64-32addr`), mark data regions as non-executable with the local `tools/ghidra/MarkDataRegions.java`, and then run the exporter script provided in the pinned PS2Recomp tree: `third_party/PS2Recomp/ps2xRecomp/tools/ghidra/ExportPS2Functions.java`.
+
+**Why the data-region step exists.** The ELF is stripped and loads code and data in a single RWX segment, so the exporter (which only checks block permissions) treats about 1.3 MB of data as code. Synthetic entries created from data words that look like pointers then span that data, and PS2Recomp emits multi-megabyte functions full of trap and undecodable instructions; these also pulled in spurious SSE4.1 intrinsics. Real code reaches a `jr $ra` return at most ~15 KiB apart in this binary, so `MarkDataRegions.java` splits every region with no return for more than 64 KiB into its own non-executable block (clearing its listing and functions) before export. The threshold is the script's single argument and is shared with the guardrail below.
 
 ```bash
 mkdir -p analysis/ghidra analysis/generated
@@ -81,11 +83,22 @@ $GHIDRA_HOME/support/analyzeHeadless \
     SLES_50282_Project \
     -import game/SLES-50282/AOK.ELF \
     -processor "MIPS:LE:64:64-32addr" \
-    -scriptPath third_party/PS2Recomp/ps2xRecomp/tools/ghidra \
+    -scriptPath "tools/ghidra;third_party/PS2Recomp/ps2xRecomp/tools/ghidra" \
+    -postScript MarkDataRegions.java 65536 \
     -postScript ExportPS2Functions.java \
     analysis/generated/SLES-50282.toml \
     analysis/generated/function_map.csv
 ```
+
+### Step 1b: Function Map Guardrail
+
+Before any code generation, the exported map is checked against the owned ELF:
+
+```bash
+python3 tools/verify_function_map.py
+```
+
+It rejects (exit 1) any entry that lies outside a loaded segment, exceeds 128 KiB, contains a return-free stretch longer than 64 KiB, or has no return while sitting inside such a region. It prints only entry names and byte counts. `tools/run_ps2recomp_pipeline.py` runs it automatically and stops before PS2Recomp on any violation; the result is recorded in the manifest as `function_map_guardrail`, and `verify_generation_manifest.py` rejects manifests without a zero-violation record.
 
 ### Step 2: Minimal PS2Recomp TOML Configuration
 
@@ -116,7 +129,7 @@ mkdir -p generated/SLES-50282
 ./third_party/PS2Recomp/build/ps2xRecomp/ps2_recomp analysis/generated/SLES-50282.toml
 ```
 
-This decodes the R5900 machine code for each discovered function boundary and emits multi-file C++ functions into `generated/SLES-50282/`.
+This decodes the R5900 machine code for each discovered function boundary and emits multi-file C++ functions into `generated/SLES-50282/`. The pipeline deletes that (git-ignored) directory first, so stale sources from an earlier map never reach the build.
 
 ### Step 4: Record & Verify Generation Provenance Manifest
 
@@ -129,6 +142,9 @@ After successful generation, create/update `generation_manifest.json` recording 
   "ps2recomp_commit": "eb8688b2fd191129f103a39543002c005b33409c",
   "ghidra_version": "<version>",
   "exporter_script": "ps2xRecomp/tools/ghidra/ExportPS2Functions.java",
+  "data_region_script": "tools/ghidra/MarkDataRegions.java",
+  "data_region_script_sha256": "<sha256>",
+  "function_map_guardrail": {"max_entry_bytes": 131072, "max_return_gap_bytes": 65536, "violations": 0},
   "timestamp": "<iso-timestamp>",
   "exported_function_count": 0,
   "generated_cpp_file_count": 0,
