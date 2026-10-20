@@ -37,10 +37,12 @@ if(AOE2_BUILD_DESKTOP_PROBE)
     message(STATUS "Configuring desktop compilation probe...")
 
     set(GENERATED_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/generated/SLES-50282")
-    set(PS2X_RUNTIME_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/PS2Recomp/ps2xRuntime")
-    set(PS2X_IOP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/PS2Recomp/ps2xIOP")
+    set(PS2X_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/PS2Recomp")
+    set(PS2X_RUNTIME_DIR "${PS2X_DIR}/ps2xRuntime")
+    set(PS2X_IOP_DIR "${PS2X_DIR}/ps2xIOP")
+    set(PS2X_RUNTIME_BUILD_DIR "${PS2X_DIR}/build-runtime")
 
-    # Collect all generated C++ translation units without omitting any
+    # Collect all generated C++ translation units (which includes generated register_functions.cpp)
     file(GLOB GENERATED_CPP_SOURCES CONFIGURE_DEPENDS
         "${GENERATED_SRC_DIR}/*.cpp"
     )
@@ -48,9 +50,10 @@ if(AOE2_BUILD_DESKTOP_PROBE)
     list(LENGTH GENERATED_CPP_SOURCES GENERATED_COUNT)
     message(STATUS "Discovered ${GENERATED_COUNT} generated C++ translation units.")
 
+    # We do NOT include the upstream runner placeholder ps2xRuntime/src/runner/register_functions.cpp
+    # because generated/SLES-50282/register_functions.cpp provides the authoritative table.
     add_library(aoe2_generated_game_code OBJECT
         ${GENERATED_CPP_SOURCES}
-        "${PS2X_RUNTIME_DIR}/src/runner/register_functions.cpp"
     )
 
     target_include_directories(aoe2_generated_game_code PRIVATE
@@ -68,6 +71,37 @@ if(AOE2_BUILD_DESKTOP_PROBE)
 
     target_include_directories(desktop_runtime_probe PRIVATE
         "${PS2X_RUNTIME_DIR}/include"
+    )
+
+    # Link built PS2Recomp runtime and required transitive libraries
+    target_link_directories(desktop_runtime_probe PRIVATE
+        "${PS2X_RUNTIME_BUILD_DIR}/ps2xRuntime"
+        "${PS2X_RUNTIME_BUILD_DIR}/ps2xIOP"
+        "${PS2X_RUNTIME_BUILD_DIR}/_deps/raylib-build/raylib"
+    )
+
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET GLOBAL
+        libavcodec
+        libavformat
+        libavutil
+        libswresample
+        libswscale
+    )
+
+    find_package(OpenGL REQUIRED)
+
+    target_link_libraries(desktop_runtime_probe PRIVATE
+        "${PS2X_RUNTIME_BUILD_DIR}/ps2xRuntime/libps2_runtime.a"
+        "${PS2X_RUNTIME_BUILD_DIR}/ps2xIOP/libps2_iop.a"
+        "${PS2X_RUNTIME_BUILD_DIR}/_deps/raylib-build/raylib/libraylib.a"
+        PkgConfig::FFMPEG
+        OpenGL::GL
+        OpenGL::GLX
+        m
+        pthread
+        rt
+        dl
     )
 endif()
 
