@@ -107,3 +107,17 @@ python3 tools/classify_diagnostics.py \
    Never patch generated functions or add stub functions with fabricated return codes (`ret0`/`ret1`). All runtime dispatch and memory access functions (`Store128`, `dispatchGuestBranch`, `Read128`, etc.) must be provided by the runtime layer (`aoe2::runtime` or `ps2xRuntime`).
 3. **Linker Probe Baseline**:
    With the diagnostic classifier established and passing 27 automated tests, future build experiments can continuously measure reduction in missing runtime API references as the runtime abstraction is fleshed out.
+
+---
+
+## 6. Full Compile and Link Result (2026-10-20)
+
+The complete recompilation now builds and links on desktop x86-64 (GCC 15.2, GNU ld 2.46).
+
+* **Input**: regenerated output after the data-region fix (`tools/ghidra/MarkDataRegions.java` + `tools/verify_function_map.py`, 0 violations): 17,047 map entries, 17,048 generated translation units, largest unit 4.0 MB (previously 77 MB of data decoded as code).
+* **Runtime**: the pinned upstream `libps2_runtime.a` and `libps2_iop.a` (`PS2X_BUILD_RUNTIME=ON`, built in `third_party/PS2Recomp/build-runtime`), raylib, ffmpeg, and OpenGL/GLX. The generated `register_functions.cpp` is the only registration table; the upstream runner placeholder is excluded. Link order runtime → IOP → raylib has no archive cycles.
+* **Build**: `python3 tools/run_desktop_probe_build.py --jobs 15` (16 cores): memory-capped systemd scope (18 GiB, no swap), memory watchdog, `nice`/`ionice`, C locale. About 50 minutes from a clean object tree with at least 21 GiB of memory left free throughout.
+* **Result**: `desktop_runtime_probe` linked (ELF64 x86-64 PIE, about 76 MB). All dynamic dependencies resolve. Symbol checks confirm the registration table (`g_ps2RecompiledFunctionTable`, slot count) and runtime definitions (`PS2Runtime::Store128`, `PS2Runtime::dispatchGuestBranch`, the EE scheduler); `Read128` is a header-inline macro. No stubs, skips, patches, or removed translation units were used.
+* **Not done**: the binary has not been executed and no guest code has run. Generated code still carries PS2Recomp warnings for unresolved `JR`/`JALR` targets, which matter at runtime, not at link time.
+
+Next step: a minimal, non-executing runtime-initialization design for the probe.
