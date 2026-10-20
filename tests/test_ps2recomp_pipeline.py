@@ -28,6 +28,10 @@ class TestGhidraCommand(unittest.TestCase):
         expected = str(pipeline.function_map_guardrail.DEFAULT_MAX_RETURN_GAP_BYTES)
         self.assertEqual(self.command[mark_index + 1], expected)
 
+    def test_imports_with_emotion_engine_language(self):
+        processor = self.command[self.command.index("-processor") + 1]
+        self.assertEqual(processor, pipeline.ee_extension.LANGUAGE_ID)
+
     def test_script_path_includes_local_and_exporter_directories(self):
         script_path = self.command[self.command.index("-scriptPath") + 1].split(";")
         self.assertIn(str(pipeline.DATA_REGION_SCRIPT.parent), script_path)

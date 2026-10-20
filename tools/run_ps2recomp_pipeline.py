@@ -28,6 +28,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from core.target import SINGLE_TARGET
+from tools import install_ghidra_ee_extension as ee_extension
 from tools import verify_function_map as function_map_guardrail
 
 DATA_REGION_SCRIPT = REPO_ROOT / "tools" / "ghidra" / "MarkDataRegions.java"
@@ -75,7 +76,7 @@ def build_ghidra_command(analyze_headless: Path, project_dir: Path, elf_path: Pa
     return [
         str(analyze_headless), str(project_dir), "SLES_50282_Project",
         "-import", str(elf_path), "-overwrite",
-        "-processor", "MIPS:LE:64:64-32addr",
+        "-processor", ee_extension.LANGUAGE_ID,
         "-scriptPath", script_path,
         "-postScript", DATA_REGION_SCRIPT.name, max_return_gap,
         "-postScript", exporter_script.name, str(toml_config), str(csv_map),
@@ -176,6 +177,16 @@ def main():
         sys.stderr.write(f"Error: Exporter script missing: {exporter_script}\n")
         sys.exit(1)
 
+    ghidra_version = ghidra_path.name
+    extensions_dir = ee_extension.user_extensions_dir(ghidra_version)
+    if not ee_extension.is_installed(extensions_dir):
+        sys.stderr.write(
+            "CRITICAL BLOCKER: the Emotion Engine Ghidra extension is not installed.\n"
+            "Stock MIPS languages truncate functions at R5900 instructions. Run:\n"
+            "  python3 tools/install_ghidra_ee_extension.py\n"
+        )
+        sys.exit(1)
+
     if not DATA_REGION_SCRIPT.exists():
         sys.stderr.write(f"Error: Data region script missing: {DATA_REGION_SCRIPT}\n")
         sys.exit(1)
@@ -245,6 +256,8 @@ def main():
         "data_region_script": str(DATA_REGION_SCRIPT.relative_to(REPO_ROOT)),
         "data_region_script_sha256": compute_sha256(DATA_REGION_SCRIPT),
         "function_map_guardrail": guardrail_record,
+        "ghidra_language": ee_extension.LANGUAGE_ID,
+        "ghidra_extension_sha256": ee_extension.installed_digest(extensions_dir),
         "artifact_paths": [
             str(csv_map.relative_to(REPO_ROOT)),
             str(toml_config.relative_to(REPO_ROOT)),

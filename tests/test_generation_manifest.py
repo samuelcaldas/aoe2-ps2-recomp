@@ -175,6 +175,7 @@ class TestGenerationManifestVerification(unittest.TestCase):
             "generated_output_dir": "generated/SLES-50282",
             "data_region_script_sha256": "fedcba654321",
             "function_map_guardrail": VALID_GUARDRAIL,
+            "ghidra_language": "r5900:LE:32:default",
             "artifact_paths": [
                 "src/tracked_code.cpp"
             ]
@@ -211,6 +212,7 @@ class TestGenerationManifestVerification(unittest.TestCase):
             "data_region_script": "tools/ghidra/MarkDataRegions.java",
             "data_region_script_sha256": "fedcba654321",
             "function_map_guardrail": VALID_GUARDRAIL,
+            "ghidra_language": "r5900:LE:32:default",
             "artifact_paths": [
                 "analysis/generated/function_map.csv",
                 "analysis/ghidra/SLES-50282.gpr",
@@ -251,6 +253,7 @@ class TestFunctionMapGuardrailInManifest(unittest.TestCase):
             "data_region_script": "tools/ghidra/MarkDataRegions.java",
             "data_region_script_sha256": "fedcba654321",
             "function_map_guardrail": dict(VALID_GUARDRAIL),
+            "ghidra_language": "r5900:LE:32:default",
             "artifact_paths": ["analysis/generated/function_map.csv", "generated/SLES-50282"],
         }
         data.update(overrides)
@@ -275,6 +278,11 @@ class TestFunctionMapGuardrailInManifest(unittest.TestCase):
         result = self.verify(self.manifest(data_region_script_sha256=None))
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("data_region_script_sha256", result.stderr)
+
+    def test_generic_mips_language_fails(self):
+        result = self.verify(self.manifest(ghidra_language="MIPS:LE:64:64-32addr"))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("ghidra_language", result.stderr)
 
     def test_complete_guardrail_record_passes(self):
         result = self.verify(self.manifest())

@@ -109,6 +109,13 @@ def main():
         )
         sys.exit(1)
 
+    if data.get("ghidra_language") != "r5900:LE:32:default":
+        sys.stderr.write(
+            f"Error: Manifest ghidra_language '{data.get('ghidra_language')}' is not the Emotion Engine language.\n"
+            "Generic MIPS languages truncate functions at R5900 instructions; regenerate with r5900:LE:32:default.\n"
+        )
+        sys.exit(1)
+
     guardrail = data.get("function_map_guardrail")
     if not isinstance(guardrail, dict) or "violations" not in guardrail:
         sys.stderr.write(
