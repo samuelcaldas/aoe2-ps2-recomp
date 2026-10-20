@@ -87,6 +87,8 @@ if(AOE2_BUILD_DESKTOP_PROBE)
 
     target_include_directories(desktop_runtime_probe PRIVATE
         "${PS2X_RUNTIME_DIR}/include"
+        "${PS2X_RUNTIME_DIR}/src/lib/Kernel"
+        "${PS2X_IOP_DIR}/include"
     )
 
     # Link built PS2Recomp runtime and required transitive libraries
@@ -118,6 +120,19 @@ if(AOE2_BUILD_DESKTOP_PROBE)
         pthread
         rt
         dl
+    )
+
+    # Headless runtime initialization: loads the owned ELF and resolves the entry
+    # point against the generated table without executing any guest code.
+    set(AOE2_OWNED_ELF "${CMAKE_CURRENT_SOURCE_DIR}/game/SLES-50282/AOK.ELF")
+    set(AOE2_FUNCTION_MAP "${CMAKE_CURRENT_SOURCE_DIR}/analysis/generated/function_map.csv")
+    add_test(NAME desktop_runtime_probe_init
+        COMMAND desktop_runtime_probe --elf "${AOE2_OWNED_ELF}" --function-map "${AOE2_FUNCTION_MAP}"
+    )
+    set_tests_properties(desktop_runtime_probe_init PROPERTIES
+        PASS_REGULAR_EXPRESSION "runtime initialized: entry point resolved; guest code not executed"
+        FAIL_REGULAR_EXPRESSION "\\[probe\\] error"
+        TIMEOUT 120
     )
 endif()
 

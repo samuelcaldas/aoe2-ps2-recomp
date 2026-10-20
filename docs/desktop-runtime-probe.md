@@ -120,4 +120,27 @@ The complete recompilation now builds and links on desktop x86-64 (GCC 15.2, GNU
 * **Result**: `desktop_runtime_probe` linked (ELF64 x86-64 PIE, about 76 MB). All dynamic dependencies resolve. Symbol checks confirm the registration table (`g_ps2RecompiledFunctionTable`, slot count) and runtime definitions (`PS2Runtime::Store128`, `PS2Runtime::dispatchGuestBranch`, the EE scheduler); `Read128` is a header-inline macro. No stubs, skips, patches, or removed translation units were used.
 * **Not done**: the binary has not been executed and no guest code has run. Generated code still carries PS2Recomp warnings for unresolved `JR`/`JALR` targets, which matter at runtime, not at link time.
 
-Next step: a minimal, non-executing runtime-initialization design for the probe.
+## 7. Headless Runtime Initialization (2026-10-20)
+
+`desktop_runtime_probe` now performs the upstream runner's boot sequence up to, but not including, `PS2Runtime::run()`:
+
+1. `runtime.memory().initialize()` and `runtime.syncCoreSubsystems()`: what `PS2Runtime::initialize()` does before `InitWindow()`/`InitAudioDevice()`, and the same headless pattern the upstream runtime tests use. No window or audio device is opened.
+2. `runtime.loadELF(<owned ELF>)`: copies the PT_LOAD segments into guest RAM, registers the code region, configures the ROM device and IOP, and applies matching game overrides (none match this ELF; overrides only rebind table entries).
+3. `runtime.hasFunction(runtime.cpu().pc)`: the ELF entry point must resolve to a recompiled function. `hasFunction` only reads the generated table; `lookupFunction` and `run()` are never called, so no guest code executes.
+4. With `--function-map`, every map entry is checked against the table and only the count is printed.
+
+```bash
+build/desktop-probe/desktop_runtime_probe --elf game/SLES-50282/AOK.ELF \
+    --function-map analysis/generated/function_map.csv
+ctest --test-dir build/desktop-probe -R desktop_runtime_probe_init --output-on-failure
+```
+
+Exit codes: 0 initialized, 1 initialization failed (`[probe] error: ...`), 2 usage error.
+
+**Result:** memory, core subsystems, and ELF load succeed; the entry point resolves; 17,047/17,047 map entries are registered in the 1,006,585-slot table.
+
+### 7.1 Finding: runtime-loaded overlays
+
+Besides the main RWX segment, the ELF has eight executable PT_LOAD segments with no file data (`filesz = 0`); six share one virtual address with different sizes (about 52 KiB to 1 MiB) and two more sit nearby. This is an overlay scheme: code is loaded from disc into a shared region at run time. That code is not in `AOK.ELF`, so it is not in the function map or the generated C++. Booting past the first overlay load needs the overlay binaries from the owned disc recompiled as additional modules; locating where they are loaded is a job for the owner's AoE2 decompilation (`docs/sot/prior-art-and-reuse.md` §4).
+
+Next step: identify the overlay files and the loader path, then extend the Ghidra/PS2Recomp pipeline to export and recompile them with the same guardrails.
