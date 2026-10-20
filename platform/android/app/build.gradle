@@ -1,0 +1,66 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Android packaging of the recompiled game, adapted from PS2Recomp's android/
+// runner template (GPL-3.0). The native library is aoe2_game from the repository
+// root CMakeLists.txt. There is no argv on Android: the runtime boots the ELF
+// baked in below, and reads disc files from that ELF's directory.
+def applicationPackage = 'com.aoe2.recomp'
+def bootElf = project.findProperty('aoe2BootElf') ?: "/storage/emulated/0/Android/data/${applicationPackage}/files/AOK.ELF"
+def abis = (project.findProperty('aoe2Abis') ?: 'arm64-v8a').split(',')
+def nativeJobs = project.findProperty('aoe2NativeJobs') ?: '8'
+
+android {
+    namespace applicationPackage
+    compileSdk 34
+    ndkVersion '28.2.13676358'
+
+    defaultConfig {
+        applicationId applicationPackage
+        minSdk 28
+        targetSdk 34
+        versionCode 1
+        versionName '0.1.0'
+
+        externalNativeBuild {
+            cmake {
+                arguments '-DAOE2_BUILD_GAME=ON',
+                        '-DANDROID_CPP_FEATURES=rtti exceptions',
+                        '-DANDROID_STL=c++_shared',
+                        "-DAOE2_DEFAULT_BOOT_ELF=${bootElf}",
+                        // AGP runs ninja without -j; a job pool keeps compiles within the container memory cap.
+                        "-DCMAKE_JOB_POOLS=compile=${nativeJobs};link=1",
+                        '-DCMAKE_JOB_POOL_COMPILE=compile',
+                        '-DCMAKE_JOB_POOL_LINK=link'
+                targets 'aoe2_game'
+            }
+        }
+
+        ndk {
+            abiFilters(*abis)
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path '../../../CMakeLists.txt'
+            version '3.22.1'
+            buildStagingDirectory "${rootDir}/../../build/android-cxx"
+        }
+    }
+
+    buildTypes {
+        debug {
+            externalNativeBuild {
+                cmake {
+                    arguments '-DCMAKE_BUILD_TYPE=RelWithDebInfo'
+                }
+            }
+        }
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.debug
+        }
+    }
+}
