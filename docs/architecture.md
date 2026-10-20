@@ -185,7 +185,7 @@ Age of Empires II (2013) is the planned optional source of higher-resolution and
 * It is the closest data lineage to the original game: the same SLP sprite format, the same graphic/unit identifiers, and it is supported by the openage converter. That keeps a PS2 → PC asset correlation tractable. Definitive Edition (`DE2`) has redrawn art in a different format (SMX) and is a later, separate option.
 * Its interface is built for arbitrary and widescreen resolutions, which gives a reference for a widescreen HUD instead of stretching 4:3 bitmaps the way AoE2Wide does.
 
-Rules, following the same provenance model as `AOK.ELF`:
+Rules, following the same provenance model as `AOK.ELF` (phase 1 implementation: `docs/hd-assets.md`):
 
 * The user must own the 2013 edition. Its files are supplied and extracted locally, never committed or distributed. Place them under `game/` (already gitignored). Record only hashes, counts and versions in tracked metadata.
 * Add an import/verify tool equivalent to `tools/import_owned_game.py` (fail-fast, checksum-verified), and an untracked asset-manifest entry.
