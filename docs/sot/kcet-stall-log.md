@@ -47,3 +47,27 @@ emulation gap. Options, in the order to evaluate them:
   before it is implemented, because the plan rejects emulating lower layers.
 
 A hook that returns a made-up result for the reply is not allowed.
+
+## Progress after porting Play!'s SIF command model (fork, 2026-10-21)
+
+The handshake gap was closed in the PS2Recomp fork (not yet pushed) by an IOP
+side of the SIF command protocol modeled on Play!'s `CSIF` (BSD 2-Clause), not
+by a game-side hook. Each step below has a fork unit test.
+
+| Step | Fix in the fork | Result in the diagnostic run |
+| :--- | :--- | :--- |
+| SIF command endpoint | INIT/CHANGE_SADDR, SET_SREG reply, BIND/CALL/OTHERDATA answered with RPC_END into the EE receive buffer, one packet per SIF0 interrupt | Boot handshake completes; the RPC semaphore is signalled |
+| LOADFILE server | Module loads routed to the upstream IOP emulator | The disc's IRX modules load and run on the IOP emulator |
+| CDVDFSV server | Init, disk type, status, read, search, stream, read-chain over the virtual disc | CD init and sector reads succeed |
+| IOP reboot | RESET packet completes the reboot on the next SMFLAG poll | The EE re-runs the handshake after the reboot |
+| Callback stacks | Interrupt and callback stacks are carved below the main thread stack | The main function no longer returns to address 0 |
+| DECI2 without a host | Requests fail in non-debug builds | The game disables its debug TTY instead of waiting |
+| Semaphores | `max_count` 0 means no maximum | A kernel-layer assertion no longer fires |
+| StartThread | Returns the thread id | A kernel-layer assertion no longer fires |
+| IOP latency | Replies reach the EE after ~55 us of EE time | Lower-priority threads run between RPC polls |
+| Disk type | PS2 CD for a disc that fits on a CD-ROM | The game accepts the disc |
+
+Current state: the game draws its own loading screen (real frames, not the
+runtime fallback), but the frame stops changing after a few seconds. The
+validator still fails on "frames change". Investigation of the remaining
+stall is in progress.
