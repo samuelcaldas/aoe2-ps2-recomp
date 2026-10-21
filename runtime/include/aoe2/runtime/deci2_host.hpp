@@ -45,6 +45,7 @@ public:
     void check(int socket) const;
     void fail(int socket);
     void reset();
+    void verify_output() const;
 
 private:
     struct State;

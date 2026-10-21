@@ -29,6 +29,7 @@ struct Deci2Host::State {
     std::unordered_map<int, Channel> channels;
     int next_socket = 1;
     std::uint64_t generation = 0;
+    bool failed = false;
 
     Channel& require(int socket) {
         const auto found = channels.find(socket);
@@ -94,10 +95,12 @@ std::size_t Deci2Host::send(int socket, std::span<const std::uint8_t> bytes) {
         return bytes.size();
     } catch (const std::ios_base::failure& error) {
         channel.phase = Phase::Failed;
+        state_->failed = true;
         std::cerr << "[game-tty:error] output failed: " << error.what() << '\n';
         throw Deci2Error("DECI2 output failed");
     } catch (const Deci2Error&) {
         channel.phase = Phase::Failed;
+        state_->failed = true;
         throw;
     }
 }
@@ -112,11 +115,20 @@ void Deci2Host::finish(const Deci2Notification& completed) {
     if (channel.phase == Phase::Accepted) { channel.phase = Phase::Captured; return; }
     if (channel.phase != Phase::Writing) return;
     channel.phase = Phase::Requested;
-    if (channel.accepted == channel.before_callback) channel.phase = Phase::Failed;
+    if (channel.accepted == channel.before_callback) fail(completed.socket);
 }
 
 void Deci2Host::lock(int socket, bool locked) { state_->require(socket).locked = locked; }
 void Deci2Host::check(int socket) const { state_->require(socket); }
-void Deci2Host::fail(int socket) { state_->require(socket).phase = Phase::Failed; }
-void Deci2Host::reset() { state_->channels.clear(); }
+void Deci2Host::fail(int socket) {
+    state_->require(socket).phase = Phase::Failed;
+    state_->failed = true;
+}
+void Deci2Host::reset() {
+    state_->channels.clear();
+    state_->failed = false;
+}
+void Deci2Host::verify_output() const {
+    if (state_->failed) throw Deci2Error("DECI2 output did not complete successfully");
+}
 }

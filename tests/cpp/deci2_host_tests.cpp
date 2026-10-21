@@ -107,6 +107,9 @@ void rejects_sink_failure_without_completion() {
     rejects([&] { host.send(socket, packet("lost")); });
     host.finish(writing);
     require(host.poll(socket)->event == Deci2Event::Error, "failed sink completed");
+    rejects([&] { host.verify_output(); });
+    host.reset();
+    host.verify_output();
 }
 
 void does_not_complete_inside_write_handler() {

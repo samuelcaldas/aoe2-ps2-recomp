@@ -34,6 +34,17 @@ add_executable(aoe2_smoke_test
 
 target_link_libraries(aoe2_smoke_test PRIVATE aoe2_interfaces)
 
+enable_testing()
+add_library(aoe2_deci2_host STATIC runtime/src/deci2_host.cpp runtime/src/deci2_tty_packet.cpp)
+target_include_directories(aoe2_deci2_host PUBLIC runtime/include)
+add_executable(aoe2_deci2_host_tests tests/cpp/deci2_host_tests.cpp)
+target_link_libraries(aoe2_deci2_host_tests PRIVATE aoe2_deci2_host)
+add_test(NAME deci2_host COMMAND aoe2_deci2_host_tests)
+option(AOE2_BUILD_DECI2_RUNTIME_TESTS "Build DECI2 scheduler tests without generated game code" OFF)
+if(AOE2_BUILD_DECI2_RUNTIME_TESTS)
+    include(cmake/Aoe2Runtime.cmake)
+endif()
+
 # Recompiled game targets (generated code + PS2Recomp runtime built from source)
 option(AOE2_BUILD_DESKTOP_PROBE "Build the headless runtime-initialization probe for generated code" OFF)
 option(AOE2_BUILD_GAME "Build the playable recompiled game runner (aoe2_game)" OFF)
