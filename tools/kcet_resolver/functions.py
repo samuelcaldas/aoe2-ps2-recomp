@@ -12,6 +12,19 @@ from pathlib import Path
 from tools.kcet_resolver.errors import HookResolutionError
 
 
+def single_function(functions: FunctionMap, addresses: list, role: str) -> tuple:
+    found = {function for function in (functions.containing(address) for address in addresses) if function}
+    if len(found) != 1:
+        raise HookResolutionError(f"expected exactly one {role} function, found {len(found)}")
+    return found.pop()
+
+
+def single(values: list, role: str) -> int:
+    if len(values) != 1:
+        raise HookResolutionError(f"expected exactly one {role}, found {len(values)}")
+    return values[0]
+
+
 class FunctionMap:
     def __init__(self, rows: list):
         self._rows = sorted(rows)

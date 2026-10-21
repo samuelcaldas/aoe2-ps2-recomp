@@ -17,6 +17,7 @@ add_library(aoe2_interfaces STATIC
     input/src/touch_gestures.cpp
     input/src/usb_mouse.cpp
     input/src/usb_mouse_rpc.cpp
+    input/src/usb_keyboard_rpc.cpp
     renderer/src/null_renderer.cpp
     runtime/src/guest_memory.cpp
 )
