@@ -132,3 +132,23 @@ of the owned audio module confirms that it registers this service and derives
 its reply from pending transfer and stream state. The long guest delay between
 queries contributes to the wall-clock wait; a missing completion path is not
 yet established. The local full log is retained outside the repository.
+
+Inspection of the owned caller shows six sequential load-and-wait stages using
+this same status helper. In the 300-second log, a command for the second stage
+follows the zero status reply. Thus the run did make internal startup progress,
+although it failed the visual-progress criterion. Repeated samples within this
+bounded delay are not sufficient to prove a permanent deadlock.
+
+### Strict mouse/keyboard registry validation
+
+A subsequent 180-second run of the linked registry build confirms that all ten
+configured mouse/keyboard replacements apply, with zero unknown hooks and no
+pad aliases configured. Its log has zero missing branch targets and two audio
+status replies, both busy; the sampled PC remains in the bounded delay.
+
+The validator then raises `subprocess.TimeoutExpired` while waiting for the game
+to stop after termination. It exits before producing its final verdict or
+analysing the screenshots. This is a validator cleanup failure, not proof of a
+game crash, successful boot, or successful input. No screenshot files from this
+run were present when inspected afterward; visual results cannot be certified
+from that run. A separate Xvfb screenshot smoke test succeeds.
