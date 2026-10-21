@@ -85,3 +85,25 @@ into the table.
 Fix direction: configure the owned disc image as the runtime's CD image so
 real LBNs resolve. The image must match the recorded disc hash, and it stays
 outside the repository.
+
+With the owned disc image configured, every disc read succeeds and the table
+is no longer zeroed.
+
+## Cause of the next stop: VSync wait never blocked (INTC_STAT not emulated)
+
+The run then stopped when a worker thread returned to an address that was a
+GS display register value. Watching that thread's stack showed GS packet data
+written over its saved return address: one graphics packet buffer had grown
+megabytes past its end, through static data, into the stack.
+
+The packet is reset once per frame by a VBlank-driven task. The loading
+screen's fade loop draws one packet per iteration and waits for the next
+VSync with the Sony graphics library's sync routine, which clears the
+VBLANK_START bit in the INTC status register and polls it until the next
+VBlank sets it again. The runtime stored INTC_STAT as a plain value, so the
+cleared bit read back as set and the wait returned at once. The fade loop then
+ran thousands of iterations per frame and overflowed the packet buffer.
+
+Fix in the fork: INTC_STAT is write-one-to-clear, and every INTC interrupt the
+scheduler dispatches latches its status bit, even when the cause is masked or
+has no handler. Two fork tests cover it.
