@@ -11,19 +11,19 @@ Build a reproducible native static-recompilation port of **Age of Empires II: Th
 
 | Area | Recorded status |
 | :--- | :--- |
-| Authoritative code generation | Ghidra export with data-region and function-map guardrails; 17,047 map entries and 17,048 generated C++ translation units in the successful desktop build. |
+| Authoritative code generation | The current Ghidra export has 58,236 map entries and 58,237 generated C++ units. The generation manifest verifies, and the function-map guard reports zero violations. |
 | Desktop compilation and linking | All generated units link with the pinned PS2Recomp runtime, without game-specific stubs, skips, or edits to generated C++. |
-| Headless initialization probe | Guest memory and subsystems initialize, the owned ELF loads, the entry point resolves, and all 17,047 map entries are registered. This probe does **not** execute guest code. |
-| Desktop game runner | The local fork completes the SIF handshake and displays the game's loading screen, but has **not** completed boot. A 300-second run failed visual-progress validation despite advancing to a second audio-loading stage. |
+| Headless initialization probe | The earlier pinned-runtime probe initialized memory and subsystems, loaded the owned ELF, and resolved the entry point with its then-current 17,047-entry map. It does **not** execute guest code and is separate from the local-fork game runs below. |
+| Desktop game runner | The local fork completes the SIF handshake and displays the game's loading screen. In a 300-second experiment with function-trace output discarded, all five audio-loading waits clear and the screen becomes black with a cursor. No menu or completed boot is verified; visual-progress validation still fails. |
 | Input | Platform-neutral touch, USB mouse, and keyboard adapters are tested. The strict KCET registry applied all ten configured mouse/keyboard hooks in a desktop run, with no pad aliases configured. In-game input and exact keyboard event-mask semantics remain unvalidated. |
 | Rendering | `IRenderer` and a headless `NullRenderer` exist. A shared OpenGL ES 3 backend is the chosen direction, not a completed renderer. |
 | ARM64, Android, and Switch | Build infrastructure exists; successful gameplay and Switch compatibility are not established. |
 
 ### Immediate blocker
 
-The current local-fork runs remain on **the loading screen**. Startup repeatedly polls an audio-side service, with a long bounded guest delay between queries. The 300-second log shows a status clearing and the next loading command being issued, so an unchanged screen alone does not establish a permanent deadlock or a missing audio completion. Zero missing branch targets were recorded in that run.
+The local fork has **not reached a verified menu**. Startup polls an audio-side service with long bounded delays. Writing the diagnostic function trace severely limits observed progress: a 300-second file-writing run reaches the third audio-loading stage, whereas discarding only that trace output lets all five waits clear within the same window. The latter run ends on a black screen with a cursor, with 23 successful SIF disc reads and no missing branch targets. The remaining boot/rendering cause is not established; audio completion must not be forced or assumed broken.
 
-A subsequent 180-second run confirmed all ten mouse/keyboard hooks were applied, but its validator raised a process-shutdown timeout before producing a final report. It must not be counted as a validation pass. See [the diagnostic history and evidence](docs/sot/kcet-stall-log.md). Fabricated status replies, semaphore signals, and bypass hooks are not acceptable.
+A 180-second run confirmed all ten mouse/keyboard hooks were applied, but its validator raised a process-shutdown timeout before producing a final report. Bounded termination escalation now prevents that timeout from discarding the result. A fresh 300-second run completes reporting but still fails validation: four real frames remain unchanged, with no missing targets. See [the diagnostic history and evidence](docs/sot/kcet-stall-log.md). Fabricated status replies, semaphore signals, and bypass hooks are not acceptable.
 
 A separate known gap is the ELF's runtime-loaded executable overlays: their code must be located on the owned disc and brought through the same guarded recompilation pipeline before execution can rely on them. See [the desktop probe report](docs/desktop-runtime-probe.md#71-finding-runtime-loaded-overlays).
 

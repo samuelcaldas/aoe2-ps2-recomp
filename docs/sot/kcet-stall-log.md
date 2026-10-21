@@ -133,7 +133,7 @@ its reply from pending transfer and stream state. The long guest delay between
 queries contributes to the wall-clock wait; a missing completion path is not
 yet established. The local full log is retained outside the repository.
 
-Inspection of the owned caller shows six sequential load-and-wait stages using
+Inspection of the owned caller shows five sequential load-and-wait stages using
 this same status helper. In the 300-second log, a command for the second stage
 follows the zero status reply. Thus the run did make internal startup progress,
 although it failed the visual-progress criterion. Repeated samples within this
@@ -152,3 +152,46 @@ analysing the screenshots. This is a validator cleanup failure, not proof of a
 game crash, successful boot, or successful input. No screenshot files from this
 run were present when inspected afterward; visual results cannot be certified
 from that run. A separate Xvfb screenshot smoke test succeeds.
+
+The validator now terminates and waits for each child with a bounded timeout,
+escalates to kill on timeout, and reaps it with another bounded wait. Both the
+game and Xvfb are cleaned up on exceptional paths. Six regression tests cover
+these cases; the complete Python suite passes (186 tests, one skipped), host
+CTest passes all five tests, and the existing fork test executable passes all
+483 runtime tests.
+
+A fresh 300-second run produces a complete **FAIL** report without the shutdown
+exception: execution started, the process remained alive, four captured frames
+are real but unchanged, and zero missing targets are recorded. All ten input
+hooks apply; pad aliases remain absent. Audio status replies are
+`1, 1, 0, 1, 0, 1`, with successive commands reaching the third of the five
+startup loading stages. The menu is still not reached. This is evidence of
+internal progress, not working gameplay or verified keyboard/mouse interaction.
+
+Further inspection of the owned audio support library identifies the relevant
+request/status pair as enqueueing and checking tickets in a bounded CD-read
+queue. It is not a direct SIF DMA completion query. The queue does advance in
+the observed runs; no defect in its completion path has yet been demonstrated.
+
+### Function-trace output experiment
+
+The diagnostic build flushes its function-entry/exit file after each record,
+producing gigabytes during a run. A second 300-second experiment uses the same
+executable from a temporary working directory with only that trace file linked
+to `/dev/null`; runtime, RPC, TTY, and error output remain captured normally.
+This is an experimental output-sink change, not a guest-code change or a
+permanent runtime fix.
+
+With this sink, all five startup loading commands are issued and each wait
+observes a clear status. All ten input hooks apply, and 23 SIF disc reads succeed
+with zero failures. No missing targets or fatal messages are recorded. The
+loading text disappears; the final captured screen is black with a visible
+cursor, not a verified menu. The changed output sink is associated with much
+more internal progress than the file-writing run, but does not establish the
+remaining boot/rendering cause or correct input behavior.
+
+Validation is still **FAIL**: `stalled_in_loop`, one frame classified as real,
+and no differing pair of real frames. Most captures are classified as low
+detail. The transition must not be called a gameplay pass or hidden by relaxing
+the frame classifier. CPU profiling was unavailable because the host restricts
+`perf`; no host permission or kernel settings were changed.

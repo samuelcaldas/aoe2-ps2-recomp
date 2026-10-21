@@ -64,3 +64,4 @@ platform/android/build/
 # Logs
 logs/
 *.log
+/ps2_log.txt
