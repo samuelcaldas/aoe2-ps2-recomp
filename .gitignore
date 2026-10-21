@@ -60,3 +60,7 @@ buildOutputCleanup.lock
 platform/android/.gradle/
 platform/android/app/build/
 platform/android/build/
+
+# Logs
+logs/
+*.log
