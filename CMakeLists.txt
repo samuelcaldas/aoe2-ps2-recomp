@@ -7,6 +7,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Platform-neutral interface library
 add_library(aoe2_interfaces STATIC
+    assets/src/asset_path_resolver.cpp
+    assets/src/loose_hd_asset_provider.cpp
     input/src/actions.cpp
     input/src/guest_keyboard.cpp
     input/src/guest_mouse.cpp
@@ -20,6 +22,7 @@ add_library(aoe2_interfaces STATIC
 )
 
 target_include_directories(aoe2_interfaces PUBLIC
+    assets/include
     core/include
     input/include
     renderer/include
@@ -55,3 +58,11 @@ add_executable(aoe2_input_tests
 
 target_link_libraries(aoe2_input_tests PRIVATE aoe2_interfaces)
 add_test(NAME input_tests COMMAND aoe2_input_tests)
+
+# Decoupled HD asset provider tests
+add_executable(aoe2_asset_tests
+    tests/cpp/asset_tests.cpp
+)
+
+target_link_libraries(aoe2_asset_tests PRIVATE aoe2_interfaces)
+add_test(NAME asset_tests COMMAND aoe2_asset_tests)
