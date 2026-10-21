@@ -182,7 +182,9 @@ Gameplay impact (more of the map visible) matches the PC widescreen mods. It mus
 
 ### 7.3 HD and widescreen assets from Age of Empires II (2013)
 
-Age of Empires II (2013) is the planned optional source of higher-resolution and widescreen-ready assets. Its openage converter ID is `HD`. Rationale:
+Age of Empires II (2013) is the primary target source of higher-resolution, widescreen-ready, and modern decoupled assets. Its openage converter ID is `HD`. Detailed architectural specification for decoupling and platform layout: see `docs/architecture-hd-asset-decoupling.md`.
+
+Rationale:
 
 * It is the closest data lineage to the original game: the same SLP sprite format, the same graphic/unit identifiers, and it is supported by the openage converter. That keeps a PS2 → PC asset correlation tractable. Definitive Edition (`DE2`) has redrawn art in a different format (SMX) and is a later, separate option.
 * Its interface is built for arbitrary and widescreen resolutions, which gives a reference for a widescreen HUD instead of stretching 4:3 bitmaps the way AoE2Wide does.
