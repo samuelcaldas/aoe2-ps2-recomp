@@ -20,6 +20,7 @@ struct HostMouseReport {
     float delta_y{0.0f};
     uint32_t buttons{0};
     uint64_t timestamp_us{0};
+    float wheel{0.0f};
 };
 
 struct MouseConfig {

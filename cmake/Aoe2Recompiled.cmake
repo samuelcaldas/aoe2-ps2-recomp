@@ -10,6 +10,14 @@
 set(GENERATED_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/generated/SLES-50282")
 set(PS2X_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/PS2Recomp")
 set(PS2X_RUNTIME_DIR "${PS2X_DIR}/ps2xRuntime")
+if(NINTENDO_SWITCH)
+    # devkitA64 newlib requires _GNU_SOURCE for posix_memalign and other POSIX APIs.
+    add_compile_definitions(_GNU_SOURCE MA_NO_RUNTIME_LINKING)
+    # Raylib has no Switch audio driver; disable raudio and rely on switch_compat.c stubs
+    set(CUSTOMIZE_BUILD ON CACHE BOOL "" FORCE)
+    set(SUPPORT_MODULE_RAUDIO OFF CACHE BOOL "" FORCE)
+endif()
+
 set(AOE2_GENERATED_UNITY_BATCH 16 CACHE STRING "Generated units per unity translation unit (0 disables unity builds)")
 set(AOE2_GENERATED_OPTIMIZATION "-O1" CACHE STRING "Optimization flag for generated code; higher levels multiply compile time")
 
@@ -39,6 +47,14 @@ if(GENERATED_COUNT EQUAL 0)
     message(FATAL_ERROR "No generated sources in ${GENERATED_SRC_DIR}; run tools/run_ps2recomp_pipeline.py")
 endif()
 message(STATUS "Discovered ${GENERATED_COUNT} generated C++ translation units.")
+
+# register_functions.cpp contains 58k sequential assignment statements. Compiling
+# it inside a unity batch under -O1/-O2 causes GCC optimization passes to take hours.
+# Compiling it standalone under -O0 takes ~20 seconds.
+set_source_files_properties("${GENERATED_SRC_DIR}/register_functions.cpp" PROPERTIES
+    SKIP_UNITY_BUILD_INCLUSION TRUE
+    COMPILE_OPTIONS "-O0"
+)
 
 # Everything that includes ps2_runtime.h links this: the runtime plus the
 # per-architecture definitions the upstream only sets in its own directory.
@@ -105,6 +121,13 @@ if(AOE2_BUILD_GAME)
         add_executable(aoe2_game "${AOE2_RUNNER_MAIN}")
     endif()
     aoe2_link_recompiled(aoe2_game)
+    # Compiled into the executable (not a static library) so the self-registering
+    # game override is never dropped by the linker.
+    target_sources(aoe2_game PRIVATE game_hooks/src/kcet_mouse_overrides.cpp)
+    if(NINTENDO_SWITCH)
+        target_sources(aoe2_game PRIVATE platform/switch/src/switch_compat.c)
+    endif()
+    target_link_libraries(aoe2_game PRIVATE aoe2_interfaces)
     if(AOE2_DEFAULT_BOOT_ELF)
         target_compile_definitions(aoe2_game PRIVATE PS2X_DEFAULT_BOOT_ELF="${AOE2_DEFAULT_BOOT_ELF}")
     endif()

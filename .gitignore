@@ -52,3 +52,11 @@ generated/
 
 # Screenshots and captures from validation runs
 .playwright-mcp/
+
+.gradle/
+buildOutputCleanup.lock
+*.lock
+
+platform/android/.gradle/
+platform/android/app/build/
+platform/android/build/

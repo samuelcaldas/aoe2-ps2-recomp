@@ -4,6 +4,7 @@
 #include <aoe2/input/surface_mapping.hpp>
 #include <aoe2/input/touch_gestures.hpp>
 #include <aoe2/input/usb_mouse.hpp>
+#include <aoe2/input/usb_mouse_rpc.hpp>
 
 #include <cmath>
 #include <cstdlib>
@@ -295,6 +296,58 @@ void TestRoutingHandheldUsesTouchDockedUsesUsb() {
     CHECK(docked.usb_mouse && docked.usb_keyboard);
 }
 
+void TestMouseRpcInfoReportsOnePortWhenConnected() {
+    UsbMouseRpcModel model;
+    model.SetConnected(true);
+    const UsbMouseRpcModel::Reply info = model.InfoReply();
+    CHECK(info[0] == 1 && info[1] == 1 && info[2] == 1);
+    model.SetConnected(false);
+    CHECK(model.InfoReply()[2] == 0);
+}
+
+void TestMouseRpcReadDrainsOneEventThenReportsEmpty() {
+    UsbMouseRpcModel model;
+    model.SetConnected(true);
+    model.Submit(HostMouseReport{3.0f, -2.0f, kMouseButtonLeft, 0, 1.0f});
+    const UsbMouseRpcModel::Reply event = model.ReadReply();
+    CHECK(event[0] == 4);
+    CHECK(event[1] == 0x01);
+    CHECK(static_cast<int8_t>(event[2]) == 3 && static_cast<int8_t>(event[3]) == -2);
+    CHECK(static_cast<int8_t>(event[4]) == 1);
+    CHECK(model.ReadReply()[0] == 0);
+}
+
+void TestMouseRpcSplitsLargeMotionAcrossEvents() {
+    UsbMouseRpcModel model;
+    model.SetConnected(true);
+    model.Submit(HostMouseReport{300.0f, 0.0f, 0});
+    int total = 0;
+    for (int read = 0; read < 4; ++read) {
+        const UsbMouseRpcModel::Reply event = model.ReadReply();
+        if (event[0] == 0) {
+            break;
+        }
+        total += static_cast<int8_t>(event[2]);
+    }
+    CHECK(total == 300);
+}
+
+void TestMouseRpcButtonChangeWithoutMotionIsAnEvent() {
+    UsbMouseRpcModel model;
+    model.SetConnected(true);
+    model.Submit(HostMouseReport{0.0f, 0.0f, kMouseButtonRight});
+    const UsbMouseRpcModel::Reply event = model.ReadReply();
+    CHECK(event[0] == 4 && event[1] == 0x02);
+    model.Submit(HostMouseReport{0.0f, 0.0f, kMouseButtonRight});
+    CHECK(model.ReadReply()[0] == 0);
+}
+
+void TestMouseRpcDisconnectedMouseHasNoEvents() {
+    UsbMouseRpcModel model;
+    model.Submit(HostMouseReport{5.0f, 5.0f, kMouseButtonLeft});
+    CHECK(model.ReadReply()[0] == 0);
+}
+
 } // namespace
 
 int main() {
@@ -321,6 +374,11 @@ int main() {
     TestKeyboardIgnoresRepeatsAndUnknownReleases();
     TestDiffPressedKeysReportsReleasesThenPresses();
     TestRoutingHandheldUsesTouchDockedUsesUsb();
+    TestMouseRpcInfoReportsOnePortWhenConnected();
+    TestMouseRpcReadDrainsOneEventThenReportsEmpty();
+    TestMouseRpcSplitsLargeMotionAcrossEvents();
+    TestMouseRpcButtonChangeWithoutMotionIsAnEvent();
+    TestMouseRpcDisconnectedMouseHasNoEvents();
     if (g_failures != 0) {
         std::cerr << g_failures << " check(s) failed" << std::endl;
         return EXIT_FAILURE;
