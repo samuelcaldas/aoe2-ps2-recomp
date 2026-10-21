@@ -81,7 +81,7 @@ uint8_t UsbKeyboardRpcModel::ValidateUnit(uint8_t unit) const {
 }
 
 uint8_t UsbKeyboardRpcModel::LockMask(const GuestKeyboardState&) const {
-    return led_pattern_ & 0x07;
+    return 0;
 }
 
 } // namespace aoe2::input
