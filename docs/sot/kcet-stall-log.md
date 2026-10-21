@@ -107,3 +107,28 @@ ran thousands of iterations per frame and overflowed the packet buffer.
 Fix in the fork: INTC_STAT is write-one-to-clear, and every INTC interrupt the
 scheduler dispatches latches its status bit, even when the cause is masked or
 has no handler. Two fork tests cover it.
+
+### Desktop validation after the INTC_STAT change
+
+The subsequent 90-second diagnostic run remains **FAIL**: the process stays
+alive, there are no missing branch targets, and the loading screen is visible,
+but the validator reports `stalled_in_loop`, one real screenshot, and no frame
+change. The earlier invalid-target stop did not recur during this run; this
+alone does not prove that every packet-buffer overrun has been eliminated.
+
+The sampled guest PC is now inside a bounded delay within a startup status
+poll, rather than the earlier packet-append path. The main thread still waits
+on its original semaphore. No SIF CDVD reads are logged in this run, so it
+provides no additional disc-read coverage. The meaning and producer of the
+polled startup status are under investigation; no success response or semaphore
+signal has been fabricated to bypass it.
+
+An unchanged-binary run extended to 300 seconds also fails validation: the
+process remains alive with zero missing targets and four real screenshots, but
+no screenshot change. Four startup status replies are observed, in sequence
+`1, 1, 0, 1`; therefore a permanently unchanged status is ruled out. The request
+uses a separate audio-side RPC service, not the controller service. Inspection
+of the owned audio module confirms that it registers this service and derives
+its reply from pending transfer and stream state. The long guest delay between
+queries contributes to the wall-clock wait; a missing completion path is not
+yet established. The local full log is retained outside the repository.
