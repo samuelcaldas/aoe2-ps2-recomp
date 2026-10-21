@@ -15,7 +15,7 @@ Build a reproducible native static-recompilation port of **Age of Empires II: Th
 | Desktop compilation and linking | All generated units link with the pinned PS2Recomp runtime, without game-specific stubs, skips, or edits to generated C++. |
 | Headless initialization probe | Guest memory and subsystems initialize, the owned ELF loads, the entry point resolves, and all 17,047 map entries are registered. This probe does **not** execute guest code. |
 | Desktop game runner | Starts guest execution, but does **not** complete boot. The latest 60-second diagnostic baseline is `stalled_in_loop`, with zero real frames. |
-| Input | Platform-neutral touch, USB mouse, and keyboard adapters are implemented and tested. KCET mouse hooks and an ELF-anchored hook resolver exist; the boot stall prevents in-game validation. Dedicated KCET keyboard hooks are not implemented. |
+| Input | Platform-neutral touch, USB mouse, and keyboard adapters are implemented and tested. KCET mouse hooks and a host keyboard RPC model exist; the ELF resolver now locates the six keyboard RPC roles. Keyboard game-hook handlers and runtime integration remain incomplete; the boot stall prevents in-game validation. |
 | Rendering | `IRenderer` and a headless `NullRenderer` exist. A shared OpenGL ES 3 backend is the chosen direction, not a completed renderer. |
 | ARM64, Android, and Switch | Build infrastructure exists; successful gameplay and Switch compatibility are not established. |
 

@@ -81,6 +81,7 @@ uint8_t UsbKeyboardRpcModel::ValidateUnit(uint8_t unit) const {
 }
 
 uint8_t UsbKeyboardRpcModel::LockMask(const GuestKeyboardState&) const {
+    // Lock-state deltas are unavailable in host snapshots; zero is a documented approximation.
     return 0;
 }
 

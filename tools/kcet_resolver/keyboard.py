@@ -17,6 +17,20 @@ BIND_HOOK = "kcet.keyboard.bind"
 ARGUMENT_REGISTER_A1 = 5
 
 
+def _client_low_half_wrappers(image: ElfImage, functions: FunctionMap, client: int,
+                              rpc_function: int) -> list:
+    """Find wrappers using the client global through a base-plus-low-half address form."""
+    matches = []
+    for start, end, _ in functions._rows:
+        if rpc_function not in small_arguments_before_calls(image, start, end, ARGUMENT_REGISTER_A1):
+            continue
+        words = image.read(start, end - start)
+        if any((int.from_bytes(words[offset:offset + 4], "little") & 0xFFFF) == (client & 0xFFFF)
+               for offset in range(0, len(words) - 3, 4)):
+            matches.append((start, end, ""))
+    return matches
+
+
 def resolve_keyboard_hooks(image: ElfImage, functions: FunctionMap) -> dict:
     """Return hook names and exported function starts for the keyboard RPC service."""
     bind = single_function(functions, find_address_loads(image, USB_KEYBOARD_RPC_SID), "keyboard service id")
@@ -30,6 +44,8 @@ def resolve_keyboard_hooks(image: ElfImage, functions: FunctionMap) -> dict:
         matches = [function for function in wrappers
                    if rpc_function in small_arguments_before_calls(
                        image, function[0], function[1], ARGUMENT_REGISTER_A1)]
+        if not matches:
+            matches = _client_low_half_wrappers(image, functions, client, rpc_function)
         hooks[hook] = single([function[0] for function in matches], f"keyboard RPC function {rpc_function}")
     for address in hooks.values():
         functions.require_start(address)
