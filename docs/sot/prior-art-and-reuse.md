@@ -9,6 +9,7 @@ No PS2 game has a native Nintendo Switch port yet; the entries below are the clo
 | :--- | :--- | :--- |
 | PS2Recomp (pinned in `third_party_provenance.lock.json`) | GPL-3.0 | Link and reuse; already a dependency. |
 | `samuelcaldas/age-of-empires-2-decomp` (local: `../aoe`) | Owner's project, no license file | **Authorized by the owner** as a reference when the generated code alone is not enough: mouse and other peripherals, input polling, structure layouts, game behavior. See §4. |
+| Play! PS2 Emulator (`jpd002/Play-`) | BSD 2-Clause | **Runtime Source of Truth (SOT)** for reference hardware behavior, SIF/IOP HLE contracts, boot handshakes, and overlay loading (see `docs/sot/play-emulator-sot.md`). |
 | `KIexster/god-of-war-recomp` | GPL-3.0 | Code reuse allowed (GPL-compatible with PS2Recomp); game-specific overrides do not apply to AoE2. |
 | `centollOS/SwitchWakerHD` | MPL-2.0 (vendored parts: see repo) | Code reuse allowed per file, keeping MPL-2.0 headers on reused files. |
 | `Trinalord777/DK64Recomp-NX` | GPL-3.0 | Code reuse allowed. |
