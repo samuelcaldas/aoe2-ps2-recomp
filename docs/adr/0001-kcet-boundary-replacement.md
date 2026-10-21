@@ -51,14 +51,16 @@ High-level replacements hook the KCET boundary: a KCET function is replaced by a
 | :--- | :--- | :--- |
 | `kt_mouse` | Write host USB mouse reports into the KCET port buffers in the same packet format, so the game's own cursor logic runs unchanged | `UsbMouseTranslator` / raw relative reports; touch converted to relative motion |
 | `kt_keybd`, `kt_usbkeybd_drv` | Answer key-status queries from `GuestKeyboardAdapter` boot-protocol reports | Host keyboard (desktop, Android, Switch docked USB) |
-| `kt_libpad` | None needed: the PS2Recomp runtime already emulates libpad from raylib gamepads and keyboard | Gamepads, Joy-Cons, Pro Controller |
-| `kt_libcdvd_server`, `kt_file` | None needed while the runtime's CD HLE serves the extracted disc; hook only if a blocker appears | Extracted disc (`tools/import_owned_disc.py`) |
-| `kt_mc_2` | None needed while the runtime's `mcserv` HLE works | Host memory-card directory |
-| `kt_gpu` | Seam for the high-level `IRenderer` (sprites, tiles, UI) when the GS path is replaced | OpenGL ES 3 backend (`docs/sot/prior-art-and-reuse.md` §3) |
+| `kt_libpad` | DualShock 2 gamepad and analog cursor emulation mapped to host controllers | Host gamepads, Joy-Cons, Pro Controller via raylib / SDL |
+| `kt_libcdvd_server`, `kt_file` | File access redirected to decoupled external assets or extracted disc files | External `assets/` folder via `LooseHdAssetProvider` |
+| `kt_mc_2` | Save game operations redirected to host platform save files | Host memory-card / save directory |
+| `kt_gpu` | Seam for the high-level `IRenderer` (sprites, tiles, UI) bypassing GS VRAM and CLUT swizzling | OpenGL ES 3 / Mesa / deko3d backend (`docs/sot/subsystems-assets-evolution.md`) |
+| `mydplay.cpp` | DirectPlay Compatible Interface hook redirecting P2P lockstep to UDP LAN | `aoe2::net::UdpLanTransport` (`docs/sot/multiplayer-lan-architecture.md`) |
+| `soundcd.irx` / audio | High-level sound effects and music streams bypassing SPU2 / IOP | Host audio backend (SDL2 / raylib / OpenAL) playing WAV/MP3 |
 | `kt_kernel` | None: the runtime's EE scheduler provides threads and semaphores | — |
 | `kt_hd` | Not replaced; unused on the retail disc | — |
 
-Order of work: input (`kt_mouse`, `kt_keybd`) first, because joystick, keyboard, and mouse are required on every platform; then `kt_gpu` with the renderer; the others only if they block.
+Order of work: input (`kt_mouse`, `kt_keybd`) first; then `kt_gpu` with the renderer and `mydplay` with network; then sound overrides (`soundcd.irx`) and file subsystems.
 
 ## Rules
 
@@ -80,4 +82,7 @@ Order of work: input (`kt_mouse`, `kt_keybd`) first, because joystick, keyboard,
 
 - `kt_mouse`: implemented. `tools/resolve_kcet_hooks.py` finds the RPC bind (USB mouse service SID `0x80000210`) and the three RPC wrappers (functions 1 info, 2 read events, 3 device info) in the decompilation by structure and writes their addresses to the ignored `game/SLES-50282/kcet_hooks.ini`. `game_hooks/src/kcet_mouse_overrides.cpp` registers a game override that replaces them with host functions answering from `aoe2::input::UsbMouseRpcModel`, sampled from the platform mouse through raylib once per game poll. Without the hooks file the bind loop has no IOP service to reach, so the file is required to boot past mouse initialization.
 - `kt_keybd`: not yet; the decompilation has not matched it. Keyboard input reaches the game through the runtime's pad emulation (keys mapped to DualShock buttons) meanwhile.
-- `kt_gpu` and the rest: not started.
+- `mydplay.cpp`: specified in `docs/sot/multiplayer-lan-architecture.md`. Intercepts the DirectPlay vtable at `0x338140` to route multiplayer lockstep over UDP LAN sockets.
+- `kt_gpu`: specified in `docs/sot/subsystems-assets-evolution.md`. Seam for high-level rendering via `aoe2::renderer::IRenderer`, bypassing GS hardware CLUT swizzling and VRAM limitations.
+- `soundcd.irx`: specified in `docs/sot/subsystems-assets-evolution.md`. Intercepts audio triggers to play WAV/MP3 files from host audio backends directly.
+- The rest: not started.
