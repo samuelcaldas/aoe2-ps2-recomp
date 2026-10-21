@@ -11,6 +11,7 @@
 
 using namespace aoe2::runtime;
 void verify_deci2_session_lifetime();
+void verify_deci2_kputs_failure();
 extern PS2Runtime::RecompiledFunction g_ps2RecompiledFunctionTable[];
 namespace {
 constexpr std::uint32_t ENTRY = 4096, HANDLER = 8192, ARGUMENTS = 12288, BUFFER = 16384;
@@ -36,8 +37,11 @@ void handler(std::uint8_t*, R5900Context* context, PS2Runtime* runtime) {
     require(getRegU32(context, 5) == 0, "wrong event parameter");
     require(getRegU32(context, 6) == 1234, "workspace used instead of opt");
     events.push_back(event);
-    if (event == 3) require(call(*runtime, *context, -6, {unsigned(socket_id), BUFFER, 15}) ==
-        (failed_sink ? -1 : 15), "wrong send result");
+    if (event == 3) {
+        require(call(*runtime, *context, -6, {unsigned(socket_id), BUFFER, 12}) == 12, "header send failed");
+        require(call(*runtime, *context, -6, {unsigned(socket_id), BUFFER + 12, 3}) ==
+            (failed_sink ? -1 : 3), "wrong payload send result");
+    }
     context->pc = getRegU32(context, 31);
 }
 
@@ -119,6 +123,7 @@ void rejects_unbound_runtime() {
 int main() {
     try {
         verify_deci2_session_lifetime();
+        verify_deci2_kputs_failure();
         rejects_unbound_runtime();
         exercises_scheduler_callbacks(false);
         exercises_scheduler_callbacks(true);

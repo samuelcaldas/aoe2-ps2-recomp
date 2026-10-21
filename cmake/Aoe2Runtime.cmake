@@ -51,6 +51,7 @@ set(AOE2_GAME_RUNNER_SOURCES
 if(AOE2_BUILD_DECI2_RUNTIME_TESTS)
     add_executable(aoe2_deci2_runtime_tests tests/cpp/deci2_runtime_tests.cpp
         tests/cpp/deci2_session_tests.cpp
+        tests/cpp/deci2_io_tests.cpp
         "${PS2X_DIR}/ps2xTest/src/test_function_table.cpp")
     target_link_libraries(aoe2_deci2_runtime_tests PRIVATE aoe2_ps2_runtime)
     add_test(NAME deci2_runtime COMMAND aoe2_deci2_runtime_tests)

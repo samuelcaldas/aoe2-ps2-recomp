@@ -90,8 +90,11 @@ void Deci2Call(std::uint8_t* memory, R5900Context* context, PS2Runtime* runtime)
     if (!host) return;
     try {
         dispatch_operation(*runtime, host, memory, *context);
+    } catch (const std::ios_base::failure& error) {
+        std::fprintf(stderr, "[game-tty:error] output failed: %s\n", error.what());
+        setReturnS32(context, -1);
     } catch (const aoe2::runtime::Deci2Error& error) {
-        std::cerr << "[game-tty:error] " << error.what() << '\n';
+        std::fprintf(stderr, "[game-tty:error] %s\n", error.what());
         setReturnS32(context, -1);
     }
 }

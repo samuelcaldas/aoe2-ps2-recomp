@@ -59,6 +59,12 @@ C++ or a game ELF. Run `ctest -R deci2 --output-on-failure` in isolated Release 
 Debug builds, also covering `-DAOE2_GAME_TTY=OFF`. Build runtime tests inside the
 desktop Docker image with the project's CPU/memory limits.
 
+Local verification also executes the owned, recompiled EE TTY handler and its
+SDK wrappers with a test-supplied packet: capture occurs once, the guest's send
+flag clears, and completion takes two Poll calls. The address-specific harness
+and its logs remain ignored under `build/tty-owned-handler/`; this isolated
+handler check is not a full game boot.
+
 A real-game check must identify text delivered through ExSend, not merely an
 existing assert-hook message or IOP printf. A stalled/aborted run remains a
 validation failure even if its diagnostic text is now visible. Local dependency

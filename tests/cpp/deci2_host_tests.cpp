@@ -154,9 +154,26 @@ void locks_and_reset_cancel_pending_events() {
     require(host.poll(fresh)->handler == 3, "stale completion affected new channel");
 }
 
+void accepts_multiple_sends_in_one_callback() {
+    std::string output;
+    Deci2Host host([&](std::string_view text) { output += text; });
+    const auto socket = host.open(EE_TTY_PROTOCOL, 1, 2);
+    host.request(socket, 'H');
+    const auto writing = *host.poll(socket);
+    const auto bytes = packet("split");
+    host.send(socket, std::span(bytes).first(12));
+    require(output.empty(), "header emitted as payload");
+    host.send(socket, std::span(bytes).subspan(12));
+    host.finish(writing);
+    require(output == "split", "split sends lost or duplicated payload");
+    host.finish(*host.poll(socket));
+    require(!host.poll(socket), "split sends repeated completion");
+}
+
 int main() {
     try {
         completes_only_after_capture();
+        accepts_multiple_sends_in_one_callback();
         assembles_split_header_and_large_payload();
         rejects_invalid_lifecycle();
         reports_malformed_packet_and_no_progress();
