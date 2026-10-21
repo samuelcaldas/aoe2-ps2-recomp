@@ -71,3 +71,17 @@ Current state: the game draws its own loading screen (real frames, not the
 runtime fallback), but the frame stops changing after a few seconds. The
 validator still fails on "frames change". Investigation of the remaining
 stall is in progress.
+
+## Cause of the zeroed data table: disc reads without a disc image
+
+Watching writes to the table that holds the game's handler pointers showed
+it being overwritten with zeros by a block copy whose source is a CD read
+buffer. Every disc read in the diagnostic run fails: the game asks for sectors
+by their real disc LBN, and the runtime has no disc image configured
+(`cdImage` is empty), so `sceCdRead` reports an unresolved LBN and returns
+without filling the buffer. The copy then moves the buffer's zero contents
+into the table.
+
+Fix direction: configure the owned disc image as the runtime's CD image so
+real LBNs resolve. The image must match the recorded disc hash, and it stays
+outside the repository.
