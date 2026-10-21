@@ -20,6 +20,14 @@ std::filesystem::path game_path(int count, char* arguments[]) {
 #endif
 }
 
+std::filesystem::path disc_image_path(int count, char* arguments[]) {
+    if (count < 3 || !arguments[2] || arguments[2][0] == '\0') return {};
+    const std::filesystem::path image = arguments[2];
+    if (!std::filesystem::is_regular_file(image))
+        throw std::runtime_error("Disc image not found: " + image.string());
+    return image;
+}
+
 std::string game_window_title(const std::filesystem::path& path) {
     const auto filename = path.filename().string();
     auto identifier = filename;
