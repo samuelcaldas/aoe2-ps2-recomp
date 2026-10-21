@@ -1,7 +1,7 @@
 # Age of Empires II: The Age of Kings — PS2 Native Recompilation Port
 
 > **Current status (2026-10-21): desktop runtime bring-up; not playable.**
-> The Ghidra → PS2Recomp pipeline produces C++ that compiles and links with the pinned upstream runtime on Linux x86-64. Headless initialization succeeds, and the desktop game runner starts guest execution, but the latest diagnostic run stalls in the SIF boot handshake before input initialization or any real frame. No game binaries, assets, or generated game code are distributed here.
+> The Ghidra → PS2Recomp pipeline produces C++ that compiles and links on Linux x86-64. The local PS2Recomp fork now completes the SIF boot handshake and has displayed the game's loading screen, but boot and gameplay remain unvalidated. Mouse and keyboard hooks apply successfully; this is not proof of working in-game input. These runtime changes are local and are not reproduced by the pinned dependency alone. No game binaries, assets, or generated game code are distributed here.
 
 ## 1. Objective and Current Status
 
@@ -14,16 +14,16 @@ Build a reproducible native static-recompilation port of **Age of Empires II: Th
 | Authoritative code generation | Ghidra export with data-region and function-map guardrails; 17,047 map entries and 17,048 generated C++ translation units in the successful desktop build. |
 | Desktop compilation and linking | All generated units link with the pinned PS2Recomp runtime, without game-specific stubs, skips, or edits to generated C++. |
 | Headless initialization probe | Guest memory and subsystems initialize, the owned ELF loads, the entry point resolves, and all 17,047 map entries are registered. This probe does **not** execute guest code. |
-| Desktop game runner | Starts guest execution, but does **not** complete boot. The latest 60-second diagnostic baseline is `stalled_in_loop`, with zero real frames. |
-| Input | Platform-neutral touch, USB mouse, and keyboard adapters are implemented and tested. KCET mouse hooks and a host keyboard RPC model exist; the ELF resolver now locates the six keyboard RPC roles. Keyboard game-hook handlers and runtime integration remain incomplete; the boot stall prevents in-game validation. |
+| Desktop game runner | The local fork completes the SIF handshake and displays the game's loading screen, but has **not** completed boot. A 300-second run failed visual-progress validation despite advancing to a second audio-loading stage. |
+| Input | Platform-neutral touch, USB mouse, and keyboard adapters are tested. The strict KCET registry applied all ten configured mouse/keyboard hooks in a desktop run, with no pad aliases configured. In-game input and exact keyboard event-mask semantics remain unvalidated. |
 | Rendering | `IRenderer` and a headless `NullRenderer` exist. A shared OpenGL ES 3 backend is the chosen direction, not a completed renderer. |
 | ARM64, Android, and Switch | Build infrastructure exists; successful gameplay and Switch compatibility are not established. |
 
 ### Immediate blocker
 
-The guest waits for an IOP-side reply during the **SIF boot handshake**. The pinned runtime has no reply path for that handshake, so the guest polls indefinitely. Keyboard, controller, and memory-card services are not reached; adding input hooks does not fix this earlier boot stall. The diagnostic run records no missing branch targets and no real frames.
+The current local-fork runs remain on **the loading screen**. Startup repeatedly polls an audio-side service, with a long bounded guest delay between queries. The 300-second log shows a status clearing and the next loading command being issued, so an unchanged screen alone does not establish a permanent deadlock or a missing audio completion. Zero missing branch targets were recorded in that run.
 
-See [the diagnostic baseline and cause](docs/sot/kcet-stall-log.md). A faithful upstream reply path is the first option to evaluate; fabricated return values or bypass hooks are not acceptable.
+A subsequent 180-second run confirmed all ten mouse/keyboard hooks were applied, but its validator raised a process-shutdown timeout before producing a final report. It must not be counted as a validation pass. See [the diagnostic history and evidence](docs/sot/kcet-stall-log.md). Fabricated status replies, semaphore signals, and bypass hooks are not acceptable.
 
 A separate known gap is the ELF's runtime-loaded executable overlays: their code must be located on the owned disc and brought through the same guarded recompilation pipeline before execution can rely on them. See [the desktop probe report](docs/desktop-runtime-probe.md#71-finding-runtime-loaded-overlays).
 
@@ -70,7 +70,7 @@ aoe2-ps2-recomp/
 ├── runtime/                        # Guest memory and platform-service interfaces
 ├── platform/                       # Desktop, Android, and Switch runners/integration
 ├── input/                          # Touch, USB mouse/keyboard, guest adapters and RPC model
-├── game_hooks/                     # Host-side KCET mouse replacements
+├── game_hooks/                     # Strict KCET registry and mouse/keyboard replacements
 ├── renderer/                       # Rendering interface and NullRenderer
 ├── docker/                         # Desktop, Android, and Switch build images
 ├── tools/                          # Import, generation, build, validation and audit tools
