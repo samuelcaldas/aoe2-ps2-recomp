@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Tests for the desktop run validation driver."""
+import tempfile
 import unittest
+from pathlib import Path
 
 from tools import validate_desktop as validation
 from tools.classify_diagnostics import RunVerdict
@@ -21,6 +23,17 @@ class TestDesktopValidation(unittest.TestCase):
         command = validation.game_command()
         self.assertTrue(command[0].endswith("aoe2_game"))
         self.assertTrue(command[1].endswith("game/SLES-50282/AOK.ELF"))
+
+    def test_game_command_passes_owned_disc_image_when_present(self):
+        with tempfile.TemporaryDirectory() as directory:
+            image = Path(directory) / "aoe2.iso"
+            image.write_bytes(b"")
+            command = validation.game_command(image)
+        self.assertEqual(command[2], str(image))
+
+    def test_game_command_omits_missing_disc_image(self):
+        command = validation.game_command(Path("/nonexistent/aoe2.iso"))
+        self.assertEqual(len(command), 2)
 
     def test_game_comes_from_the_diagnostic_build(self):
         self.assertIn("docker-desktop-diagnostics", str(validation.GAME_BINARY))
