@@ -33,11 +33,22 @@ if(NOT MSVC AND NOT ANDROID AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd
     string(APPEND CMAKE_CXX_FLAGS " -march=x86-64-v2")
 endif()
 
+# Diagnostic runs turn on the per-tick and unserved-RPC traces that
+# tools/classify_diagnostics.py reads, and stop at the first missing guest
+# function (game_hooks/src/aoe2_diagnostics.cpp). Normal builds keep them off.
+option(AOE2_RUNTIME_DIAGNOSTICS "Verbose runtime traces and stop-on-missing-function (diagnostic builds only)" OFF)
+
 # Runtime only: no recompiler, analyzer, tests, studio, debug UI, or sccache.
 foreach(ps2x_disabled IN ITEMS PS2X_BUILD_RECOMP PS2X_BUILD_ANALYZER PS2X_BUILD_TEST PS2X_BUILD_STUDIO
-                               PS2X_ENABLE_DEBUG_UI PS2X_ENABLE_SCCACHE PS2X_ENABLE_AGRESSIVE_LOGS)
+                               PS2X_ENABLE_DEBUG_UI PS2X_ENABLE_SCCACHE)
     set(${ps2x_disabled} OFF CACHE BOOL "Disabled by aoe2_ps2_recomp" FORCE)
 endforeach()
+if(AOE2_RUNTIME_DIAGNOSTICS)
+    set(PS2X_ENABLE_AGRESSIVE_LOGS ON CACHE BOOL "Enabled by AOE2_RUNTIME_DIAGNOSTICS" FORCE)
+    set(PS2X_ENABLE_IOP_RPC_TRACE ON CACHE BOOL "Enabled by AOE2_RUNTIME_DIAGNOSTICS" FORCE)
+else()
+    set(PS2X_ENABLE_AGRESSIVE_LOGS OFF CACHE BOOL "Disabled by aoe2_ps2_recomp" FORCE)
+endif()
 set(PS2X_BUILD_RUNTIME ON CACHE BOOL "Enabled by aoe2_ps2_recomp" FORCE)
 add_subdirectory("${PS2X_DIR}" "${CMAKE_BINARY_DIR}/ps2recomp" EXCLUDE_FROM_ALL)
 
@@ -124,6 +135,9 @@ if(AOE2_BUILD_GAME)
     # Compiled into the executable (not a static library) so the self-registering
     # game override is never dropped by the linker.
     target_sources(aoe2_game PRIVATE game_hooks/src/kcet_mouse_overrides.cpp)
+    if(AOE2_RUNTIME_DIAGNOSTICS)
+        target_sources(aoe2_game PRIVATE game_hooks/src/aoe2_diagnostics.cpp)
+    endif()
     if(NINTENDO_SWITCH)
         target_sources(aoe2_game PRIVATE platform/switch/src/switch_compat.c)
     endif()

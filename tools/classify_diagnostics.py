@@ -13,6 +13,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from dataclasses import dataclass
 from typing import Any, Dict, List
 
 class BlockerCategory(str, enum.Enum):
@@ -117,6 +118,54 @@ class DiagnosticClassifier:
             "sanitized_samples": samples,
             "total_diagnostics_classified": sum(counts.values()),
         }
+
+class RunVerdict(str, enum.Enum):
+    PROGRESSING = "progressing"
+    STALLED_IN_LOOP = "stalled_in_loop"
+    MISSING_FUNCTION = "missing_function"
+    NO_EVIDENCE = "no_evidence"
+
+
+@dataclass(frozen=True)
+class RunEvidence:
+    verdict: RunVerdict
+    tick_samples: int
+    recent_distinct_pcs: int
+    missing_targets: int
+    unserved_rpc_by_sid: Dict[str, int]
+
+
+TICK_PATTERN = re.compile(r"\[run:tick\] tick=\d+ pc=0x([0-9a-fA-F]+)")
+UNSERVED_RPC_PATTERN = re.compile(r"\[IOP/RPC trace:unhandled\] sid=0x([0-9a-fA-F]+)")
+MISSING_TARGET_MARKER = "[guest-branch:missing-target]"
+STALL_WINDOW = 5
+STALL_MAX_DISTINCT_PCS = 3
+
+
+def classify_run_log(text: str) -> RunEvidence:
+    """Judge a run from its log: missing targets first, then whether recent program counters move.
+
+    A run with fewer than two [run:tick] samples has no evidence either way.
+    The stall rule looks only at the last STALL_WINDOW samples, so an early
+    stall that the guest later escapes still counts as progress.
+    """
+    pcs = [int(match.group(1), 16) for match in TICK_PATTERN.finditer(text)]
+    missing = text.count(MISSING_TARGET_MARKER)
+    unserved: Dict[str, int] = {}
+    for match in UNSERVED_RPC_PATTERN.finditer(text):
+        sid = f"0x{int(match.group(1), 16):08x}"
+        unserved[sid] = unserved.get(sid, 0) + 1
+    recent_distinct = len(set(pcs[-STALL_WINDOW:]))
+    if missing:
+        verdict = RunVerdict.MISSING_FUNCTION
+    elif len(pcs) < 2:
+        verdict = RunVerdict.NO_EVIDENCE
+    elif recent_distinct <= STALL_MAX_DISTINCT_PCS:
+        verdict = RunVerdict.STALLED_IN_LOOP
+    else:
+        verdict = RunVerdict.PROGRESSING
+    return RunEvidence(verdict, len(pcs), recent_distinct, missing, unserved)
+
 
 def main():
     parser = argparse.ArgumentParser(description="Classify sanitized compiler/linker diagnostics.")
