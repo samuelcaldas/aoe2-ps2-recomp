@@ -7,6 +7,7 @@
 // guest function is ever called. Output reports only counts and yes/no checks,
 // never guest addresses.
 #include "ps2_runtime.h"
+#include <aoe2/runtime/deci2_runtime_session.hpp>
 
 #include <cstdint>
 #include <cstdlib>
@@ -107,6 +108,8 @@ void ReportMapCoverage(const PS2Runtime& runtime, const std::string& path) {
 int RunProbe(const ProbeOptions& options) {
     std::cout << "[probe] generated table slots: " << g_ps2RecompiledFunctionTableSlotCount << std::endl;
     PS2Runtime runtime;
+    aoe2::runtime::Deci2RuntimeSession tty(runtime);
+    tty.reset();
     InitializeHeadless(runtime, options.elf_path);
     Require(runtime.hasFunction(runtime.cpu().pc), "entry point has a recompiled function");
     if (options.function_map_path) {

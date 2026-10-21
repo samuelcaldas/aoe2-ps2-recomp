@@ -1,0 +1,22 @@
+function(aoe2_install_deci2 runtime_target upstream_source project_root)
+    get_target_property(runtime_sources ${runtime_target} SOURCES)
+    set(deci2_count 0)
+    foreach(source IN LISTS runtime_sources)
+        if(source STREQUAL upstream_source)
+            math(EXPR deci2_count "${deci2_count} + 1")
+        endif()
+    endforeach()
+    if(NOT deci2_count EQUAL 1)
+        message(FATAL_ERROR "Expected exactly one upstream DECI2 syscall source, found ${deci2_count}")
+    endif()
+    list(REMOVE_ITEM runtime_sources "${upstream_source}")
+    set_property(TARGET ${runtime_target} PROPERTY SOURCES "${runtime_sources}")
+    target_sources(${runtime_target} PRIVATE
+        "${project_root}/runtime/src/deci2_syscall.cpp"
+        "${project_root}/runtime/src/deci2_runtime_session.cpp")
+    target_include_directories(${runtime_target} PRIVATE
+        "${project_root}/third_party/PS2Recomp/ps2xRuntime/src/lib/Kernel/Syscalls")
+    target_include_directories(${runtime_target} PUBLIC "${project_root}/runtime/include")
+    target_compile_definitions(${runtime_target} PUBLIC AOE2_GAME_TTY=$<BOOL:${AOE2_GAME_TTY}>)
+    target_link_libraries(${runtime_target} PUBLIC aoe2_deci2_host)
+endfunction()
