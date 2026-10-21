@@ -130,5 +130,8 @@ void Deci2Host::reset() {
 }
 void Deci2Host::verify_output() const {
     if (state_->failed) throw Deci2Error("DECI2 output did not complete successfully");
+    for (const auto& [socket, channel] : state_->channels) {
+        if (channel.phase != Phase::Idle) throw Deci2Error("DECI2 transfer still pending at shutdown");
+    }
 }
 }

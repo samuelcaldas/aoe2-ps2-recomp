@@ -16,8 +16,11 @@ ReqSend requests a transfer to the host. Poll dispatches a WRITE event on the EE
 executor. The guest handler supplies data through ExSend. Once the framed packet
 has been captured and the WRITE handler has returned, a later Poll delivers
 WRITE_DONE. A handler that supplies no bytes is reported as an error, not polled
-indefinitely. Pending events are invalidated by close/reset. Unsupported
-operations, protocols, destinations, and invalid guest ranges fail explicitly.
+indefinitely. A transfer failure stops the EE on the next Poll; the runner's
+output verification then exits with failure rather than inventing an unverified
+error-callback contract or reporting success. Pending events are invalidated by
+close/reset. Unsupported operations, protocols, destinations, and invalid guest
+ranges fail explicitly.
 
 TTY packets contain an eight-byte DECI2 header followed by four bytes of TTY
 metadata; only the remaining payload is printed. The transport accepts split

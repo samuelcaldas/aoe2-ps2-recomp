@@ -36,6 +36,7 @@ void completes_only_after_capture() {
     Deci2Host host([&](std::string_view text) { output += text; });
     const auto socket = host.open(EE_TTY_PROTOCOL, 123, 456);
     host.request(socket, 'H');
+    rejects([&] { host.verify_output(); });
     auto writing = host.poll(socket);
     require(writing && writing->event == Deci2Event::Write, "missing write event");
     require(writing->handler == 123 && writing->option == 456, "wrong callback ABI");
