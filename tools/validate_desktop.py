@@ -33,6 +33,8 @@ from tools.frame_analysis import FrameSeries, analyze_frames, run_command  # noq
 
 GAME_BINARY = REPO_ROOT / "build" / "docker-desktop-diagnostics" / "aoe2_game"
 OWNED_ELF = REPO_ROOT / "game" / "SLES-50282" / "AOK.ELF"
+# Ignored; the game reads by real disc LBN, which only the image resolves.
+OWNED_DISC_IMAGE = REPO_ROOT / "game" / "SLES-50282" / "aoe2.iso"
 EVIDENCE_DIR = REPO_ROOT / "build" / "desktop-validation"
 SCREENSHOT_DIR = REPO_ROOT / ".playwright-mcp"
 DISPLAY = ":99"
@@ -48,8 +50,12 @@ class RunSummary:
     verdict: RunVerdict
 
 
-def game_command() -> list:
-    return [str(GAME_BINARY), str(OWNED_ELF)]
+def game_command(disc_image: Path = OWNED_DISC_IMAGE) -> list:
+    """Return the game command line; the owned disc image is passed when it exists."""
+    command = [str(GAME_BINARY), str(OWNED_ELF)]
+    if disc_image.is_file():
+        command.append(str(disc_image))
+    return command
 
 
 def summarize_log(log: str) -> RunSummary:
