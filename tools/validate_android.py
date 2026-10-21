@@ -4,9 +4,12 @@
 Boots an API 34 x86_64 emulator (KVM-accelerated) in the aoe2-build-android
 image, installs build/docker-android/aoe2-recomp-debug.apk, pushes the owned
 game files (ELF, extracted disc, KCET hooks file) into the app's external files
-directory, launches the NativeActivity, and after a fixed run collects:
-build/android-validation/{logcat.txt,screen.png,result.txt}. The result is
-PASS when the app process is still alive at the end of the run.
+directory, launches the NativeActivity, and takes a screenshot every interval.
+The container collects build/android-validation/{logcat.txt,screen-NNN.png,alive.txt}.
+The host then judges that evidence with the same rules as the desktop validator
+(tools/validate_desktop.py): the process is alive, the log shows PROGRESSING,
+and at least two screenshots are real frames that differ. The verdict is
+written to build/android-validation/result.txt.
 
 Exit codes: 0 pass, 1 fail, 2 preflight failed.
 """
@@ -20,6 +23,11 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+
+from tools.classify_diagnostics import RunVerdict, classify_run_log  # noqa: E402
+from tools.frame_analysis import analyze_frames, run_command  # noqa: E402
+
 CONTAINER_ROOT = "/src"
 IMAGE = "aoe2-build-android"
 DOCKER_CONTEXT = "docker-dev"
@@ -29,12 +37,14 @@ APK = "build/docker-android/aoe2-recomp-debug.apk"
 GAME_DIR = "game/SLES-50282"
 EVIDENCE_DIR = "build/android-validation"
 SYSTEM_IMAGE = "system-images;android-34;default;x86_64"
+SCREENSHOT_INTERVAL = 15
 EXIT_PASS, EXIT_FAIL, EXIT_PREFLIGHT = 0, 1, 2
 
 
-def emulator_script(run_seconds: int) -> str:
-    """Shell script run inside the container; writes evidence and prints PASS/FAIL."""
+def emulator_script(run_seconds: int, interval: int = SCREENSHOT_INTERVAL) -> str:
+    """Shell script run inside the container; writes raw evidence for the host to judge."""
     evidence = f"{CONTAINER_ROOT}/{EVIDENCE_DIR}"
+    shots = max(1, run_seconds // interval)
     return "\n".join([
         "set -euo pipefail",
         f"mkdir -p {evidence}",
@@ -51,13 +61,19 @@ def emulator_script(run_seconds: int) -> str:
         f"adb shell ls {DEVICE_GAME_DIR}/kcet_hooks.ini",
         "adb logcat -c",
         f"adb shell am start -n {PACKAGE}/android.app.NativeActivity",
-        f"sleep {run_seconds}",
-        f"adb exec-out screencap -p > {evidence}/screen.png",
+        f"for shot in $(seq 1 {shots}); do sleep {interval}; "
+        f"adb exec-out screencap -p > {evidence}/screen-$(printf '%03d' \"$shot\").png; done",
         f"adb logcat -d > {evidence}/logcat.txt",
-        f"if adb shell pidof {PACKAGE} > /dev/null; then echo PASS > {evidence}/result.txt; "
-        f"else echo FAIL > {evidence}/result.txt; fi",
-        f"cat {evidence}/result.txt",
+        f"if adb shell pidof {PACKAGE} > /dev/null; then echo yes > {evidence}/alive.txt; "
+        f"else echo no > {evidence}/alive.txt; fi",
     ]) + "\n"
+
+
+def evidence_passed(alive: bool, logcat: str, screenshots: list, executor=run_command) -> bool:
+    """Same verdict rules as the desktop validator: alive, progressing guest, changing real frames."""
+    progressing = classify_run_log(logcat).verdict is RunVerdict.PROGRESSING
+    frames = analyze_frames(screenshots, executor)
+    return alive and progressing and frames.real_frames >= 2 and frames.changed
 
 
 def container_command(run_seconds: int) -> list:
@@ -88,8 +104,14 @@ def main(argv: list | None = None) -> int:
         sys.stderr.write(f"PREFLIGHT FAILED: {error}\n")
         return EXIT_PREFLIGHT
     subprocess.run(container_command(args.run_seconds))
-    result_file = REPO_ROOT / EVIDENCE_DIR / "result.txt"
-    passed = result_file.is_file() and result_file.read_text().strip() == "PASS"
+    evidence = REPO_ROOT / EVIDENCE_DIR
+    alive_file = evidence / "alive.txt"
+    logcat_file = evidence / "logcat.txt"
+    alive = alive_file.is_file() and alive_file.read_text().strip() == "yes"
+    logcat = logcat_file.read_text(errors="replace") if logcat_file.is_file() else ""
+    screenshots = sorted(str(path) for path in evidence.glob("screen-*.png"))
+    passed = evidence_passed(alive, logcat, screenshots)
+    (evidence / "result.txt").write_text("PASS\n" if passed else "FAIL\n", encoding="utf-8")
     print(f"Android validation: {'PASS' if passed else 'FAIL'} (evidence in {EVIDENCE_DIR}/)")
     return EXIT_PASS if passed else EXIT_FAIL
 
