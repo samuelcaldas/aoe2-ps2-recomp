@@ -4,9 +4,11 @@
       "interface": 354
     },
     "by_format": {
+      "bmp": 8,
+      "jasc-pal": 32,
       "riff": 50,
       "slp-2.0N": 170,
-      "unknown": 134
+      "unknown": 94
     },
     "total": 354
   },

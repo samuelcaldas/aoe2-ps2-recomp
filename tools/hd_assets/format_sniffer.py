@@ -5,6 +5,8 @@ from typing import Final
 UNKNOWN_FORMAT: Final = "unknown"
 SLP_VERSIONS: Final = (b"2.0N", b"3.0", b"4.0X", b"4.1X", b"4.2P")
 PREFIX_FORMATS: Final = (
+    (b"JASC-PAL", "jasc-pal"),
+    (b"BM", "bmp"),
     (b"SLDX", "sld"),
     (b"SMPX", "smpx"),
     (b"DDS ", "dds"),
