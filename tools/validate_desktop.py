@@ -78,6 +78,16 @@ def capture_screenshot(name: str) -> Path:
     return destination
 
 
+def stop_process(process: subprocess.Popen) -> None:
+    """Terminate and reap a child, escalating to kill with bounded waits."""
+    process.terminate()
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=10)
+
+
 def run_game(run_seconds: int, interval: int) -> tuple:
     """Run the game, capturing screenshots; return (still running at the end, screenshot paths)."""
     environment = {**os.environ, "DISPLAY": DISPLAY}
@@ -85,13 +95,14 @@ def run_game(run_seconds: int, interval: int) -> tuple:
     shots = []
     with log_path.open("w") as log:
         process = subprocess.Popen(game_command(), stdout=log, stderr=subprocess.STDOUT, env=environment)
-        for elapsed in range(interval, run_seconds + 1, interval):
-            time.sleep(interval)
-            shots.append(str(capture_screenshot(f"desktop-validation-{elapsed:03d}s.png")))
-            if process.poll() is not None:
-                return False, shots
-        process.terminate()
-        process.wait(timeout=10)
+        try:
+            for elapsed in range(interval, run_seconds + 1, interval):
+                time.sleep(interval)
+                shots.append(str(capture_screenshot(f"desktop-validation-{elapsed:03d}s.png")))
+                if process.poll() is not None:
+                    return False, shots
+        finally:
+            stop_process(process)
     return True, shots
 
 
@@ -122,7 +133,7 @@ def main(argv: list | None = None) -> int:
         time.sleep(2)
         still_running, shots = run_game(args.run_seconds, args.interval)
     finally:
-        display.terminate()
+        stop_process(display)
     summary = summarize_log((EVIDENCE_DIR / "run.log").read_text(errors="replace"))
     frames = analyze_frames(shots, run_command)
     verdict = passed(summary, still_running, frames)

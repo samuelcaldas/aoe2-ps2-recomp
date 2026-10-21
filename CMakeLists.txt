@@ -18,6 +18,7 @@ add_library(aoe2_interfaces STATIC
     input/src/usb_mouse.cpp
     input/src/usb_mouse_rpc.cpp
     input/src/usb_keyboard_rpc.cpp
+    game_hooks/src/kcet_hook_config.cpp
     renderer/src/null_renderer.cpp
     runtime/src/guest_memory.cpp
 )
@@ -29,6 +30,7 @@ target_include_directories(aoe2_interfaces PUBLIC
     renderer/include
     runtime/include
     platform/desktop/include
+    game_hooks/include
 )
 
 # Desktop host smoke test executable
@@ -78,3 +80,8 @@ add_executable(aoe2_asset_tests
 
 target_link_libraries(aoe2_asset_tests PRIVATE aoe2_interfaces)
 add_test(NAME asset_tests COMMAND aoe2_asset_tests)
+
+# Strict host-only KCET hook configuration parser tests
+add_executable(aoe2_kcet_hook_config_tests tests/cpp/kcet_hook_config_tests.cpp)
+target_link_libraries(aoe2_kcet_hook_config_tests PRIVATE aoe2_interfaces)
+add_test(NAME kcet_hook_config_tests COMMAND aoe2_kcet_hook_config_tests)

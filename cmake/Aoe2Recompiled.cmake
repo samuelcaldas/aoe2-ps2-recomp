@@ -76,7 +76,11 @@ if(AOE2_BUILD_GAME)
     aoe2_link_recompiled(aoe2_game)
     # Compiled into the executable (not a static library) so the self-registering
     # game override is never dropped by the linker.
-    target_sources(aoe2_game PRIVATE game_hooks/src/kcet_mouse_overrides.cpp)
+    target_sources(aoe2_game PRIVATE
+        game_hooks/src/kcet_hook_registry.cpp
+        game_hooks/src/kcet_mouse_overrides.cpp
+        game_hooks/src/kcet_keyboard.cpp
+    )
     if(AOE2_RUNTIME_DIAGNOSTICS)
         target_sources(aoe2_game PRIVATE game_hooks/src/aoe2_diagnostics.cpp)
     endif()

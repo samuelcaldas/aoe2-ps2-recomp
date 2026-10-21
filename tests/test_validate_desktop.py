@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Tests for the desktop run validation driver."""
+import subprocess
 import tempfile
 import unittest
+from contextlib import ExitStack
 from pathlib import Path
+from unittest.mock import Mock, call, patch
 
 from tools import validate_desktop as validation
 from tools.classify_diagnostics import RunVerdict
@@ -19,6 +22,83 @@ ONLY_FALLBACK = FrameSeries(kinds=(FrameKind.SOLID_FALLBACK,) * 3, real_frames=0
 
 
 class TestDesktopValidation(unittest.TestCase):
+    def setUp(self):
+        self.stack = ExitStack()
+        self.addCleanup(self.stack.close)
+        directory = self.stack.enter_context(tempfile.TemporaryDirectory())
+        self.evidence = Path(directory)
+        self.stack.enter_context(patch.object(validation, "EVIDENCE_DIR", self.evidence))
+        self.stack.enter_context(patch.object(validation, "SCREENSHOT_DIR", self.evidence))
+        self.stack.enter_context(patch.object(validation.time, "sleep"))
+        self.capture = self.stack.enter_context(patch.object(validation, "capture_screenshot", return_value=Path("shot.png")))
+        self.popen = self.stack.enter_context(patch.object(validation.subprocess, "Popen"))
+
+    def test_shutdown_escalates_and_preserves_completed_run(self):
+        process = self.popen.return_value
+        process.poll.return_value = None
+        process.wait.side_effect = [subprocess.TimeoutExpired("game", 10), -9]
+        self.assertEqual(validation.run_game(1, 1), (True, ["shot.png"]))
+        self.assertEqual(process.method_calls, [call.poll(), call.terminate(),
+                                              call.wait(timeout=10), call.kill(), call.wait(timeout=10)])
+
+    def test_early_exit_remains_failed(self):
+        process = self.popen.return_value
+        process.poll.return_value = 1
+        self.assertEqual(validation.run_game(1, 1), (False, ["shot.png"]))
+        process.kill.assert_not_called()
+
+    def test_capture_error_cleans_up_game_and_propagates(self):
+        error = RuntimeError("capture failed")
+        self.capture.side_effect = error
+        with self.assertRaises(RuntimeError) as caught:
+            validation.run_game(1, 1)
+        self.assertIs(caught.exception, error)
+        self.popen.return_value.terminate.assert_called_once_with()
+        self.popen.return_value.wait.assert_called_once_with(timeout=10)
+
+    def test_kill_reap_timeout_is_bounded_and_propagates(self):
+        process = self.popen.return_value
+        process.poll.return_value = None
+        error = subprocess.TimeoutExpired("game", 10)
+        process.wait.side_effect = [subprocess.TimeoutExpired("game", 10), error]
+        with self.assertRaises(subprocess.TimeoutExpired) as caught:
+            validation.run_game(1, 1)
+        self.assertIs(caught.exception, error)
+        process.kill.assert_called_once_with()
+        self.assertEqual(process.wait.call_args_list, [call(timeout=10), call(timeout=10)])
+
+    def test_main_classifies_after_game_and_display_escalation(self):
+        display = Mock()
+        game = Mock()
+        game.poll.return_value = None
+        for process in (display, game):
+            process.wait.side_effect = [subprocess.TimeoutExpired("child", 10), -9]
+        self.popen.side_effect = [display, game]
+
+        def capture(name):
+            (self.evidence / "run.log").write_text(PROGRESSING_LOG)
+            return Path(name)
+
+        self.capture.side_effect = capture
+        with patch.object(validation, "check_preflight"), \
+                patch.object(validation, "analyze_frames", return_value=REAL_AND_CHANGED), \
+                patch("builtins.print") as output:
+            self.assertEqual(validation.main(["--run-seconds", "1", "--interval", "1"]), validation.EXIT_PASS)
+        self.assertIn("running_at_end=True, guest=progressing", output.call_args.args[0])
+        for process in (display, game):
+            process.kill.assert_called_once_with()
+            self.assertEqual(process.wait.call_args_list, [call(timeout=10), call(timeout=10)])
+
+    def test_main_reaps_display_when_game_launch_fails(self):
+        error = OSError("launch failed")
+        with patch.object(validation, "check_preflight"), \
+                patch.object(validation, "run_game", side_effect=error):
+            with self.assertRaises(OSError) as caught:
+                validation.main([])
+        self.assertIs(caught.exception, error)
+        self.popen.return_value.terminate.assert_called_once_with()
+        self.popen.return_value.wait.assert_called_once_with(timeout=10)
+
     def test_game_command_boots_owned_elf(self):
         command = validation.game_command()
         self.assertTrue(command[0].endswith("aoe2_game"))
