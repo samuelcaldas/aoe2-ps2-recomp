@@ -156,6 +156,12 @@ python3 tools/docker_build.py --platform switch --jobs 3
 
 These commands describe the available tooling, not verified boot or gameplay on those targets. Switch builds use the devkitPro Docker image through `docker-dev`.
 
+### EE game TTY diagnostics
+
+The project includes a minimal DECI2 host for the game's EE debug output. It captures packets supplied by the guest handler through `ExSend` and delivers write-completion callbacks through the EE scheduler. Captured text is identified by `[game-tty]` on stderr, separately from runtime instrumentation and IOP logs. This does not bypass asserts or make the game playable.
+
+The CMake option `AOE2_GAME_TTY` defaults to `ON`, independently of debug tracing; `OFF` reports that no host is attached. Synthetic transport tests are part of the default host build. Enable `AOE2_BUILD_DECI2_RUNTIME_TESTS` for isolated scheduler and lifecycle tests without generated game code. See [EE game TTY](docs/game-tty.md) for the protocol, build integration, and validation limits.
+
 ## 6. Technical Documentation
 
 - [Architecture](docs/architecture.md) — layer boundaries, platform strategy, and input design.
