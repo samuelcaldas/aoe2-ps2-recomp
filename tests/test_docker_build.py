@@ -6,6 +6,10 @@ from unittest import mock
 from tools import docker_build
 
 
+def build_script_for(spec) -> str:
+    return docker_build.build_script(spec, jobs=1)
+
+
 class TestDockerBuildCommands(unittest.TestCase):
     def setUp(self):
         self.spec = docker_build.PLATFORMS["desktop"]
@@ -41,6 +45,25 @@ class TestDockerBuildCommands(unittest.TestCase):
         with mock.patch.object(docker_build, "generated_source_count", return_value=0):
             with self.assertRaises(docker_build.PreflightError):
                 docker_build.check_preflight(self.args)
+
+    def test_diagnostics_desktop_build_uses_its_own_directory_and_flag(self):
+        spec = docker_build.select_spec("desktop", diagnostics=True)
+        self.assertEqual(spec.build_dir, "build/docker-desktop-diagnostics")
+        self.assertIn("-DAOE2_RUNTIME_DIAGNOSTICS=ON", build_script_for(spec))
+        self.assertNotEqual(spec.build_dir, self.spec.build_dir)
+
+    def test_normal_desktop_build_does_not_enable_diagnostics(self):
+        spec = docker_build.select_spec("desktop", diagnostics=False)
+        self.assertEqual(spec.build_dir, "build/docker-desktop")
+        self.assertNotIn("-DAOE2_RUNTIME_DIAGNOSTICS=ON", build_script_for(spec))
+
+    def test_diagnostics_is_rejected_for_platforms_without_a_variant(self):
+        with self.assertRaises(docker_build.PreflightError):
+            docker_build.select_spec("android", diagnostics=True)
+
+    def test_parse_args_accepts_diagnostics_flag(self):
+        args = docker_build.parse_args(["--platform", "desktop", "--diagnostics"])
+        self.assertTrue(args.diagnostics)
 
     def test_unknown_platform_is_rejected(self):
         with self.assertRaises(SystemExit):

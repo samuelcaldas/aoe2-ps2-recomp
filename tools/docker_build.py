@@ -54,15 +54,29 @@ def cmake_commands(*configure_args: str, targets: tuple = ("aoe2_game",)) -> tup
     return (configure, build)
 
 
+def desktop_commands(*extra_configure: str) -> tuple:
+    return cmake_commands(
+        "-DCMAKE_BUILD_TYPE=Release", "-DAOE2_BUILD_GAME=ON", "-DAOE2_BUILD_DESKTOP_PROBE=ON", *extra_configure,
+        targets=("aoe2_game", "desktop_runtime_probe", "aoe2_input_tests"),
+    )
+
+
+# Diagnostic variants build into their own directory so the normal artifacts stay untouched.
+DIAGNOSTIC_VARIANTS = {
+    "desktop": PlatformSpec(
+        dockerfile="docker/desktop/Dockerfile",
+        image="aoe2-build-desktop",
+        build_dir="build/docker-desktop-diagnostics",
+        commands=desktop_commands("-DAOE2_RUNTIME_DIAGNOSTICS=ON"),
+    ),
+}
+
 PLATFORMS = {
     "desktop": PlatformSpec(
         dockerfile="docker/desktop/Dockerfile",
         image="aoe2-build-desktop",
         build_dir="build/docker-desktop",
-        commands=cmake_commands(
-            "-DCMAKE_BUILD_TYPE=Release", "-DAOE2_BUILD_GAME=ON", "-DAOE2_BUILD_DESKTOP_PROBE=ON",
-            targets=("aoe2_game", "desktop_runtime_probe", "aoe2_input_tests"),
-        ),
+        commands=desktop_commands(),
     ),
     "android": PlatformSpec(
         dockerfile="docker/android/Dockerfile",
@@ -106,6 +120,15 @@ def check_preflight(args: argparse.Namespace) -> None:
         raise PreflightError("--jobs must be at least 1")
 
 
+def select_spec(platform: str, diagnostics: bool) -> PlatformSpec:
+    """Return the build spec for a platform, or its diagnostic variant; raises PreflightError if none exists."""
+    if not diagnostics:
+        return PLATFORMS[platform]
+    if platform not in DIAGNOSTIC_VARIANTS:
+        raise PreflightError(f"--diagnostics is only available for: {', '.join(sorted(DIAGNOSTIC_VARIANTS))}")
+    return DIAGNOSTIC_VARIANTS[platform]
+
+
 def image_build_command(spec: PlatformSpec, uid: int, gid: int) -> list:
     return [
         "docker", "--context", DOCKER_CONTEXT, "build",
@@ -140,6 +163,8 @@ def parse_args(argv: list) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--platform", required=True, choices=sorted(PLATFORMS))
     parser.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) - 1))
+    parser.add_argument("--diagnostics", action="store_true",
+                        help="build with verbose runtime traces into build/docker-<platform>-diagnostics")
     parser.add_argument("--dry-run", action="store_true", help="print the docker commands without running them")
     return parser.parse_args(argv)
 
@@ -148,10 +173,10 @@ def main(argv: list | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
     try:
         check_preflight(args)
+        spec = select_spec(args.platform, args.diagnostics)
     except PreflightError as error:
         sys.stderr.write(f"PREFLIGHT FAILED: {error}\n")
         return EXIT_PREFLIGHT
-    spec = PLATFORMS[args.platform]
     commands = [image_build_command(spec, os.getuid(), os.getgid()), container_run_command(spec, args)]
     for command in commands:
         print("+ " + shlex.join(command[:12]) + (" ..." if len(command) > 12 else ""), flush=True)
