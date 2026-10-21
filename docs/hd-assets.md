@@ -48,6 +48,18 @@ The HD edition does not ship `.drs` containers. Each asset is a loose file named
 
 Palettes are not a separate category: the HD profile keeps them in the `interface` folder, so `interface` includes them.
 
+## C++ Runtime Integration (`aoe2::assets`)
+
+The static recompilation runtime directly consumes these imported assets via the platform-agnostic library `aoe2_interfaces` (modules `aoe2::assets::IAssetProvider` and `aoe2::assets::LooseHdAssetProvider`).
+
+1. **Path Resolution**: `AssetPathResolver::ResolveRoot()` locates the assets directory dynamically:
+   - Desktop: `./assets/` or `$XDG_DATA_HOME/aoe2-recomp/assets/`
+   - Switch: `sdmc:/switch/aoe2/assets/`
+   - Android: `assets/`
+2. **Format Sniffing**: Assets are identified by initial header bytes (`2.0N` for SLP 2.0N sprites, `RIFF` for sound effects, `BINA` for UI layouts).
+3. **Decoupled Strings**: Localized string tables (`key-value-strings-utf8.txt`) are loaded directly into an in-memory hash map, avoiding PS2 disc regional partitions.
+4. **Architecture Specification**: Full details on decoupling and pipeline architecture can be found in `docs/architecture-hd-asset-decoupling.md` and `docs/sot/subsystems-assets-evolution.md`.
+
 ## Provenance and licences
 
 The layout paths and the sentinel names come from the openage project's public converter configuration (`cfg/converter/games/game_editions.toml`, GPL-3.0). That is used as a fact about the game's file layout. The code here is written from the public format descriptions and does not copy openage source. The SLP header offsets come from openage's `doc/media/slp-files.md`.
