@@ -29,18 +29,46 @@ std::optional<std::string> Deci2TtyPacket::append(std::span<const std::uint8_t> 
 
 void Deci2TtyPacket::clear() { bytes_.clear(); }
 
-std::string escape_tty_text(std::string_view text) {
-    constexpr char DIGITS[] = "0123456789abcdef";
-    std::string result;
-    for (const unsigned char byte : text) {
-        if (byte == '\n' || byte == '\t' || (byte >= 32 && byte != 127)) {
-            result.push_back(static_cast<char>(byte));
-            continue;
-        }
-        result += "\\x";
-        result += DIGITS[byte >> 4];
-        result += DIGITS[byte & 15];
+namespace {
+std::size_t utf8_length(unsigned char lead) {
+    if (lead >= 0xc2 && lead <= 0xdf) return 2;
+    if (lead >= 0xe0 && lead <= 0xef) return 3;
+    if (lead >= 0xf0 && lead <= 0xf4) return 4;
+    return 0;
+}
+
+std::size_t printable_utf8(std::string_view text) {
+    const auto length = utf8_length(static_cast<unsigned char>(text.front()));
+    if (!length || length > text.size()) return 0;
+    std::uint32_t point = static_cast<unsigned char>(text.front()) & (127u >> length);
+    for (std::size_t index = 1; index < length; ++index) {
+        const auto byte = static_cast<unsigned char>(text[index]);
+        if ((byte & 0xc0) != 0x80) return 0;
+        point = (point << 6) | (byte & 63);
     }
+    constexpr std::uint32_t MINIMUM[] = {0, 0, 128, 2048, 65536};
+    if (point < MINIMUM[length] || point < 160 || point > 0x10ffff) return 0;
+    if (point >= 0xd800 && point <= 0xdfff) return 0;
+    return length;
+}
+
+std::size_t append_display_text(std::string& result, std::string_view text) {
+    const auto byte = static_cast<unsigned char>(text.front());
+    auto length = printable_utf8(text);
+    if (byte == '\n' || byte == '\t' || (byte >= 32 && byte < 127)) length = 1;
+    if (length) { result.append(text.substr(0, length)); return length; }
+    constexpr char DIGITS[] = "0123456789abcdef";
+    result += "\\x";
+    result += DIGITS[byte >> 4];
+    result += DIGITS[byte & 15];
+    return 1;
+}
+}
+
+std::string escape_tty_text(std::string_view text) {
+    std::string result;
+    for (std::size_t index = 0; index < text.size();)
+        index += append_display_text(result, text.substr(index));
     return result;
 }
 }

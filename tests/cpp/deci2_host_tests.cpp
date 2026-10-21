@@ -127,6 +127,9 @@ void does_not_complete_inside_write_handler() {
 void preserves_bytes_and_escapes_controls() {
     const std::string text("a\0\x1b\r\n\t\xc3\xa9", 8);
     require(escape_tty_text(text) == "a\\x00\\x1b\\x0d\n\t\xc3\xa9", "unsafe text escaping");
+    require(escape_tty_text("\x9b") == "\\x9b", "raw terminal CSI was not escaped");
+    require(escape_tty_text("\xc2\x9b") == "\\xc2\\x9b", "Unicode C1 control was not escaped");
+    require(escape_tty_text("\xe2\x82\xac") == "\xe2\x82\xac", "UTF-8 continuation corrupted");
     std::string output;
     Deci2Host host([&](std::string_view value) { output.append(value); });
     const auto socket = host.open(EE_TTY_PROTOCOL, 1, 2);
