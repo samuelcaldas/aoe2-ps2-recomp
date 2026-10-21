@@ -27,10 +27,27 @@ def stage_assets(catalog, platform: str, source_root: Path, repository_root: Pat
     stage_root = stage_root_for(platform, repository_root)
     _validate_stage_root(repository_root, stage_root)
     entries = plan_stage(catalog, platform, repository_root, source_root)
+    _reject_unlisted_files(stage_root, entries)
     rows = [_stage_entry(entry, stage_root, source_root) for entry in entries]
     _write_manifest(stage_root, platform, rows)
     relative_root = stage_root.relative_to(repository_root)
     return StageReport(platform=platform, relative_root=relative_root, entry_count=len(rows))
+
+
+def _reject_unlisted_files(stage_root: Path, entries: tuple[StageEntry, ...]) -> None:
+    assets_root = stage_root / "assets"
+    if not assets_root.exists():
+        return
+    if not assets_root.resolve().is_relative_to(stage_root.resolve()):
+        raise HdAssetError("assets directory escapes stage root")
+    expected = {entry.destination_relative for entry in entries}
+    actual = {
+        path.relative_to(stage_root).as_posix()
+        for path in assets_root.rglob("*")
+        if path.is_file() or path.is_symlink()
+    }
+    if actual - expected:
+        raise HdAssetError(f"stage contains {len(actual - expected)} unlisted files")
 
 
 def _stage_entry(entry: StageEntry, stage_root: Path, source_root: Path) -> dict:

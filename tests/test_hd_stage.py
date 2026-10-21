@@ -176,6 +176,15 @@ class StageAssetsTest(unittest.TestCase):
 
         self.assertTrue(any("unlisted files" in problem for problem in find_stage_problems("switch", self.repo)))
 
+    def test_staging_rejects_assets_removed_from_a_later_catalog(self):
+        report = stage_assets(self.catalog, "switch", self.source, self.repo)
+        stale = self.repo / report.relative_root / "assets" / "interface" / "50100.slp"
+
+        with self.assertRaises(HdAssetError):
+            stage_assets(AssetCatalog(()), "switch", self.source, self.repo)
+
+        self.assertEqual(stale.read_bytes(), self.payload)
+
     def test_verifier_rejects_file_symlink_outside_stage_root(self):
         report = stage_assets(self.catalog, "switch", self.source, self.repo)
         staged = self.repo / report.relative_root / "assets" / "interface" / "50100.slp"

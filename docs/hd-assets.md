@@ -65,7 +65,7 @@ python3 tools/verify_hd_stage.py --platform desktop
 | Android | `game/SLES-50282/assets/` | `validate_android.py` pushes the PS2 data directory, including `assets/`, to app external files |
 | Switch | `build/hd-stage/switch/assets/` | Copy this directory to `sdmc:/switch/aoe2/assets/` beside the NRO; no automatic SD-card deployment exists |
 
-Only files in the local catalog are staged. Original filenames, extensions, and bytes are preserved under the provider categories. The local `hd_stage.json` stores per-file digests under ignored game/build output. Desktop and Android share the same staged source tree and portable manifest. The Switch build outputs its own copy for manual packaging.
+Only files in the local catalog are staged. Original filenames, extensions, and bytes are preserved under the provider categories. The stager rejects stale or unlisted files instead of silently deleting them; remove those files deliberately and rerun staging if the catalog shrinks. The local `hd_stage.json` stores per-file digests under ignored game/build output, and the Docker build verifies the staged tree before compiling. Desktop and Android share the same staged source tree and portable manifest. The Switch build outputs its own copy for manual packaging.
 
 `AssetPathResolver::ResolveRoot()` defaults to Desktop `./assets/` or `$XDG_DATA_HOME/aoe2-recomp/assets/`, Switch `sdmc:/switch/aoe2/assets/`, and Android relative `assets/`. The staging directories above are not automatically passed to that resolver because runtime initialization is not wired yet; the runtime hand-off must choose explicit roots consistent with this table.
 

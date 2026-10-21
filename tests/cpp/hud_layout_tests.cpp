@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <optional>
 #include <string_view>
 #include <vector>
@@ -86,6 +87,38 @@ void TestInverseMapperDoesNotCapturePlayfieldGaps() {
     Check(!mapper.ToGuest(700.0f, 300.0f).has_value(), "point outside relocated regions falls through");
 }
 
+void TestLayoutRejectsNonFiniteGeometry() {
+    using namespace aoe2;
+    const auto infinity = std::numeric_limits<float>::infinity();
+    const auto not_a_number = std::numeric_limits<float>::quiet_NaN();
+    bool rejected_infinite_extent = false;
+    bool rejected_nan_source = false;
+    bool rejected_nan_margin = false;
+    try {
+        (void)renderer::HudLayout::ForExtent({infinity, 720}, {});
+    } catch (const std::invalid_argument&) {
+        rejected_infinite_extent = true;
+    }
+    try {
+        auto specification = MakeRegion(renderer::HudRegionRole::ResourceBar,
+            renderer::HudAnchor::Top, {not_a_number, 0, 100, 20}, 100, 20);
+        (void)renderer::HudLayout::ForExtent({1280, 720}, {specification});
+    } catch (const std::invalid_argument&) {
+        rejected_nan_source = true;
+    }
+    try {
+        auto specification = MakeRegion(renderer::HudRegionRole::ResourceBar,
+            renderer::HudAnchor::Top, {0, 0, 100, 20}, 100, 20);
+        specification.margin_x = not_a_number;
+        (void)renderer::HudLayout::ForExtent({1280, 720}, {specification});
+    } catch (const std::invalid_argument&) {
+        rejected_nan_margin = true;
+    }
+    Check(rejected_infinite_extent, "infinite extents are rejected");
+    Check(rejected_nan_source, "NaN source geometry is rejected");
+    Check(rejected_nan_margin, "NaN anchor margins are rejected");
+}
+
 void TestLayoutRejectsPanelsOutsideGuestOrDestinationExtent() {
     using namespace aoe2;
     bool rejected = false;
@@ -107,6 +140,7 @@ int main() {
     TestWidescreenAnchorsPanelsToOppositeEdges();
     TestInverseMapperReturnsOriginalGuestCoordinates();
     TestInverseMapperDoesNotCapturePlayfieldGaps();
+    TestLayoutRejectsNonFiniteGeometry();
     TestLayoutRejectsPanelsOutsideGuestOrDestinationExtent();
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }

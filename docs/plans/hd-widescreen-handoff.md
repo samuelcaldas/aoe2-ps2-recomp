@@ -42,7 +42,7 @@ The current C++ provider sniffing recognizes SLP, RIFF, and `BINA` signatures bu
 1. Initialize `LooseHdAssetProvider` with the platform root above and ensure the asset-resolution path is reached from game boot.
 2. Add `JASC-PAL` and BMP format recognition to the provider and a runtime SLP 2.0N decoder/palette path. Staged `.slp` files are intentionally raw; no PNG conversion occurs in the build stage.
 3. Resolve a verified PS2 guest-asset → HD asset-ID table. Preserve the PS2 path as fallback for unmatched/unsupported IDs.
-4. Add a `kt_gpu` draw hook only after the decompilation match and source/layout correspondence are verified. No game-specific panel coordinates are inferred by the generic HUD library.
+4. **Do not assume `kt_gpu` is the main draw seam.** Current investigation suggests it handles splash/fade operations; verify the actual gameplay draw path before choosing a hook. No renderer hook or main draw seam is established yet. No game-specific panel coordinates are inferred by the generic HUD library.
 5. Register `renderer/src/hud_layout.cpp` and `input/src/hud_inverse_mapper.cpp` in `aoe2_interfaces` and register `tests/cpp/hud_layout_tests.cpp` in CMake. These three edits were kept out of this branch to avoid editing the other agent's active CMake tree.
 6. At input dispatch, call `HudInverseMapper::ToGuest(displayX, displayY)` first. If it returns no region, pass the point through the existing `SurfaceMapping` playfield path. Do not forward relocated HUD coordinates as world clicks.
 7. Establish the actual guest and presenter extents before enabling widescreen. Existing docs disagree between a 640x480 guest and a 640x448 runtime window; resolve that before selecting panel source rectangles or applying playfield transforms.
@@ -50,7 +50,7 @@ The current C++ provider sniffing recognizes SLP, RIFF, and `BINA` signatures bu
 ## New C++ API
 
 - `renderer::HudLayout::ForExtent(displayExtent, regionSpecs)` keeps guest coordinates at 640x480 by default; the overload accepts the guest extent explicitly.
-- Each `HudRegionSpec` declares a source guest rectangle, an anchor, destination size, and safe margins. The implementation validates source/destination bounds and rejects overlapping destination regions.
+- Each `HudRegionSpec` declares a source guest rectangle, an anchor, destination size, and safe margins. The implementation rejects non-finite geometry, validates source/destination bounds, and rejects overlapping destination regions.
 - `input::HudInverseMapper` consumes the layout's resolved regions. It maps points in those relocated regions back to the original guest rectangles and returns `std::nullopt` for points outside them.
 - These are geometry primitives only. This branch does not declare any actual game HUD rectangles, tie regions to SLP IDs, alter viewport/culling constants, or make the HUD visible in-game.
 

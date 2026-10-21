@@ -1,6 +1,7 @@
 #include <aoe2/renderer/hud_layout.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <stdexcept>
 #include <string>
 
@@ -8,7 +9,15 @@ namespace aoe2::renderer {
 
 namespace {
 
+void RequireFinite(float value, const char* name) {
+    if (std::isfinite(value)) {
+        return;
+    }
+    throw std::invalid_argument(std::string(name) + " must be finite");
+}
+
 void RequirePositive(float value, const char* name) {
+    RequireFinite(value, name);
     if (value > 0.0f) {
         return;
     }
@@ -16,12 +25,28 @@ void RequirePositive(float value, const char* name) {
 }
 
 void ValidateSource(Rect source, aoe2::input::Extent guest) {
+    RequireFinite(source.x, "HUD source x");
+    RequireFinite(source.y, "HUD source y");
     RequirePositive(source.width, "HUD source width");
     RequirePositive(source.height, "HUD source height");
     if (source.x < 0.0f || source.y < 0.0f || source.x + source.width > guest.width ||
         source.y + source.height > guest.height) {
         throw std::invalid_argument("HUD source rectangle exceeds guest extent");
     }
+}
+
+void ValidateMargins(const HudRegionSpec& specification) {
+    RequireFinite(specification.margin_x, "HUD horizontal margin");
+    RequireFinite(specification.margin_y, "HUD vertical margin");
+}
+
+void ValidateDestination(Rect destination) {
+    RequireFinite(destination.x, "HUD destination x");
+    RequireFinite(destination.y, "HUD destination y");
+    RequireFinite(destination.width, "HUD destination width");
+    RequireFinite(destination.height, "HUD destination height");
+    RequireFinite(destination.x + destination.width, "HUD destination right edge");
+    RequireFinite(destination.y + destination.height, "HUD destination bottom edge");
 }
 
 Rect Place(const HudRegionSpec& specification, aoe2::input::Extent guest, aoe2::input::Extent display) {
@@ -70,7 +95,9 @@ HudLayout HudLayout::ForExtent(
         ValidateSource(specification.guest_source, guest_extent);
         RequirePositive(specification.destination_width, "HUD destination width");
         RequirePositive(specification.destination_height, "HUD destination height");
+        ValidateMargins(specification);
         Rect destination = Place(specification, guest_extent, display_extent);
+        ValidateDestination(destination);
         if (destination.x < 0.0f || destination.y < 0.0f ||
             destination.x + destination.width > display_extent.width ||
             destination.y + destination.height > display_extent.height) {

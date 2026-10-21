@@ -58,7 +58,8 @@ def hd_stage_command(platform: str) -> str:
     """Stage imported HD assets when a local catalog exists; leave PS2-only builds unchanged."""
     return (
         "if [ -f game/hd-edition/catalog.json ]; then "
-        f"python3 tools/stage_hd_assets.py --platform {platform}; "
+        f"python3 tools/stage_hd_assets.py --platform {platform} && "
+        f"python3 tools/verify_hd_stage.py --platform {platform}; "
         "else printf '%s\\n' 'HD assets not imported; skipping staging'; fi"
     )
 
