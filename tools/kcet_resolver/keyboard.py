@@ -3,7 +3,19 @@ from __future__ import annotations
 
 from tools.kcet_resolver.elf_image import ElfImage
 from tools.kcet_resolver.functions import FunctionMap, single, single_function
-from tools.kcet_resolver.mips import constants_built, find_address_loads, small_arguments_before_calls
+from tools.kcet_resolver.mips import (
+    OP_ADDIU,
+    OP_LUI,
+    OP_ORI,
+    constants_built,
+    find_address_loads,
+    immediate_of,
+    opcode_of,
+    rs_of,
+    rt_of,
+    signed16,
+    small_arguments_before_calls,
+)
 
 USB_KEYBOARD_RPC_SID = 0x80000211
 WRAPPER_HOOKS = {
@@ -17,6 +29,24 @@ BIND_HOOK = "kcet.keyboard.bind"
 ARGUMENT_REGISTER_A1 = 5
 
 
+def _builds_client_address(words: list[int], client: int) -> bool:
+    for index, high_word in enumerate(words):
+        if opcode_of(high_word) != OP_LUI:
+            continue
+        register = rt_of(high_word)
+        for low_word in words[index + 1:]:
+            if opcode_of(low_word) not in (OP_ADDIU, OP_ORI):
+                continue
+            if rs_of(low_word) != register or rt_of(low_word) != register:
+                continue
+            high = immediate_of(high_word) << 16
+            low = immediate_of(low_word)
+            value = high + signed16(low) if opcode_of(low_word) == OP_ADDIU else high | low
+            if value & 0xFFFFFFFF == client:
+                return True
+    return False
+
+
 def _client_low_half_wrappers(image: ElfImage, functions: FunctionMap, client: int,
                               rpc_function: int) -> list:
     """Find wrappers using the client global through a base-plus-low-half address form."""
@@ -24,9 +54,9 @@ def _client_low_half_wrappers(image: ElfImage, functions: FunctionMap, client: i
     for start, end, _ in functions._rows:
         if rpc_function not in small_arguments_before_calls(image, start, end, ARGUMENT_REGISTER_A1):
             continue
-        words = image.read(start, end - start)
-        if any((int.from_bytes(words[offset:offset + 4], "little") & 0xFFFF) == (client & 0xFFFF)
-               for offset in range(0, len(words) - 3, 4)):
+        words = [int.from_bytes(image.read(start + offset, 4), "little")
+                 for offset in range(0, end - start, 4)]
+        if _builds_client_address(words, client):
             matches.append((start, end, ""))
     return matches
 

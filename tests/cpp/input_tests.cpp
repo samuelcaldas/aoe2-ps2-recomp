@@ -385,6 +385,7 @@ void TestKeyboardRpcQueuesChangedBootReports() {
   model.SubmitReport(report);
   const auto reply = model.ReadReply();
   CHECK(reply[1] == 8 && reply[2] == 0x02 && reply[4] == 0x04);
+  CHECK(reply[0] == 0);  // mask byte: documented zero approximation
   CHECK(model.ReadReply()[1] == 0);
   model.SubmitReport(report);
   CHECK(model.ReadReply()[1] == 0);

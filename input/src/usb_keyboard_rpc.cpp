@@ -81,7 +81,9 @@ uint8_t UsbKeyboardRpcModel::ValidateUnit(uint8_t unit) const {
 }
 
 uint8_t UsbKeyboardRpcModel::LockMask(const GuestKeyboardState&) const {
-    // Lock-state deltas are unavailable in host snapshots; zero is a documented approximation.
+    // The IRX derives this five-bit mask from internal state whose meaning is not
+    // established, and the game's traced key consumer ignores the byte; zero is a
+    // documented approximation rather than a guess presented as protocol.
     return 0;
 }
 

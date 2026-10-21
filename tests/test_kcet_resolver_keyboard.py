@@ -50,6 +50,21 @@ class TestResolveKeyboardHooks(unittest.TestCase):
         with self.assertRaises(HookResolutionError):
             resolve_keyboard_hooks(image, functions)
 
+    def test_low_half_fallback_rejects_unrelated_immediate(self):
+        fallback_client = 0x0050A540
+        bodies = [function(lui(16, fallback_client >> 16), ori(16, 16, fallback_client & 0xFFFF),
+                           lui(5, SID >> 16), ori(5, 5, SID & 0xFFFF))]
+        bodies.extend(function(addiu(5, 0, rpc), ori(7, 7, 0xA540),
+                               jal(BASE + 0x200), 0, 0) for rpc in (1, 2, 3, 4, 5))
+        words = [word for body in bodies for word in body]
+        image_bytes = code(*words)
+        image = ElfImage(build_elf([(BASE, image_bytes, len(image_bytes), PF_RX)]))
+        starts = [BASE + index * WRAPPER_WORDS * 4 for index in range(len(bodies))]
+        ends = starts[1:] + [BASE + len(words) * 4]
+        functions = FunctionMap.from_rows([(start, end, f"FUN_{start:08x}") for start, end in zip(starts, ends)])
+        with self.assertRaises(HookResolutionError):
+            resolve_keyboard_hooks(image, functions)
+
     def test_ambiguous_bind_constant_fails(self):
         image, functions = synthetic_keyboard(extra_bind=(lui(6, 0x0055), addiu(6, 6, 0)))
         with self.assertRaises(HookResolutionError):
