@@ -21,13 +21,29 @@ address unchanged, the GS shows no DMA, GIF, or VIF traffic, and no frame is
 presented. The runtime never reports a missing target, so the spin is inside
 code that exists, not a call to an absent function.
 
-## Decision table for the next steps
+## Cause: SIF boot handshake, not an input device
 
-| Candidate cause | Evidence needed | Status |
-| :--- | :--- | :--- |
-| Waiting for an RPC service that no IOP module serves | unserved-RPC lines with the sid of the service | not observed in this run; the IOP trace did not fire |
-| Wait on a semaphore or vsync that the runtime never signals | the spin sits in a kernel wait helper | not yet checked |
-| Input device service missing (keyboard, pad, memory card) | RPC binds for those service ids | not yet traced |
+Traced from the diagnostic run's SIF events and the guest code around the spin:
 
-The next step is to trace which service the spinning code is waiting on,
-before adding any hook. A hook that returns a made-up result is not allowed.
+1. The guest reads the SIF boot-status register (ready in the runtime), sets
+   the main and sub address registers, then reads the MsCom register
+   (`0x80000002`). The runtime seeds MsCom to 0 and nothing updates it.
+2. The guest sends a 16-byte SIF DMA packet to the IOP whose first argument
+   is the MsCom id `0x80000002`.
+3. The guest then polls a reply word in guest memory until it becomes nonzero.
+   Only an IOP-side reply would write it. The runtime has no IOP side for this
+   handshake, so the poll never ends. The spin is the wait loop itself.
+
+The keyboard, pad, and memory-card services are never reached: the guest is
+still inside boot. Adding input hooks now would not change the stall.
+
+Upstream (`third_party/PS2Recomp`, not editable here) seeds the handshake
+registers and has no IOP reply path for MsCom, so this is an upstream
+emulation gap. Options, in the order to evaluate them:
+
+- Ask upstream to add the IOP boot reply for MsCom, then re-run the baseline.
+- Or an explicit game-side handshake that the IOP would perform, written so it
+  is traceable and does not fabricate any game result. This must be discussed
+  before it is implemented, because the plan rejects emulating lower layers.
+
+A hook that returns a made-up result for the reply is not allowed.
