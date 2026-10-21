@@ -1,134 +1,168 @@
 # Age of Empires II: The Age of Kings — PS2 Native Recompilation Port
 
-> **Current State Notice:**
-> **Bootstrap phase only.** This repository contains only the architectural foundation, target validation metadata, interface stubs, and dependency management scaffolding. There is **no playable port claim, no active recompilation runtime, no game assets, and no emulator included.**
+> **Current status (2026-10-21): desktop runtime bring-up; not playable.**
+> The Ghidra → PS2Recomp pipeline produces C++ that compiles and links with the pinned upstream runtime on Linux x86-64. Headless initialization succeeds, and the desktop game runner starts guest execution, but the latest diagnostic run stalls in the SIF boot handshake before input initialization or any real frame. No game binaries, assets, or generated game code are distributed here.
 
----
+## 1. Objective and Current Status
 
-## 1. Project Objective & Non-Goals
+Build a reproducible native static-recompilation port of **Age of Empires II: The Age of Kings**, PlayStation 2 PAL (`SLES-50282`, `AOK.ELF`), with **Nintendo Switch homebrew as the primary target**. Bring-up proceeds through desktop Linux x86-64 validation, an ARM64 portability gate, and then Switch. Android build and validation tooling also exists; its presence does not establish a working port.
 
-### Objective
-To build a clean, reproducible, and legally sound foundation for a native recompilation port of **Age of Empires II: The Age of Kings** (PlayStation 2 PAL edition, serial `SLES-50282`), with **Nintendo Switch homebrew as the primary target**. Desktop x86-64/Linux is the validation host where the port is developed and tested first, followed by an ARM64 portability gate and then the Switch backend.
+### What works and what remains
 
-The PS2 release supports a USB mouse; on Switch that mouse input is replaced by the **touchscreen** (tap = left click, long press = right click, drag = box select, two-finger drag = pan) through a high-level input adapter rather than USB/IOP emulation. Docked, a USB mouse and keyboard plugged into the dock work like the PS2 USB peripherals. See `docs/architecture.md` §6.
+| Area | Recorded status |
+| :--- | :--- |
+| Authoritative code generation | Ghidra export with data-region and function-map guardrails; 17,047 map entries and 17,048 generated C++ translation units in the successful desktop build. |
+| Desktop compilation and linking | All generated units link with the pinned PS2Recomp runtime, without game-specific stubs, skips, or edits to generated C++. |
+| Headless initialization probe | Guest memory and subsystems initialize, the owned ELF loads, the entry point resolves, and all 17,047 map entries are registered. This probe does **not** execute guest code. |
+| Desktop game runner | Starts guest execution, but does **not** complete boot. The latest 60-second diagnostic baseline is `stalled_in_loop`, with zero real frames. |
+| Input | Platform-neutral touch, USB mouse, and keyboard adapters are implemented and tested. KCET mouse hooks and an ELF-anchored hook resolver exist; the boot stall prevents in-game validation. Dedicated KCET keyboard hooks are not implemented. |
+| Rendering | `IRenderer` and a headless `NullRenderer` exist. A shared OpenGL ES 3 backend is the chosen direction, not a completed renderer. |
+| ARM64, Android, and Switch | Build infrastructure exists; successful gameplay and Switch compatibility are not established. |
 
-### Explicit Non-Goals
-- No distribution or inclusion of copyrighted game code, binary executables, ISO images, or proprietary assets.
-- No inclusion or tracking of PS2Recomp-generated C++ code in git history.
-- No full software emulation of the PS2 Graphics Synthesizer (GS) or I/O Processor (IOP).
-- No asset upscaling, HD modding, or gameplay mechanic alterations during the recompilation bootstrap.
-- No Switch homebrew builds or cross-compilation during the initial desktop bootstrap phase.
+### Immediate blocker
 
----
+The guest waits for an IOP-side reply during the **SIF boot handshake**. The pinned runtime has no reply path for that handshake, so the guest polls indefinitely. Keyboard, controller, and memory-card services are not reached; adding input hooks does not fix this earlier boot stall. The diagnostic run records no missing branch targets and no real frames.
 
-## 2. Legal, Safety, and Provenance Rules
+See [the diagnostic baseline and cause](docs/sot/kcet-stall-log.md). A faithful upstream reply path is the first option to evaluate; fabricated return values or bypass hooks are not acceptable.
 
-- **Clean-room provenance**: This repository is strictly independent. It does not import source code, headers, documentation, or symbols from any unofficial or proprietary disassembly projects.
-- **User-supplied game assets**: Original game executables (`AOK.ELF`) must be legally owned and provided locally by the user.
-- **Zero game asset distribution**: The `.gitignore` configuration strictly forbids committing `.ELF`, `.BIN`, `.ISO`, or extracted game data.
-- **Third-Party Licensing**:
-  - `PS2Recomp` is licensed under the **GNU General Public License v3.0 (GPL-3.0)**. Recompilation tools and any runtime code linking with PS2Recomp components must adhere to GPL-3.0 obligations. Do not make unsupported legal claims regarding license compatibility without consultation.
-  - `libnx` is licensed under the **ISC License**.
-  - `deko3d` is licensed under the **Zlib License**.
-- Third-party repositories are managed via `tools/bootstrap_dependencies.py` and tracked in `third_party_provenance.lock.json`. Their source trees are ignored in git.
+A separate known gap is the ELF's runtime-loaded executable overlays: their code must be located on the owned disc and brought through the same guarded recompilation pipeline before execution can rely on them. See [the desktop probe report](docs/desktop-runtime-probe.md#71-finding-runtime-loaded-overlays).
 
----
+### Architecture and non-goals
 
-## 3. Host Prerequisites
+- Replace hardware-facing behavior at the **KCET boundary**, preserving the game's own input and engine logic rather than implementing a full PS2 emulator. See [ADR 0001](docs/adr/0001-kcet-boundary-replacement.md).
+- Preserve native controller, mouse, and keyboard input channels. On Switch handheld, touchscreen gestures supply mouse actions; docked USB mouse and keyboard are intended to mirror the PS2 peripherals. These are adapter capabilities and design goals, not validated gameplay claims.
+- Use **OpenGL ES 3 through Mesa** as the shared desktop/Switch graphics direction. Vulkan is not adopted; deko3d is reserved for a later profiling-driven decision. See [graphics and toolchain decisions](docs/sot/prior-art-and-reuse.md#3-decision-graphics-api-for-desktop-and-switch).
+- No distribution of copyrighted game code or assets, no tracked generated C++, no full GS/IOP software emulation, and no gameplay alterations during bring-up.
 
-- **Linux x86-64** (Ubuntu 22.04+ or equivalent)
-- **C++20 compliant compiler** (`g++` >= 11 or `clang++` >= 13)
-- **CMake** (>= 3.20) and **Ninja**
-- **Python** (>= 3.10)
-- **Git**
-- **External Prerequisite for Function Map Export:**
-  - **Ghidra** (>= 10.x): Required for running PS2Recomp's `ExportPS2Functions.java` headless analyzer script. Must have `GHIDRA_HOME` configured in your environment.
+## 2. Legal and Provenance Rules
 
----
+- **User-owned inputs:** provide a legally owned PAL executable and disc locally. Game binaries, disc images, extracted data, Ghidra projects, function maps, and generated C++ remain git-ignored.
+- **Authoritative pipeline:** function maps must come from Ghidra. The local fallback analyzer is not accepted by the generation-manifest verifier. Data-spanning entries must be fixed during Ghidra analysis, not hidden with skips or generated-code edits.
+- **No fabricated results:** do not add speculative stubs, skips, instruction patches, or placeholder return values to make boot appear successful.
+- **Reference exception:** unofficial disassembly material is not imported by default. The owner explicitly authorizes their matching `samuelcaldas/age-of-empires-2-decomp` repository (`../aoe`) as a reference for peripheral hooks and engine behavior. Do not modify it from this repository. Game function names, addresses, disassembly, and binary-derived code snippets must stay out of tracked files here. See [the reuse rules](docs/sot/prior-art-and-reuse.md#4-using-the-aoe2-decompilation).
+- **Pinned dependencies:** `third_party_provenance.lock.json` records dependency revisions and licenses; source trees live in ignored `third_party/` and are managed by `tools/bootstrap_dependencies.py`.
+- **Licensing:** PS2Recomp is **GPL-3.0**, and runtime code linking it inherits GPL obligations. libnx is **ISC**; deko3d is **Zlib**. Check [prior art and reuse permissions](docs/sot/prior-art-and-reuse.md) before copying third-party code.
+
+## 3. Prerequisites
+
+For the lightweight host scaffolding and tests:
+
+- Linux x86-64, a C++20 compiler, CMake >= 3.20, Ninja, Python >= 3.10, and Git.
+
+For code generation and full runtime bring-up:
+
+- Ghidra with `GHIDRA_HOME` configured, a compatible Java runtime, and the pinned Emotion Engine/R5900 language extension installed by the project tool.
+- The pinned PS2Recomp dependencies and verified local game inputs.
+- Substantial disk space and memory for thousands of generated translation units. Use the resource-limited build wrappers below rather than an unrestricted full build.
+- Docker with the **`docker-dev` context** for containerized desktop, Android, and Switch builds. **devkitPro runs only inside Docker**, never on the host.
+- For a native desktop probe build: systemd user scopes and the runtime's raylib, FFmpeg, and OpenGL/GLX dependencies. See [the probe report](docs/desktop-runtime-probe.md).
+- For desktop execution validation: `Xvfb`, `xwd`, and ImageMagick (`convert` and `magick`), plus the diagnostic game binary and owned ELF.
 
 ## 4. Repository Layout
 
-```
+```text
 aoe2-ps2-recomp/
-├── CMakeLists.txt                 # Host build definition
-├── third_party_provenance.lock.json # Tracked commit SHAs and licenses
-├── core/                          # Target metadata & verification specifications
-│   ├── target.py                  # Python target definition
-│   └── include/aoe2/core/         # C++ target constants & neutral types
-├── runtime/                       # Guest memory & execution adapters
-│   ├── include/aoe2/runtime/      # GuestMemory, PlatformServices
-│   └── src/                       # Runtime implementations
-├── platform/                      # Host platform implementations
-│   └── desktop/                   # Desktop Linux x86-64 platform layer & smoke test
-├── input/                         # Platform-neutral input actions & interfaces
-│   ├── include/aoe2/input/        # Pointer/menu actions, touch gestures, USB mouse/keyboard, guest adapters
-│   └── src/                       # Action utilities
-├── renderer/                      # Graphics abstraction interfaces
-│   ├── include/aoe2/renderer/     # IRenderer, FramebufferInfo
-│   └── src/                       # NullRenderer (headless/test capture)
-├── tools/                         # Maintenance and verification scripts
-│   ├── import_owned_game.py       # Checksum-verified ELF importer
-│   ├── verify_owned_game.py       # Local game validation tool
-│   ├── bootstrap_dependencies.py  # Dependency cloner & lockfile manager
-│   └── validate_ghidra_env.py     # GHIDRA_HOME validation script
-├── docs/                          # Documentation & technical specifications (docs/sot: prior art & reuse rules)
-│   └── architecture.md            # System layers and technical rationale
-└── tests/                         # Automated unit & behavioral tests
+├── CMakeLists.txt                   # Interface tests and opt-in runtime/game targets
+├── cmake/                          # Generated-code and upstream runtime integration
+├── third_party_provenance.lock.json # Pinned dependency revisions and licenses
+├── generation_manifest.json        # Sanitized generation provenance
+├── core/                           # Shared target metadata and constants
+├── runtime/                        # Guest memory and platform-service interfaces
+├── platform/                       # Desktop, Android, and Switch runners/integration
+├── input/                          # Touch, USB mouse/keyboard, guest adapters and RPC model
+├── game_hooks/                     # Host-side KCET mouse replacements
+├── renderer/                       # Rendering interface and NullRenderer
+├── docker/                         # Desktop, Android, and Switch build images
+├── tools/                          # Import, generation, build, validation and audit tools
+├── docs/                           # Architecture, reports, ADRs and reuse rules
+└── tests/                          # Python and C++ tests
 ```
 
----
+Local inputs and derived artifacts live in ignored `game/`, `analysis/`, `generated/`, `third_party/`, and `build/` paths. Validation screenshots belong only in ignored `.playwright-mcp/`.
 
-## 5. Bootstrap, Validation, and Workflow Commands
+## 5. Setup and Validation Commands
 
-### Step 1: Bootstrap Third-Party Dependencies
-Clone external repositories (into ignored `third_party/`) and generate/verify the lockfile:
-```bash
-python3 tools/bootstrap_dependencies.py
-# Or check status without modifying files:
-python3 tools/bootstrap_dependencies.py --check
-```
+Run commands from the repository root. The lightweight tests do not require the owned game or generated code; full generation and runtime builds do.
 
-### Step 2: Import Legally Owned Game Executable
-Import your locally dumped PAL executable:
-```bash
-python3 tools/import_owned_game.py --source /path/to/SLES-50282/AOK.ELF
-```
-*Expected target:*
-- File: `game/SLES-50282/AOK.ELF`
-- Expected SHA-1: `f478e19f2059d52899b691483ef5c7522e30e17c`
+### Lightweight host tests
 
-### Step 3: Verify Imported Game Binary
-```bash
-python3 tools/verify_owned_game.py
-```
-
-### Step 4: Run Automated Tests
-Run Python test suite:
 ```bash
 python3 -m unittest discover -s tests
-```
-
-### Step 5: Configure and Build C++ Host Scaffolding
-```bash
 cmake -B build -G Ninja
 cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
----
+The default CMake build tests the host interfaces; it does not compile or boot the game.
 
-## 6. Future Workflow: Ghidra Function Map Export
+### Dependencies and owned inputs
 
-Before PS2Recomp can translate MIPS R5900 instructions to C++, a symbol and function map must be exported using Ghidra:
+```bash
+python3 tools/bootstrap_dependencies.py
+python3 tools/bootstrap_dependencies.py --check
+python3 tools/import_owned_game.py --source /path/to/AOK.ELF
+python3 tools/verify_owned_game.py
+python3 tools/import_owned_disc.py --iso /path/to/aoe2.iso
+```
 
-1. Validate your Ghidra environment:
-   ```bash
-   python3 tools/validate_ghidra_env.py
-   ```
-2. Open the verified `game/SLES-50282/AOK.ELF` in Ghidra with the PS2/MIPS R5900 language profile.
-3. Execute PS2Recomp's headless script:
-   ```
-   third_party/PS2Recomp/tools/ExportPS2Functions.java
-   ```
-4. Output the resulting symbol and function map to an untracked directory: `analysis/generated/`.
-5. Review the map for correctness before feeding it to PS2Recomp.
+The expected executable is `game/SLES-50282/AOK.ELF`, SHA-1 `f478e19f2059d52899b691483ef5c7522e30e17c`. Disc extraction places local files beside it; those files are also needed to investigate runtime-loaded overlays.
+
+### Ghidra export and guarded code generation
+
+With `GHIDRA_HOME` set and dependencies available:
+
+```bash
+python3 tools/install_ghidra_ee_extension.py
+python3 tools/validate_ghidra_env.py
+python3 tools/run_ps2recomp_pipeline.py
+python3 tools/verify_function_map.py
+python3 tools/verify_generation_manifest.py
+```
+
+The pipeline runs Ghidra analysis and export, validates function boundaries, generates C++, and records provenance. It stops if Ghidra is missing or the map violates guardrails. See [the detailed workflow](docs/ghidra-ps2recomp-workflow.md).
+
+### Headless desktop initialization probe
+
+Build the native probe only through its memory-capped wrapper; adjust the job count to available resources:
+
+```bash
+python3 tools/run_desktop_probe_build.py --jobs 3
+ctest --test-dir build/desktop-probe -R desktop_runtime_probe_init --output-on-failure
+```
+
+This checks initialization, ELF loading, and registration, **not guest execution or gameplay**.
+
+### Desktop game runner and diagnostic validation
+
+After generation, resolve local mouse hooks from the owned ELF and function map, then build the diagnostic runner in Docker:
+
+```bash
+python3 tools/resolve_kcet_hooks.py
+python3 tools/docker_build.py --platform desktop --diagnostics --jobs 3
+python3 tools/validate_desktop.py --run-seconds 60 --interval 15
+```
+
+The resolver writes ignored `game/SLES-50282/kcet_hooks.ini`; `--decomp-root ../aoe` optionally cross-checks the result against the authorized reference. Hooks do not resolve the current SIF boot blocker.
+
+Validation runs `build/docker-desktop-diagnostics/aoe2_game`, saves its log under `build/desktop-validation/`, and captures screenshots in `.playwright-mcp/`. A pass requires guest progress and at least two changing real frames, not merely a live process or the runtime's fallback image. **The latest recorded baseline fails these criteria** with `stalled_in_loop` and zero real frames.
+
+Container build entry points also exist for normal desktop, Android, and Switch builds:
+
+```bash
+python3 tools/docker_build.py --platform desktop --jobs 3
+python3 tools/docker_build.py --platform android --jobs 3
+python3 tools/docker_build.py --platform switch --jobs 3
+```
+
+These commands describe the available tooling, not verified boot or gameplay on those targets. Switch builds use the devkitPro Docker image through `docker-dev`.
+
+## 6. Technical Documentation
+
+- [Architecture](docs/architecture.md) — layer boundaries, platform strategy, and input design.
+- [Ghidra and PS2Recomp workflow](docs/ghidra-ps2recomp-workflow.md) — export, guardrails, generation, and manifest verification.
+- [Desktop runtime probe](docs/desktop-runtime-probe.md) — historical compile/link diagnostics, successful full build, headless initialization, and overlay finding.
+- [Current desktop boot stall](docs/sot/kcet-stall-log.md) — diagnostic baseline and SIF handshake cause; supersedes the probe report's earlier non-execution status for the separate game runner.
+- [KCET boundary replacement](docs/adr/0001-kcet-boundary-replacement.md) — accepted replacement strategy and input-hook contracts.
+- [Prior art and reuse](docs/sot/prior-art-and-reuse.md) — permissions, licenses, graphics decision, and Docker-only Switch toolchain policy.
+- [Runtime linkage audit](docs/runtime-linkage-audit.md) — runtime integration analysis.
+- [Optional HD asset tooling](docs/hd-assets.md) — local asset import and inventory, separate from the original PS2 boot milestone.
