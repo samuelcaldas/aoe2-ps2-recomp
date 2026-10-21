@@ -70,6 +70,27 @@ existing assert-hook message or IOP printf. A stalled/aborted run remains a
 validation failure even if its diagnostic text is now visible. Local dependency
 modifications must be reported; they are not evidence for the pinned revision.
 
+## Validation record (2026-10-21)
+
+- Main regression suites: 174 Python tests (one skip) and four CTest targets pass.
+- Clean pinned runtime: 12 DECI2 tests pass across Release/Debug and TTY ON/OFF;
+  the owned-handler check captures one packet and clears the send flag in two
+  polls. Transport tests also pass AddressSanitizer, UndefinedBehaviorSanitizer,
+  and leak detection.
+- Full desktop run with the **local, uncommitted SIF runtime changes**: build
+  succeeds; the 60-second run records **28,890 `[game-tty]` lines**, zero missing
+  branch targets, and two real but unchanged frames. The loading screen remains
+  stalled, so gameplay validation is **FAIL**. This is real EE TTY evidence, not
+  a claim that the pinned upstream runtime boots the game.
+- The separate full-game rebuild against the clean pin was cancelled after the
+  local-fork run established end-to-end capture. Clean-pin claims above cover
+  runtime/component and owned-handler tests, **not** a completed full-game build
+  or boot in that configuration. No SDK working-tree changes were made here.
+
+Local logs and verification metadata are retained in ignored
+`build/tty-validation/`; address-specific handler evidence remains in ignored
+`build/tty-owned-handler/`.
+
 ## Sources and licensing
 
 ABI references, consulted 2026-10-21:
