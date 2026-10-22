@@ -19,6 +19,9 @@ add_library(aoe2_interfaces STATIC
     input/src/usb_mouse_rpc.cpp
     input/src/usb_keyboard_rpc.cpp
     game_hooks/src/kcet_hook_config.cpp
+    net/src/ilink_address.cpp
+    net/src/ilink_socket_model.cpp
+    net/src/in_memory_hub.cpp
     renderer/src/null_renderer.cpp
     runtime/src/guest_memory.cpp
 )
@@ -27,6 +30,7 @@ target_include_directories(aoe2_interfaces PUBLIC
     assets/include
     core/include
     input/include
+    net/include
     renderer/include
     runtime/include
     platform/desktop/include
@@ -85,3 +89,8 @@ add_test(NAME asset_tests COMMAND aoe2_asset_tests)
 add_executable(aoe2_kcet_hook_config_tests tests/cpp/kcet_hook_config_tests.cpp)
 target_link_libraries(aoe2_kcet_hook_config_tests PRIVATE aoe2_interfaces)
 add_test(NAME kcet_hook_config_tests COMMAND aoe2_kcet_hook_config_tests)
+
+# i.LINK socket model tests (in-memory network)
+add_executable(aoe2_net_tests tests/cpp/net_tests.cpp)
+target_link_libraries(aoe2_net_tests PRIVATE aoe2_interfaces)
+add_test(NAME net_tests COMMAND aoe2_net_tests)
