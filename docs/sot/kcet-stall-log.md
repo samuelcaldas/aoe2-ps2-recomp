@@ -291,3 +291,18 @@ call on every iteration until a connection is established. The -2000 bind and co
 lines are therefore that retry path failing five times. A receiver that never connects
 spins on its discovery poll, which matches the repeated receive calls. The reference
 sources do not define the -2000 code, so its meaning remains unverified.
+
+**Socket RPCs are never served (60-second probe, 2026-10-22).** The diagnostics
+binary was run alone for 60 seconds, without a debugger. Every request to the three
+socket-service operations (open, bind, connect) and to a fourth startup request is
+reported as handled, yet the reply words are identical to the request words. In each
+case the first word is the same error constant the guest wrote before the call (-2000
+for the socket operations, -1000 for the fourth), so no service wrote a result. This
+matches the TTY lines: the -2000 values are the guest's own pre-set default surviving
+an RPC that nobody answered, not an error returned by a server. The receive request
+shows the same echo pattern, so its repeated polling never receives a result either.
+The bind/connect failures are therefore a missing IOP socket service, not a game bug.
+
+This is an inference from request/reply word equality in the runtime log. It has not
+been confirmed against the runtime's RPC dispatch code, and it does not show that
+the missing service blocks the loading-to-menu transition.
