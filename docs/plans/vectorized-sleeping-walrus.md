@@ -71,3 +71,51 @@ As três plataformas compilam em Docker, mas o jogo **não progride**: o ELF car
 - **`replaceFunction` fora do range é ignorado:** `verify` precisa falhar nesse caso.
 - **Build de diagnóstico dobra o tempo de compilação:** usar diretório de build separado e em cache.
 - **Mouse em Android/Switch não é garantido:** documentar o toque como trabalho futuro.
+
+---
+
+# Adendo (2026-10-22): rede i.LINK pelo código decompilado
+
+## Context
+
+O jogo registra `-2000` em `sceILsockBind`/`Connect` e a thread receptora gira em modo de descoberta sem nunca conectar. O log mostra o motivo: `ILINK.IRX`, `ILSOCK.IRX` e `ILINT.IRX` (de `MODULES2`) são carregados no emulador de IOP e registram servidores RPC, mas não há hardware FireWire por trás, então as respostas voltam iguais aos pedidos. **Correção de uma inferência anterior** gravada no log de stall ("serviço ausente"): o serviço existe e roda, o que falta é o hardware. A causa do travamento de boot **não está provada** como sendo a rede (a análise estática diz que a descoberta não bloqueia a máquina de estados); este adendo corrige a rede por mérito próprio (multijogador LAN, ADR 0001, autorização do dono de 2026-10-22 para portar o decomp) e mede o efeito no boot.
+
+## Decisão de design
+
+Substituir **no lado EE**, na fronteira `sceILsock*` (open, bind, connect, send, recv, recvfrom, close), por funções do host via `replaceFunction`, com UDP real por trás. Isso evita editar `third_party/PS2Recomp` (que é fixado e o checkout já diverge do lock) e evita o ABI interno de RPC. Os módulos IRX do disco não são trocados nem alterados. A lógica DirectPlay (fila, jogadores, protocolo de 492 bytes) continua como código guest recompilado. Alternativa descartada: serviço HLE novo em `ps2xIOP` (exige alterar a dependência vendorizada).
+
+## Etapas (TDD; RED antes de GREEN; um commit por fatia)
+
+**N0. Especificação dos wrappers (bloqueia o resto).** O decomp não tem `socketee.c`. Delegar à sessão `aoe-decomp` (somente leitura, resposta em mensagem) a decompilação de: open, bind, connect, send, recv, recvfrom, close e do leitor de EUI-64. Por função: argumentos, retorno, códigos de erro (`-2000`, `-1000`, `-2007`), tratamento de bloqueio, formato do registro de endereço de 16 bytes (comprimento, família 60, porta, dois words de nó) e onde o comprimento recebido é devolvido. Não codificar nada sem esta saída.
+
+**N1. Modelo puro e testável** `net/` (namespace `aoe2::net`, estilo `UsbMouseRpcModel`): tabela de sockets, regras de erro de `socketee`, endereço i.LINK ↔ `IPv4:porta` (EUI-64 → mapeamento determinístico; nó todo-1 → broadcast UDP), moldura fixa de 492 bytes com preenchimento determinístico. Interface `INetworkTransport` (do SOT) com backend de sockets POSIX em `platform/` e um backend em memória para testes. Testes em `tests/cpp/net_tests.cpp` (ctest `net_tests`): 0/1/muitos sockets, bind duplicado, envio de 493 bytes → `-2007`, recvfrom sem dados, loopback entre dois modelos.
+
+**N2. Resolvedor.** Novo `tools/kcet_resolver/network.py`: âncoras pelas constantes de SID (`0x80000b88`, `b8a`, `b8b`, `b8f`, etc.) e pelas strings `socketee.c`; exige candidato único e início de função verificado no `function_map.csv`; falha em ambiguidade. Papéis `kcet.net.open|bind|connect|send|recv|recvfrom|close` no `kcet_hooks.ini` (ignorado). Estender o analisador estrito em `game_hooks/src/kcet_hook_config.cpp` e os testes Python com ELF sintético.
+
+**N3. Handlers** `game_hooks/src/kcet_net.cpp`: lê argumentos de `R5900Context` (a0..a3), traduz ponteiros com `getMemPtr`, chama o modelo, escreve o resultado com `setReturnU32`. Recepção **não bloqueante**: o despacho é síncrono no thread guest e um handler que bloqueia trava o runtime; sem dados, devolve o código de "sem pacote" definido em N0 (a thread receptora já ignora retornos diferentes de 492).
+
+**N4. Medição (critério de sucesso real).** Rodar 60 s e depois 500 s com o binário de diagnóstico: (a) as linhas `-2000` de `mydplay.cpp` desaparecem; (b) a thread receptora deixa de repetir `recvfrom` com o mesmo SID em loop apertado ou passa a consumir dados; (c) o screenshot muda ou não. Registrar o resultado, inclusive se a tela **não** mudar, em `docs/sot/kcet-stall-log.md` sem endereços.
+
+**N5. LAN real.** Dois processos no mesmo host (loopback) e depois duas máquinas: descoberta por broadcast, `SESSION`/`JOINED` com quadros de 224 e 456 bytes lógicos. Sem captura real de dois PS2 existente, a fidelidade de bytes na rede não é verificável; documentar isso.
+
+## Arquivos críticos
+
+- Criar: `net/include/aoe2/net/*`, `net/src/*`, `platform/desktop/src/udp_transport.cpp`, `game_hooks/src/kcet_net.cpp`, `tools/kcet_resolver/network.py`, `tests/cpp/net_tests.cpp`, `tests/test_kcet_resolver_network.py`.
+- Modificar: `CMakeLists.txt` (biblioteca e teste), `game_hooks/src/kcet_hook_config.cpp`, `tools/resolve_kcet_hooks.py`, `docs/sot/kcet-stall-log.md` (corrigir a inferência anterior), `docs/sot/multiplayer-lan-architecture.md`.
+- Reutilizar: padrão de `input/include/aoe2/input/usb_mouse_rpc.hpp`, `game_hooks/src/kcet_hook_registry.cpp` (`replaceFunction`), `tools/kcet_resolver/mouse.py` (âncoras por SID), `PS2_REGISTER_GAME_OVERRIDE`.
+- O código do decomp serve de especificação; o port é reescrito sobre `GuestMemory`, porque ele usa ponteiros de 32 bits e globais em endereços fixos e não compila direto no host (principalmente ARM64/Switch).
+
+## Verificação
+
+- `python3 -m unittest discover -s tests` e `ctest` (inclui `net_tests`) passam.
+- `resolve_kcet_hooks.py` no ELF real resolve os 7 papéis de rede, cada um com início de função verificado.
+- Execução de 60 s: sem `-2000` de bind/connect; `th_Receiver` ativo; relatório do N4 anexado ao log.
+- Teste de loopback entre dois processos troca a descoberta `SESSION`/`JOINED`.
+
+## Riscos
+
+- **A rede pode não ser a causa do boot parado.** Medir e reportar, sem declarar sucesso pela ausência dos erros.
+- **Semântica de bloqueio do recvfrom real é desconhecida** até N0; um retorno "sem dados" errado pode manter a thread em loop. Definir pelo decomp, não por palpite.
+- **Sem captura de dois PS2:** bytes de preenchimento e ordem de bytes no fio não verificáveis.
+- **Estado interno dos clientes RPC no guest** fica sem uso quando o wrapper é substituído por inteiro; confirmar em N4 que nada mais lê esses buffers.
+- **Switch/Android:** o backend POSIX precisa de adaptação por plataforma; fora do escopo desta fatia.

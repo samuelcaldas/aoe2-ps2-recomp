@@ -306,3 +306,20 @@ The bind/connect failures are therefore a missing IOP socket service, not a game
 This is an inference from request/reply word equality in the runtime log. It has not
 been confirmed against the runtime's RPC dispatch code, and it does not show that
 the missing service blocks the loading-to-menu transition.
+
+### Correction: socket services exist but have no hardware (2026-10-22)
+
+The statement above that the bind/connect failures are "a missing IOP socket service"
+was wrong. The three socket IRX modules load from the disc and register their RPC
+servers; the guest binds all twelve of their clients at init. What is missing is the
+FireWire hardware behind them, so a call returns the request unchanged.
+
+The EE-side wrappers each build a request, make one RPC call, and return word 0 of the
+reply (`docs/sot/ilink-socket-wrapper-spec.md`). With an echoing reply, word 0 is the
+first request word: the socket id for bind/connect/send/recv, and the domain constant
+for open. A receive then reports a short or garbage count instead of the 492 bytes the
+receiver thread waits for, so it polls forever. The `-2000` values are still the
+guest's pre-set default and are not a service error code.
+
+These wrappers are now replaced by a host socket model (`kcet.net.*` hooks). Whether
+this changes the boot stall is measured separately below and is not assumed.

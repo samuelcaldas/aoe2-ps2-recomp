@@ -159,3 +159,26 @@ No arquivo `game_hooks/src/kcet_net_overrides.cpp`:
 3. **Fase 3: Implementação dos Hooks KCET**:
    - Implementar `game_hooks/src/kcet_net_overrides.cpp`.
    - Garantir que ao clicar em "Multiplayer" no menu principal, o jogo carregue as telas de setup de rede em vez de travar por falta do driver i.LINK.
+
+## 5. Implementação atual (2026-10-22): fronteira `sceILsock*`
+
+A substituição foi feita **no lado EE**, nos sete wrappers de socket do jogo
+(`kcet.net.open|bind|connect|send|recv|recvfrom|node_id`), e não em `mydplay` nem no
+serviço do IOP. A lógica DirectPlay (fila, jogadores, quadro de 492 bytes) continua como
+código guest recompilado. Contrato dos wrappers: `docs/sot/ilink-socket-wrapper-spec.md`.
+
+- Modelo puro: `net/` (`aoe2::net::IlinkSocketModel`), testado por `net_tests` com um
+  transporte em memória e por `udp_transport_tests` com sockets UDP reais.
+- Transporte: `INetworkTransport`/`ITransportFactory` (`net/include/aoe2/net/network_transport.hpp`);
+  backend POSIX em `platform/desktop/src/udp_transport.cpp`; `NullTransportFactory`
+  no Switch, onde todo bind falha até existir backend próprio (libnx exige inicialização
+  de sockets, fora desta fatia).
+- Identidade: `AOE2_NET_IPV4` e `AOE2_NET_INSTANCE` (processos no mesmo host). O nó é
+  `0xAE20<<16 | instância` e o IPv4; porta UDP = porta i.LINK + instância. Em host
+  loopback o broadcast vai para 127.0.0.1.
+- Recepção nunca bloqueia: sem pacote devolve 0, e a thread receptora só age sobre 492.
+- Limites: não há captura de dois PS2, então a fidelidade de bytes no fio (preenchimento,
+  ordem de bytes) não é verificável. Os quadros levam um cabeçalho do host com o nó do
+  remetente; consoles reais não interoperam com ele.
+- Os módulos `ILINK.IRX`/`ILSOCK.IRX`/`ILINT.IRX` ainda são carregados no IOP e seguem
+  sem hardware; seus servidores deixam de ser consultados pelo jogo para sockets.
