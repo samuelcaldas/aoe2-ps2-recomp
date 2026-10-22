@@ -49,7 +49,8 @@ class PlatformSpec:
 
 
 def cmake_commands(*configure_args: str, targets: tuple = ("aoe2_game",)) -> tuple:
-    configure = shlex.join(["cmake", "-S", CONTAINER_ROOT, "-B", "{build_dir}", "-G", "Ninja", *configure_args])
+    configure = shlex.join(["cmake", "-S", CONTAINER_ROOT, "-B", "{build_dir}", "-G", "Ninja",
+                            "-DPS2X_ENABLE_FUNCTION_LOG_TRACKER=OFF", *configure_args])
     build = shlex.join(["cmake", "--build", "{build_dir}", "--target", *targets]) + " -j {jobs}"
     return (configure, build)
 
