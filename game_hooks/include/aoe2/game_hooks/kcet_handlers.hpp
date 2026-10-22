@@ -12,4 +12,6 @@ using KcetHandlers = std::map<std::string, PS2Runtime::RecompiledFunction>;
 void RegisterMouseHandlers(KcetHandlers& handlers);
 // Adds host keyboard replacements to the registry; addresses come from local configuration.
 void RegisterKeyboardHandlers(KcetHandlers& handlers);
+// Adds the i.LINK socket replacements (host socket model); addresses come from local configuration.
+void RegisterNetworkHandlers(KcetHandlers& handlers);
 }

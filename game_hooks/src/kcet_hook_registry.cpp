@@ -15,6 +15,7 @@ KcetHandlers host_handlers() {
     KcetHandlers handlers;
     aoe2::game_hooks::RegisterMouseHandlers(handlers);
     aoe2::game_hooks::RegisterKeyboardHandlers(handlers);
+    aoe2::game_hooks::RegisterNetworkHandlers(handlers);
     return handlers;
 }
 

@@ -22,6 +22,7 @@ add_library(aoe2_interfaces STATIC
     net/src/ilink_address.cpp
     net/src/ilink_socket_model.cpp
     net/src/in_memory_hub.cpp
+    net/src/null_transport.cpp
     renderer/src/null_renderer.cpp
     runtime/src/guest_memory.cpp
 )
@@ -94,3 +95,12 @@ add_test(NAME kcet_hook_config_tests COMMAND aoe2_kcet_hook_config_tests)
 add_executable(aoe2_net_tests tests/cpp/net_tests.cpp)
 target_link_libraries(aoe2_net_tests PRIVATE aoe2_interfaces)
 add_test(NAME net_tests COMMAND aoe2_net_tests)
+
+# POSIX UDP backend for the i.LINK socket model (not available on Switch)
+if(UNIX AND NOT NINTENDO_SWITCH)
+    add_library(aoe2_udp_transport STATIC platform/desktop/src/udp_transport.cpp)
+    target_link_libraries(aoe2_udp_transport PUBLIC aoe2_interfaces)
+    add_executable(aoe2_udp_transport_tests tests/cpp/udp_transport_tests.cpp)
+    target_link_libraries(aoe2_udp_transport_tests PRIVATE aoe2_udp_transport)
+    add_test(NAME udp_transport_tests COMMAND aoe2_udp_transport_tests)
+endif()

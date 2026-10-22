@@ -80,7 +80,11 @@ if(AOE2_BUILD_GAME)
         game_hooks/src/kcet_hook_registry.cpp
         game_hooks/src/kcet_mouse_overrides.cpp
         game_hooks/src/kcet_keyboard.cpp
+        game_hooks/src/kcet_net.cpp
     )
+    if(NOT NINTENDO_SWITCH)
+        target_sources(aoe2_game PRIVATE platform/desktop/src/udp_transport.cpp)
+    endif()
     if(AOE2_RUNTIME_DIAGNOSTICS)
         target_sources(aoe2_game PRIVATE game_hooks/src/aoe2_diagnostics.cpp)
     endif()
