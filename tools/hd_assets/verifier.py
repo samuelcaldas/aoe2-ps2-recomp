@@ -7,6 +7,7 @@ from tools.hd_assets.asset_catalog import AssetCatalog, AssetRecord
 from tools.hd_assets.digest import sha256_file
 from tools.hd_assets.importer import SOURCE_FOLDER
 from tools.hd_assets.manifests import TRACKED_KEYS, build_tracked_summary
+from tools.hd_assets.stage_verifier import find_stage_problems
 
 
 def find_copy_problems(dest_root: Path, catalog: AssetCatalog) -> list[str]:

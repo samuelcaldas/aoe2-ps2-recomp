@@ -48,17 +48,28 @@ The HD edition does not ship `.drs` containers. Each asset is a loose file named
 
 Palettes are not a separate category: the HD profile keeps them in the `interface` folder, so `interface` includes them.
 
-## C++ Runtime Integration (`aoe2::assets`)
+## Asset provider and build staging
 
-The static recompilation runtime directly consumes these imported assets via the platform-agnostic library `aoe2_interfaces` (modules `aoe2::assets::IAssetProvider` and `aoe2::assets::LooseHdAssetProvider`).
+The codebase defines `IAssetProvider`, `LooseHdAssetProvider`, and `AssetPathResolver` in `assets/`, but the game runtime does not initialize or call the provider yet. The workflow below prepares the provider's expected loose files; it does not make HD sprites visible in-game. SLP decoding, palette application, PS2-to-HD correlation, and runtime wiring remain future work owned by the runtime integration hand-off.
 
-1. **Path Resolution**: `AssetPathResolver::ResolveRoot()` locates the assets directory dynamically:
-   - Desktop: `./assets/` or `$XDG_DATA_HOME/aoe2-recomp/assets/`
-   - Switch: `sdmc:/switch/aoe2/assets/`
-   - Android: `assets/`
-2. **Format Sniffing**: Assets are identified by initial header bytes (`2.0N` for SLP 2.0N sprites, `RIFF` for sound effects, `BINA` for UI layouts).
-3. **Decoupled Strings**: Localized string tables (`key-value-strings-utf8.txt`) are loaded directly into an in-memory hash map, avoiding PS2 disc regional partitions.
-4. **Architecture Specification**: Full details on decoupling and pipeline architecture can be found in `docs/architecture-hd-asset-decoupling.md` and `docs/sot/subsystems-assets-evolution.md`.
+```bash
+# Stage the imported catalog for one target (the Docker build driver does this automatically when catalog.json exists)
+python3 tools/stage_hd_assets.py --platform desktop --dry-run
+python3 tools/stage_hd_assets.py --platform desktop
+python3 tools/verify_hd_stage.py --platform desktop
+```
+
+| Build target | Prepared `assets/` directory | Delivery |
+|---|---|---|
+| Desktop | `game/SLES-50282/assets/` | Beside `AOK.ELF`; initialize the provider with this explicit path when runtime wiring is added |
+| Android | `game/SLES-50282/assets/` | `validate_android.py` pushes the PS2 data directory, including `assets/`, to app external files |
+| Switch | `build/hd-stage/switch/assets/` | Copy this directory to `sdmc:/switch/aoe2/assets/` beside the NRO; no automatic SD-card deployment exists |
+
+Only files in the local catalog are staged. Original filenames, extensions, and bytes are preserved under the provider categories. The stager rejects stale or unlisted files instead of silently deleting them; remove those files deliberately and rerun staging if the catalog shrinks. The local `hd_stage.json` stores per-file digests under ignored game/build output, and the Docker build verifies the staged tree before compiling. Desktop and Android share the same staged source tree and portable manifest. The Switch build outputs its own copy for manual packaging.
+
+`AssetPathResolver::ResolveRoot()` defaults to Desktop `./assets/` or `$XDG_DATA_HOME/aoe2-recomp/assets/`, Switch `sdmc:/switch/aoe2/assets/`, and Android relative `assets/`. The staging directories above are not automatically passed to that resolver because runtime initialization is not wired yet; the runtime hand-off must choose explicit roots consistent with this table.
+
+The current `LooseHdAssetProvider` searches loose files by numeric ID and extension (`.slp`, `.bina`, `.wav`, `.mp3`, `.dat`, `.txt`). Its format sniffer recognizes SLP, RIFF, and BINA signatures. Content inspection of HD v5.8 found JASC-PAL palettes stored as `.bina` files and BMP images; staging preserves these originals. A standalone strict JASC-PAL parser validates the palette bytes, but no runtime decoder is present. See `docs/architecture-hd-asset-decoupling.md` for the broader target architecture.
 
 ## Provenance and licences
 
@@ -67,7 +78,7 @@ The layout paths and the sentinel names come from the openage project's public c
 ## Open questions and verified findings
 
 Analysis of the real user-owned AoE2 HD Edition v5.8 installation confirmed:
-1. **Interface asset counts:** `resources/_common/drs/interface` contains 354 assets (170 SLP 2.0N, 50 RIFF WAV sound clips, 134 BINA UI/palette/table files).
+1. **Interface asset counts:** `resources/_common/drs/interface` contains 354 assets: 170 SLP 2.0N, 50 RIFF WAV sound clips, 32 JASC-PAL palettes, 8 BMP images, and 94 other BINA/UI/table files. The 32 palettes each declare 256 RGB colors.
 2. **Resolution-specific HUD bases:** The HD set provides multi-resolution in-game UI layouts in SLP:
    - 800x600 (`50100` and variants)
    - 1024x768 (`50101`, `51121`)

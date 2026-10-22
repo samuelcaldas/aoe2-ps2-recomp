@@ -54,11 +54,25 @@ def cmake_commands(*configure_args: str, targets: tuple = ("aoe2_game",)) -> tup
     return (configure, build)
 
 
+def hd_stage_command(platform: str) -> str:
+    """Stage imported HD assets when a local catalog exists; leave PS2-only builds unchanged."""
+    return (
+        "if [ -f game/hd-edition/catalog.json ]; then "
+        f"python3 tools/stage_hd_assets.py --platform {platform} && "
+        f"python3 tools/verify_hd_stage.py --platform {platform}; "
+        "else printf '%s\\n' 'HD assets not imported; skipping staging'; fi"
+    )
+
+
+def with_hd_stage(platform: str, commands: tuple) -> tuple:
+    return (hd_stage_command(platform), *commands)
+
+
 def desktop_commands(*extra_configure: str) -> tuple:
-    return cmake_commands(
+    return with_hd_stage("desktop", cmake_commands(
         "-DCMAKE_BUILD_TYPE=Release", "-DAOE2_BUILD_GAME=ON", "-DAOE2_BUILD_DESKTOP_PROBE=ON", *extra_configure,
         targets=("aoe2_game", "desktop_runtime_probe", "aoe2_input_tests"),
-    )
+    ))
 
 
 # Diagnostic variants build into their own directory so the normal artifacts stay untouched.
@@ -82,23 +96,23 @@ PLATFORMS = {
         dockerfile="docker/android/Dockerfile",
         image="aoe2-build-android",
         build_dir="build/docker-android",
-        commands=(
+        commands=with_hd_stage("android", (
             "export GRADLE_USER_HOME={build_dir}/gradle-home",
             "cd platform/android && gradle --no-daemon --console=plain assembleDebug "
             "-Paoe2NativeJobs={jobs} -Paoe2Abis=arm64-v8a,x86_64",
             "mkdir -p {build_dir} && cp app/build/outputs/apk/debug/app-debug.apk {build_dir}/aoe2-recomp-debug.apk",
-        ),
+        )),
     ),
     "switch": PlatformSpec(
         dockerfile="docker/switch/Dockerfile",
         image="aoe2-build-switch",
         build_dir="build/docker-switch",
-        commands=cmake_commands(
+        commands=with_hd_stage("switch", cmake_commands(
             "-DCMAKE_TOOLCHAIN_FILE=/opt/devkitpro/cmake/Switch.cmake", "-DCMAKE_BUILD_TYPE=Release",
             "-DAOE2_BUILD_GAME=ON", "-DAOE2_DEFAULT_BOOT_ELF=AOK.ELF",
             "-DPLATFORM=SDL", "-DPS2X_ENABLE_FFMPEG=OFF",
             targets=("aoe2_game_nro",),
-        ),
+        )),
     ),
 }
 

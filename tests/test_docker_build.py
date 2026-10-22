@@ -37,6 +37,22 @@ class TestDockerBuildCommands(unittest.TestCase):
         self.assertIn("-j 6", script)
         self.assertIn("set -euo pipefail", script)
 
+    def test_build_script_stages_hd_assets_before_configuring(self):
+        script = docker_build.build_script(self.spec, jobs=6)
+        stage = "python3 tools/stage_hd_assets.py --platform desktop"
+        verify = "python3 tools/verify_hd_stage.py --platform desktop"
+        self.assertIn(stage, script)
+        self.assertIn(verify, script)
+        self.assertLess(script.index(stage), script.index(verify))
+        self.assertLess(script.index(verify), script.index("cmake -S"))
+        self.assertIn("game/hd-edition/catalog.json", script)
+
+    def test_android_and_switch_build_specs_stage_their_platform_assets(self):
+        for platform in ("android", "switch"):
+            script = docker_build.build_script(docker_build.PLATFORMS[platform], jobs=2)
+            self.assertIn(f"python3 tools/stage_hd_assets.py --platform {platform}", script)
+            self.assertIn(f"python3 tools/verify_hd_stage.py --platform {platform}", script)
+
     def test_every_platform_declares_a_dockerfile_that_exists(self):
         for name, spec in docker_build.PLATFORMS.items():
             self.assertTrue((docker_build.REPO_ROOT / spec.dockerfile).is_file(), name)

@@ -96,10 +96,11 @@ flowchart TD
 ## 4. Migration Strategy
 
 1. **Phase 1 (Completed)**:
-   - Tooling implemented to import, sniff formats, verify digests, and inventory loose HD assets (`tools/import_hd_assets.py`, `tools/verify_hd_assets.py`, `tools/inventory_hd_assets.py`).
+   - Tooling imports, sniffs formats, verifies digests, and inventories loose HD assets (`tools/import_hd_assets.py`, `tools/verify_hd_assets.py`, `tools/inventory_hd_assets.py`).
+   - The optional build stage prepares the catalog under the provider's `assets/<category>/` layout (`tools/stage_hd_assets.py`, `tools/verify_hd_stage.py`). It preserves source bytes and does not decode SLPs.
 2. **Phase 2 (Current Focus)**:
-   - Abstract Asset Provider interface (`aoe2::assets::IAssetProvider`) to load assets by numeric ID from the platform's external assets folder.
-   - Decouple KCET rendering calls (`kt_gpu`) to redirect high-level sprite draws to modern textures rather than decoding GS VRAM packets.
+   - `aoe2::assets::IAssetProvider`, `LooseHdAssetProvider`, and `AssetPathResolver` exist, but no game runtime initialization or draw path calls them yet.
+   - Resolve HD assets against guest graphic IDs, decode SLP 2.0N with the appropriate JASC-PAL palette, and connect the provider to high-level KCET `kt_gpu` draw calls; do not emulate the GS packet pipeline for the replacement renderer.
 3. **Phase 3**:
    - Host audio provider bypassing IOP RPC commands.
    - Widescreen coordinate translation mapping host touches/clicks directly to game simulation space while anchoring HUD elements to widescreen borders.
