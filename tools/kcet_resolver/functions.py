@@ -1,7 +1,8 @@
 """Function boundaries from the Ghidra export (analysis/generated/function_map.csv).
 
 The export is the only source of function boundaries: prologue guesses are not
-used, so a resolved address is either a function start in this map or rejected.
+used. Its internal continuation labels are resumable dispatch targets, not
+callable hook entries.
 """
 from __future__ import annotations
 
@@ -27,7 +28,7 @@ def single(values: list, role: str) -> int:
 
 class FunctionMap:
     def __init__(self, rows: list):
-        self._rows = sorted(rows)
+        self._rows = sorted(row for row in rows if not row[2].startswith(("entry_", "caseD_")))
         self._starts = [row[0] for row in self._rows]
 
     @classmethod

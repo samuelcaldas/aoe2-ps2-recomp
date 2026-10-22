@@ -29,22 +29,51 @@ BIND_HOOK = "kcet.keyboard.bind"
 ARGUMENT_REGISTER_A1 = 5
 
 
-def _builds_client_address(words: list[int], client: int) -> bool:
-    for index, high_word in enumerate(words):
-        if opcode_of(high_word) != OP_LUI:
-            continue
-        register = rt_of(high_word)
-        for low_word in words[index + 1:]:
-            if opcode_of(low_word) not in (OP_ADDIU, OP_ORI):
-                continue
-            if rs_of(low_word) != register or rt_of(low_word) != register:
-                continue
-            high = immediate_of(high_word) << 16
-            low = immediate_of(low_word)
-            value = high + signed16(low) if opcode_of(low_word) == OP_ADDIU else high | low
-            if value & 0xFFFFFFFF == client:
-                return True
+GPR_IMMEDIATE_WRITES = frozenset((*range(8, 16), *range(24, 28), 30,
+                                  *range(32, 40), 48, 52, 55, 56, 60))
+CONTROL_FLOW_OPCODES = frozenset((1, 2, 3, 4, 5, 6, 7, 20, 21, 22, 23))
+
+
+def _writes_gpr(word: int, register: int) -> bool:
+    opcode = opcode_of(word)
+    if opcode in (0, 28):
+        return (word >> 11) & 31 == register
+    if opcode in (16, 17, 18) and rs_of(word) in (0, 1, 2):
+        return rt_of(word) == register
+    return opcode in GPR_IMMEDIATE_WRITES and rt_of(word) == register
+
+
+def _ends_linear_scan(word: int) -> bool:
+    opcode = opcode_of(word)
+    return (opcode in CONTROL_FLOW_OPCODES
+            or (opcode in (16, 17, 18) and rs_of(word) == 8)
+            or (opcode == 0 and word & 63 in (8, 9, 12, 13)))
+
+
+def _matches_client_low(word: int, register: int, high: int, client: int) -> bool:
+    if opcode_of(word) not in (OP_ADDIU, OP_ORI) or rs_of(word) != register or rt_of(word) == 0:
+        return False
+    low = immediate_of(word)
+    value = high + signed16(low) if opcode_of(word) == OP_ADDIU else high | low
+    return value & 0xFFFFFFFF == client
+
+
+def _client_built_after(words: list[int], index: int, client: int) -> bool:
+    register = rt_of(words[index])
+    high = immediate_of(words[index]) << 16
+    for word in words[index + 1:]:
+        if _ends_linear_scan(word):
+            return False
+        if _matches_client_low(word, register, high, client):
+            return True
+        if _writes_gpr(word, register):
+            return False
     return False
+
+
+def _builds_client_address(words: list[int], client: int) -> bool:
+    return any(opcode_of(word) == OP_LUI and rt_of(word) != 0
+               and _client_built_after(words, index, client) for index, word in enumerate(words))
 
 
 def _client_low_half_wrappers(image: ElfImage, functions: FunctionMap, client: int,
