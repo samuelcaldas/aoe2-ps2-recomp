@@ -59,6 +59,14 @@ Ao analisar `AOK.ELF`, os módulos em `MODULES2/` e os overlays em `EN/`:
 
 ## 2. Abordagens Possíveis para Habilitar Rede Local no Recomp
 
+> **Atualização (2026-10-22):** o dono do projeto autorizou o uso do código
+> decompilado do próprio repositório `aoe` em qualquer problema, inclusive para
+> substituir código gerado (ver `docs/sot/prior-art-and-reuse.md` §4). A camada
+> de rede (`mydplay`, `socketee`) pode, portanto, ser substituída pelo código
+> casado do decomp, por meio de hooks de override no host. Essa autorização não
+> muda as regras de rastreamento: endereços e nomes de função continuam fora dos
+> arquivos versionados.
+
 Para o runtime estático multiplataforma, temos duas abordagens viáveis:
 
 ```mermaid

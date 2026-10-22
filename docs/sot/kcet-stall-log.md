@@ -239,3 +239,55 @@ build-command regression covers the flag. The configured Ninja rules confirm
 that generated units retain diagnostic definitions but omit the function
 tracker; this requires recompiling the generated units, not editing them.
 Runtime menu validation with this build remains pending until it links and runs.
+
+### Startup-state investigation (2026-10-22)
+
+This section records the read-only observation sessions after the function-trace
+experiment. It contains no guest addresses or binary symbol names, per the
+provenance rules; the detailed evidence stays in local files outside the repository.
+
+**Breakpoint on the audio-status poll.** Watching the function that contains the
+audio-status service request entered only a small number of times during a 300-second
+run. Its status word changed from zero to a nonzero packet-like value on a later
+entry. That function is a bind/registration initializer, not the repeating poller.
+
+**Repeating poll.** The repeating service requests came from the socket receive
+wrapper, not from the initializer. Over 500 seconds, about 206,000 requests were
+issued from one caller in the receive path. The decompilation reference states that
+the receive loop repeats whenever the packet length is not the expected size, and
+that a missing peer does not block the main startup transition.
+
+**Data-transfer wait.** The startup state machine waits on the low busy bits of the
+data-transfer flag. In one observed run that byte changed 17 times and then stayed at
+zero for the rest of the window, so that wait completed. A follow-up watch on the startup
+stage and outer state did not record any change, and the cause of that
+silence is not established. The result is inconclusive for stage progression.
+
+**Network errors.** The terminal log records socket bind and connect failures with
+error -2000 for the local, broadcast, and receive endpoints, after which the receive
+thread starts anyway. These are real errors but do not by themselves account for the
+stall.
+
+**PC reference.** The local PC trial build (1999) uses DirectPlay for networking and
+is outside the target editions in the decompilation ADR, so no matching reference exists yet.
+
+**Status.** The stall cause is not identified. No hook, status value, or semaphore has
+been forced. The next measurement compares the state after the data-transfer wait
+clears with the hot loops observed in the same window.
+
+**Reference plan.** A decompilation plan for the keyboard, mouse, and network layers
+exists in the reference project's agent workspace. It covers the mouse unit (already
+registered), the keyboard units (not yet split from the shared blob), and the network
+helpers that are still unsplit. The network initializer and send wrapper are already
+matched there. The plan's verification gates are byte-level matches against the owned
+ELF, which the repository's provenance rules keep out of tracked files.
+
+**Matched network code and the discovery loop.** The reference project already has
+matched sources for the transport initializer and the receiver thread. Together they
+explain the earlier observations. The initializer opens three sockets, binds and
+connects each one at most five times, logs each failed attempt, and continues
+without aborting. The receiver then runs in discovery mode, polling with a receive
+call on every iteration until a connection is established. The -2000 bind and connect
+lines are therefore that retry path failing five times. A receiver that never connects
+spins on its discovery poll, which matches the repeated receive calls. The reference
+sources do not define the -2000 code, so its meaning remains unverified.
