@@ -8,31 +8,46 @@ from tools.kcet_resolver.mips import JR_RA, addiu, jal, lui, ori
 from tools.kcet_resolver.keyboard import resolve_keyboard_hooks
 
 BASE = 0x100000
-CLIENT = 0x00510000
+CLIENT = 0x00720000
+SPLIT_CLIENT = 0x0071B6C0
 SID = 0x80000211
 PROLOGUE = addiu(29, 29, 0xFFE0)
 EPILOGUE = [JR_RA, addiu(29, 29, 0x20)]
-BIND_WORDS = 7
-WRAPPER_WORDS = 8
 
 
 def function(*words):
     return [PROLOGUE, *words, *EPILOGUE]
 
 
+def synthetic_program(bodies):
+    rows = []
+    address = BASE
+    for body in bodies:
+        end = address + len(body) * 4
+        rows.append((address, end, f"FUN_{address:08x}"))
+        address = end
+    image_bytes = code(*(word for body in bodies for word in body))
+    image = ElfImage(build_elf([(BASE, image_bytes, len(image_bytes), PF_RX)]))
+    return image, FunctionMap.from_rows(rows)
+
+
+def bind_body(client, extra_bind=()):
+    return function(lui(16, client >> 16), ori(16, 16, client & 0xFFFF),
+                    lui(5, SID >> 16), ori(5, 5, SID & 0xFFFF), *extra_bind)
+
+
 def synthetic_keyboard(rpcs=(1, 2, 3, 4, 5), extra_bind=()):
-    bodies = [function(lui(16, CLIENT >> 16), addiu(16, 16, 0),
-                       lui(5, SID >> 16), ori(5, 5, SID & 0xFFFF), *extra_bind)]
+    bodies = [bind_body(CLIENT, extra_bind)]
     bodies.extend(function(lui(4, CLIENT >> 16), addiu(4, 4, 0), addiu(5, 0, rpc),
                            jal(BASE + 0x200), 0) for rpc in rpcs)
-    words = [word for body in bodies for word in body]
-    image_bytes = code(*words)
-    image = ElfImage(build_elf([(BASE, image_bytes, len(image_bytes), PF_RX)]))
-    starts = [BASE + index * (BIND_WORDS if index == 0 else WRAPPER_WORDS) * 4
-              for index in range(len(bodies))]
-    ends = starts[1:] + [BASE + len(words) * 4]
-    functions = FunctionMap.from_rows([(start, end, f"FUN_{start:08x}") for start, end in zip(starts, ends)])
-    return image, functions
+    return synthetic_program(bodies)
+
+
+def split_client_bodies(intervening):
+    bodies = [bind_body(SPLIT_CLIENT)]
+    bodies.extend(function(lui(2, 0x0072), *intervening, addiu(4, 2, 0xB6C0),
+                           addiu(5, 0, rpc), jal(BASE + 0x800), 0) for rpc in (1, 2, 3, 4, 5))
+    return bodies
 
 
 class TestResolveKeyboardHooks(unittest.TestCase):
@@ -44,6 +59,24 @@ class TestResolveKeyboardHooks(unittest.TestCase):
             "kcet.keyboard.device_info", "kcet.keyboard.set_led", "kcet.keyboard.set_caps_type",
         })
         self.assertEqual(len(set(hooks.values())), 6)
+        for address in hooks.values():
+            self.assertEqual(int.from_bytes(image.read(address, 4), "little"), PROLOGUE)
+
+    def test_delayed_client_load_may_use_another_destination_register(self):
+        bodies = split_client_bodies([0] * 6)
+        image, functions = synthetic_program(bodies)
+        hooks = resolve_keyboard_hooks(image, functions)
+        self.assertEqual(hooks["kcet.keyboard.set_led"], BASE + sum(len(body) * 4 for body in bodies[:4]))
+        self.assertEqual(hooks["kcet.keyboard.set_caps_type"], BASE + sum(len(body) * 4 for body in bodies[:5]))
+
+    def test_client_load_rejects_a_clobbered_or_unproven_base(self):
+        interruptions = (addiu(2, 0, 0x1234), 0x00041021, 0x8C820000,
+                         0x70001628, jal(BASE + 0x800), 0x45000000)
+        for interruption in interruptions:
+            with self.subTest(interruption=interruption):
+                image, functions = synthetic_program(split_client_bodies([interruption]))
+                with self.assertRaises(HookResolutionError):
+                    resolve_keyboard_hooks(image, functions)
 
     def test_missing_wrapper_fails(self):
         image, functions = synthetic_keyboard(rpcs=(1, 2, 3, 4))
@@ -51,22 +84,15 @@ class TestResolveKeyboardHooks(unittest.TestCase):
             resolve_keyboard_hooks(image, functions)
 
     def test_low_half_fallback_rejects_unrelated_immediate(self):
-        fallback_client = 0x0050A540
-        bodies = [function(lui(16, fallback_client >> 16), ori(16, 16, fallback_client & 0xFFFF),
-                           lui(5, SID >> 16), ori(5, 5, SID & 0xFFFF))]
-        bodies.extend(function(addiu(5, 0, rpc), ori(7, 7, 0xA540),
+        bodies = [bind_body(SPLIT_CLIENT)]
+        bodies.extend(function(addiu(5, 0, rpc), ori(7, 7, 0xB6C0),
                                jal(BASE + 0x200), 0, 0) for rpc in (1, 2, 3, 4, 5))
-        words = [word for body in bodies for word in body]
-        image_bytes = code(*words)
-        image = ElfImage(build_elf([(BASE, image_bytes, len(image_bytes), PF_RX)]))
-        starts = [BASE + index * WRAPPER_WORDS * 4 for index in range(len(bodies))]
-        ends = starts[1:] + [BASE + len(words) * 4]
-        functions = FunctionMap.from_rows([(start, end, f"FUN_{start:08x}") for start, end in zip(starts, ends)])
+        image, functions = synthetic_program(bodies)
         with self.assertRaises(HookResolutionError):
             resolve_keyboard_hooks(image, functions)
 
     def test_ambiguous_bind_constant_fails(self):
-        image, functions = synthetic_keyboard(extra_bind=(lui(6, 0x0055), addiu(6, 6, 0)))
+        image, functions = synthetic_keyboard(extra_bind=(lui(6, 0x0077), addiu(6, 6, 0)))
         with self.assertRaises(HookResolutionError):
             resolve_keyboard_hooks(image, functions)
 

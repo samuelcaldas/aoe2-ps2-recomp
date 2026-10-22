@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Tests for the containerized platform build driver (tools/docker_build.py)."""
 import unittest
+import shlex
 from unittest import mock
 
 from tools import docker_build
@@ -36,6 +37,18 @@ class TestDockerBuildCommands(unittest.TestCase):
         self.assertIn(self.spec.build_dir, script)
         self.assertIn("-j 6", script)
         self.assertIn("set -euo pipefail", script)
+
+    def test_cmake_build_commands_disable_function_log_tracker(self):
+        specs = {
+            "desktop": docker_build.PLATFORMS["desktop"],
+            "desktop-diagnostics": docker_build.DIAGNOSTIC_VARIANTS["desktop"],
+            "switch": docker_build.PLATFORMS["switch"],
+        }
+        for name, spec in specs.items():
+            with self.subTest(platform=name):
+                commands = [shlex.split(line) for line in build_script_for(spec).splitlines()]
+                configure = next(command for command in commands if command[:2] == ["cmake", "-S"])
+                self.assertIn("-DPS2X_ENABLE_FUNCTION_LOG_TRACKER=OFF", configure)
 
     def test_build_script_stages_hd_assets_before_configuring(self):
         script = docker_build.build_script(self.spec, jobs=6)

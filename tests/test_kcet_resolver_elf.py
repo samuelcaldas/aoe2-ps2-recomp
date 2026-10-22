@@ -4,6 +4,8 @@ import struct
 import unittest
 
 from tools.kcet_resolver.elf_image import ElfFormatError, ElfImage
+from tools.kcet_resolver.errors import HookResolutionError
+from tools.kcet_resolver.functions import FunctionMap
 from tools.kcet_resolver.mips import (
     JR_RA,
     addiu,
@@ -74,6 +76,34 @@ class TestElfImage(unittest.TestCase):
     def test_rejects_non_mips_machine(self):
         with self.assertRaises(ElfFormatError):
             ElfImage(build_elf([(0x100000, b"\0" * 4, 4, PF_RX)], machine=62))
+
+
+class TestCallableFunctionMap(unittest.TestCase):
+    def test_continuation_does_not_shadow_callable_range(self):
+        outer = (0x4000, 0x4080, "callable_handler")
+        for name in ("entry_00004030", "caseD_1_00004030"):
+            with self.subTest(name=name):
+                functions = FunctionMap.from_rows([outer, (0x4030, 0x4080, name)])
+                self.assertEqual(functions.containing(0x4040), outer)
+
+    def test_continuation_is_not_a_callable_start(self):
+        functions = FunctionMap.from_rows([
+            (0x4000, 0x4080, "callable_handler"),
+            (0x4030, 0x4080, "entry_00004030"),
+        ])
+        with self.assertRaises(HookResolutionError):
+            functions.require_start(0x4030)
+
+    def test_orphan_continuation_is_not_callable(self):
+        functions = FunctionMap.from_rows([(0x4030, 0x4080, "entry_00004030")])
+        self.assertIsNone(functions.containing(0x4040))
+
+    def test_named_functions_and_thunks_remain_callable(self):
+        rows = [(0x4000, 0x4080, "callable_handler"), (0x4080, 0x4090, "thunk_handler")]
+        functions = FunctionMap.from_rows(rows)
+        for row in rows:
+            self.assertEqual(functions.containing(row[0]), row)
+            functions.require_start(row[0])
 
 
 class TestMipsAddressLoads(unittest.TestCase):
