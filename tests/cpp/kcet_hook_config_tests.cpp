@@ -27,7 +27,13 @@ int main() {
     Check(config.replacements.at("kcet.mouse.bind") == 0x00100000u, "hex address parsed");
     Check(config.aliases.at("scePadRead") == 0x00100008u, "alias address parsed");
 
+    std::istringstream network("kcet.net.open=0x100000\nkcet.net.bind=0x100004\nkcet.net.connect=0x100008\n"
+                                "kcet.net.send=0x10000c\nkcet.net.recv=0x100010\nkcet.net.recvfrom=0x100014\n"
+                                "kcet.net.node_id=0x100018\n");
+    Check(ParseKcetHookConfig(network).replacements.size() == 7, "all seven network roles parsed");
+
     for (const std::string text : {
+             "kcet.net.close=0x100000\n", "kcet.net.sendto=0x100000\n",
              "bad line\n", "=0x100000\n", "kcet.mouse.bind=\n",
              "kcet.mouse.bind=0x100000\nkcet.mouse.bind=0x100004\n",
              "kcet.mouse.bind=0x100000junk\n", "kcet.mouse.bind=0x100001\n",

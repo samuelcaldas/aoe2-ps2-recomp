@@ -12,6 +12,9 @@ game/SLES-50282/kcet_hooks.ini is what the runtime override module reads at boot
 - kcet.mouse.get_info / read / device_info: the wrappers that call that client
   with RPC functions 1, 2, and 3.
 
+- kcet.net.*: the i.LINK socket wrappers (open, bind, connect, send, recv, recvfrom,
+  node_id), found by the service id each one calls (docs/sot/ilink-socket-wrapper-spec.md).
+
 With --decomp-root the same targets are also resolved from the owner's matched
 decompilation and must agree with the ELF result (cross-check).
 
@@ -36,6 +39,7 @@ from tools.kcet_resolver.functions import FunctionMap  # noqa: E402
 from tools.kcet_resolver.keyboard import (
     resolve_keyboard_hooks as resolve_keyboard_hooks_from_elf,
 )  # noqa: E402
+from tools.kcet_resolver.network import resolve_network_hooks  # noqa: E402
 from tools.kcet_resolver.mouse import (
     resolve_mouse_hooks as resolve_mouse_hooks_from_elf,
 )  # noqa: E402
@@ -151,6 +155,7 @@ def main(argv: list | None = None) -> int:
         functions = FunctionMap.from_csv(args.function_map)
         hooks = resolve_mouse_hooks_from_elf(image, functions)
         hooks.update(resolve_keyboard_hooks_from_elf(image, functions))
+        hooks.update(resolve_network_hooks(image, functions))
         if args.decomp_root is not None:
             if resolve_from_decomp(args.decomp_root) != hooks:
                 raise HookResolutionError(

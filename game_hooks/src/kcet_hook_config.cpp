@@ -7,10 +7,12 @@
 
 namespace aoe2::game_hooks {
 namespace {
-constexpr std::array<std::string_view, 10> kRoles{
+constexpr std::array<std::string_view, 17> kRoles{
     "kcet.mouse.bind", "kcet.mouse.get_info", "kcet.mouse.read", "kcet.mouse.device_info",
     "kcet.keyboard.bind", "kcet.keyboard.get_info", "kcet.keyboard.read", "kcet.keyboard.device_info",
-    "kcet.keyboard.set_led", "kcet.keyboard.set_caps_type"};
+    "kcet.keyboard.set_led", "kcet.keyboard.set_caps_type",
+    "kcet.net.open", "kcet.net.bind", "kcet.net.connect", "kcet.net.send", "kcet.net.recv",
+    "kcet.net.recvfrom", "kcet.net.node_id"};
 constexpr std::array<std::string_view, 29> kPadCalls{
     "scePadEnd", "scePadEnterPressMode", "scePadExitPressMode", "scePadGetButtonMask", "scePadGetDmaStr",
     "scePadGetFrameCount", "scePadGetModVersion", "scePadGetPortMax", "scePadGetReqState", "scePadGetSlotMax",

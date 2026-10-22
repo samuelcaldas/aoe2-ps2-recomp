@@ -92,6 +92,32 @@ def find_address_loads(image: ElfImage, address: int, window: int = LOAD_WINDOW)
     return found
 
 
+def _constant_built_into_any_register(hi_word: int, follower: int) -> int | None:
+    """Like _constant_built_by, but the addiu/ori may write a different register than the lui."""
+    if rs_of(follower) != rt_of(hi_word) or rt_of(follower) == 0:
+        return None
+    high = immediate_of(hi_word) << 16
+    if opcode_of(follower) == OP_ADDIU:
+        return (high + signed16(immediate_of(follower))) & 0xFFFFFFFF
+    if opcode_of(follower) == OP_ORI:
+        return high | immediate_of(follower)
+    return None
+
+
+def find_address_loads_any_register(image: ElfImage, address: int, window: int = LOAD_WINDOW) -> list:
+    """Guest addresses of `lui` words whose base register feeds an addiu/ori that builds `address`."""
+    found = []
+    for base, code in image.code_segments():
+        words = _words(code)
+        for index, word in enumerate(words):
+            if opcode_of(word) != OP_LUI:
+                continue
+            followers = words[index + 1:index + 1 + window]
+            if any(_constant_built_into_any_register(word, follower) == address for follower in followers):
+                found.append(base + 4 * index)
+    return found
+
+
 def words_between(image: ElfImage, start: int, end: int) -> tuple:
     """Instruction words of the guest range [start, end)."""
     return _words(image.read(start, end - start))
