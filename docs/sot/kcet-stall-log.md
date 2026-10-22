@@ -195,3 +195,47 @@ and no differing pair of real frames. Most captures are classified as low
 detail. The transition must not be called a gameplay pass or hidden by relaxing
 the frame classifier. CPU profiling was unavailable because the host restricts
 `perf`; no host permission or kernel settings were changed.
+
+### Extended run and callable hook boundaries
+
+A 540-second run using the same trace-output sink still fails validation:
+seven captures classify as real and the series changes, but the final screen
+is black with a cursor rather than a menu. All five audio waits clear; all
+23 SIF disc reads succeed; no missing targets are recorded. This rules out
+calling the earlier 300-second screen a proven permanent audio wait, but does
+not establish the cause of the later screen.
+
+Checking the hook file against callable boundaries uncovers a separate concrete
+error: three keyboard roles resolve to internal continuation labels inside
+larger functions. The runtime's successful replacement count only proves that
+those dispatch addresses were accepted, not that the intended function entry
+was intercepted. Earlier 10/10 reports are therefore not input validation.
+
+The resolver now excludes continuation labels from callable boundary lookup and
+rejects them as hook starts. Two additional wrappers require a full client
+address constructed into a different destination register after intervening
+instructions; this form is accepted only while the source register remains
+valid and without crossing control flow. Synthetic regressions demonstrate the
+old failures, reject overwritten-register decoys, and preserve callable named
+functions and thunks. The focused resolver suite passes 32 tests, and all ten
+roles resolve from the owned ELF into the ignored local hook file. No game
+addresses or generated sources are changed in tracked files.
+
+The prior extended log also shows repeated unhandled requests from the keyboard
+client using an uninitialized service value. A controlled 300-second run with
+the corrected hook file and the unchanged executable records zero such calls.
+It still fails menu validation: the loading screen remains, only two audio
+waits clear in that window, no additional SIF disc reads occur, and no missing
+targets are recorded. Correct interception is improved; boot success is not
+established by this result.
+
+### Separating function tracing from runtime diagnostics
+
+The fork now exposes `PS2X_ENABLE_FUNCTION_LOG_TRACKER`, defaulting to enabled
+for compatibility. The desktop/Switch build commands explicitly disable it,
+while retaining runtime, aggressive, and RPC diagnostics as well as the
+stop-on-missing-target override in the desktop diagnostic build. A functional
+build-command regression covers the flag. The configured Ninja rules confirm
+that generated units retain diagnostic definitions but omit the function
+tracker; this requires recompiling the generated units, not editing them.
+Runtime menu validation with this build remains pending until it links and runs.
