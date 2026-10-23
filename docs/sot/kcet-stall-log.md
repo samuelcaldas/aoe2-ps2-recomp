@@ -323,3 +323,20 @@ guest's pre-set default and are not a service error code.
 
 These wrappers are now replaced by a host socket model (`kcet.net.*` hooks). Whether
 this changes the boot stall is measured separately below and is not assumed.
+
+### Measurement: host socket model, 60-second desktop run (2026-10-22)
+
+Diagnostics build with `kcet.net.*` applied (17/17 hooks), run by `tools/validate_desktop.py`
+for 60 seconds under Xvfb.
+
+- The `-2000` bind/connect lines no longer appear. After init, no socket RPCs are
+  issued; the 20 matches of those service ids are the init-time binds only.
+- The receiver thread is alive and polls the host model in a tight loop (it keeps
+  returning "no packet", as expected with no peer). It no longer receives garbage counts.
+- The main thread is unchanged: it waits on the same semaphore for the whole run. The
+  screen is still the solid fallback (real frames: 0, verdict: stalled_in_loop).
+
+**Conclusion:** the i.LINK network layer is fixed on its own merits but is **not** the
+cause of the boot stall, which matches the earlier static analysis. The stall lies
+elsewhere (main-thread semaphore wait). Not yet run: the 500-second window and the
+two-process discovery test.
