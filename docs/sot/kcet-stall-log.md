@@ -340,3 +340,33 @@ for 60 seconds under Xvfb.
 cause of the boot stall, which matches the earlier static analysis. The stall lies
 elsewhere (main-thread semaphore wait). Not yet run: the 500-second window and the
 two-process discovery test.
+
+### Root cause of the main-thread semaphore stall: receiver starvation (2026-10-23)
+
+The main thread's per-frame loop waits on a join semaphore that the game thread
+(priority 13) is meant to signal. Thread dumps showed the game thread `ready`, never
+running: it had called `StartThread` on the network receiver (priority 11) and was never
+scheduled again. The receiver spun on the host recv handler, which returned
+immediately and never blocked, so the strict-priority scheduler never let the lower
+priority game thread run. The original RPC round trip sleeps the caller for the IOP
+latency; the host replacement did not.
+
+**Fix:** when a receive finds no packet, the handler sleeps the calling thread for about
+1 ms of EE time (a host callback wakes it; the scheduler writes 0 into `v0`, which is
+"no packet"). Same pattern as the runtime's SIF reply latency.
+
+**Result (diagnostics build, desktop, Xvfb):**
+- 60 s: real frames 2 (was 0). The screen shows the game's own loading text. The game
+  thread runs. In this log-heavy build it spends most of its time in a 16M-iteration
+  busy delay between polls of the audio service status (about 12 s per poll), so
+  60 s is too short to judge.
+- 240 s: real frames 6, frames change. The game draws its own mouse cursor (the mouse
+  hooks work) and starts file-sector accesses.
+
+**Next blocker:** at about 4 minutes the game thread ends with a return address of zero
+inside the per-frame message-pump method (drain queue, idle, return). The scheduler logs
+`pc-zero` and makes the thread dormant; the main thread then waits forever on its join
+semaphore and the screen stays black apart from the cursor. The pump method is a virtual
+method that normally returns to its caller, so something invoked it as a root context.
+Not yet determined who dispatches it. Not yet tried: a non-diagnostics build, where the
+busy delays are far shorter.
