@@ -6,6 +6,7 @@
 #ifndef __SWITCH__
 #include <aoe2/platform/desktop/udp_transport.hpp>
 #endif
+#include "runtime/ee_scheduler.h"
 #include "runtime/ps2_memory.h"
 
 #include <algorithm>
@@ -23,6 +24,9 @@ constexpr int kRegT0 = 8;
 constexpr int kRegT1 = 9;
 constexpr int kRegRa = 31;
 constexpr uint32_t kNodeIdBytes = 8;
+// A real receive is an RPC round trip to the IOP, during which the calling thread sleeps.
+// About 1 ms of EE time keeps polling from starving lower-priority guest threads.
+constexpr uint64_t kNoPacketLatencyCycles = EeScheduler::kEeClockHz / 1000;
 
 std::mutex g_net_mutex;
 
@@ -68,6 +72,19 @@ bool WriteGuest(uint8_t* rdram, uint32_t address, const uint8_t* data, std::size
     return true;
 }
 
+// Returns 0 to the caller after a modelled device latency, letting other threads run.
+// The scheduler writes 0 into v0 when the sleeping thread is woken.
+void SleepForDeviceLatency(R5900Context* ctx, PS2Runtime* runtime) {
+    EeScheduler& scheduler = runtime->eeScheduler();
+    if (!scheduler.isExecutingGuest()) return;
+    ctx->pc = getRegU32(ctx, kRegRa);
+    const int thread = scheduler.currentThreadId();
+    scheduler.scheduleHostCallback(kNoPacketLatencyCycles, [&scheduler, thread]() {
+        scheduler.wakeupThread(thread, true);
+    });
+    scheduler.sleepCurrent();
+}
+
 int AsInt(R5900Context* ctx, int reg) { return static_cast<int>(getRegU32(ctx, reg)); }
 
 void NetOpen(uint8_t*, R5900Context* ctx, PS2Runtime*) {
@@ -105,22 +122,27 @@ void CopyReceived(uint8_t* rdram, uint32_t address, const std::array<uint8_t, kF
     WriteGuest(rdram, address, data.data(), static_cast<std::size_t>(count));
 }
 
-void NetRecv(uint8_t* rdram, R5900Context* ctx, PS2Runtime*) {
+int ReceiveLocked(uint8_t* rdram, R5900Context* ctx) {
     std::lock_guard<std::mutex> lock(g_net_mutex);
     const int capacity = AsInt(ctx, kRegA2);
     std::array<uint8_t, kFrameBytes> data{};
     const int count = Model().Receive(AsInt(ctx, kRegA0), data.data(), capacity);
     CopyReceived(rdram, getRegU32(ctx, kRegA1), data, count, capacity);
     ReturnToCaller(ctx, count);
+    return count;
 }
 
-void NetRecvFrom(uint8_t* rdram, R5900Context* ctx, PS2Runtime*) {
+void NetRecv(uint8_t* rdram, R5900Context* ctx, PS2Runtime* runtime) {
+    if (ReceiveLocked(rdram, ctx) == 0) SleepForDeviceLatency(ctx, runtime);
+}
+
+int ReceiveFromLocked(uint8_t* rdram, R5900Context* ctx) {
     std::lock_guard<std::mutex> lock(g_net_mutex);
     const uint32_t length_pointer = getRegU32(ctx, kRegT1);
     uint32_t address_length = 0;
     if (!ReadGuest(rdram, length_pointer, reinterpret_cast<uint8_t*>(&address_length), sizeof(address_length)))
-        return ReturnToCaller(ctx, kErrorFailure);
-    if (address_length != kIlinkAddressLength) return ReturnToCaller(ctx, kErrorInvalidArgument);
+        return ReturnToCaller(ctx, kErrorFailure), kErrorFailure;
+    if (address_length != kIlinkAddressLength) return ReturnToCaller(ctx, kErrorInvalidArgument), kErrorInvalidArgument;
     const int capacity = AsInt(ctx, kRegA2);
     std::array<uint8_t, kFrameBytes> data{};
     IlinkAddress source;
@@ -132,6 +154,11 @@ void NetRecvFrom(uint8_t* rdram, R5900Context* ctx, PS2Runtime*) {
         WriteGuest(rdram, length_pointer, reinterpret_cast<const uint8_t*>(&address_length), sizeof(address_length));
     }
     ReturnToCaller(ctx, count);
+    return count;
+}
+
+void NetRecvFrom(uint8_t* rdram, R5900Context* ctx, PS2Runtime* runtime) {
+    if (ReceiveFromLocked(rdram, ctx) == 0) SleepForDeviceLatency(ctx, runtime);
 }
 
 void NetNodeId(uint8_t* rdram, R5900Context* ctx, PS2Runtime*) {
