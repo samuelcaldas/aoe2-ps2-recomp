@@ -77,12 +77,13 @@ bibliotecas Sony, SIF, módulos IRX, emulação de IOP) deixa de rodar.
 
 ## Decisões em aberto
 
-1. **Kernel EE** (threads/semáforos/interrupções): manter o `EeScheduler` do runtime (o motor recompilado
-   ainda usa syscalls) ou substituir por threads nativas. Recomendação: manter por ora.
+1. **Kernel EE** (threads/semáforos/interrupções): **decidido (2026-10-23): manter o `EeScheduler`
+   provisoriamente.** O motor recompilado ainda usa as syscalls; reavaliar quando o resto estiver nativo.
 2. **Fronteira Sony abaixo do KCET** (libgraph/libdma/libkernl): medir antes de decidir; o motor pode
    chamá-las diretamente, e elas dependem de hardware (GS/DMA).
-3. **Contrato com o agy**: formato em que a decompilação da camada chega aqui (documento de
-   comportamento por papel, e não só código), para eu não depender de ler fontes brutas.
+3. **Contrato com o agy**: **decidido (2026-10-23): só o código decompilado.** Este projeto lê os fontes de
+   `~/repos/aoe` e extrai o comportamento; o agy não precisa produzir documentos extras. Consequência: o
+   comportamento extraído por papel deve ser registrado aqui (sem endereços/nomes) para ser revisável.
 4. **Proveniência**: confirmar que adaptadores descritos por papel, sem nomes/endereços, satisfazem a
    exceção autorizada pelo dono (CLAUDE.md), antes de portar qualquer lógica.
 
