@@ -19,7 +19,7 @@ bibliotecas Sony, SIF, módulos IRX, emulação de IOP) deixa de rodar.
 
 ## Por que isso é viável (medido)
 
-- Fronteira KCET: **58 pontos de entrada**, chamados por **40 funções** do motor. É superfície pequena.
+- Fronteira que exige adaptador: ~85 pontos de entrada (Sony base + KCET). É superfície pequena (ver medida abaixo).
 - O decomp (`~/repos/aoe`) já tem 100% de correspondência de bytes nos módulos KCET: mouse, teclado,
   driver USB de teclado, pad, servidor CD/DVD, arquivos, memory card, kernel, hd e libscf, mais a rede.
   Isso dá o comportamento exato (máquinas de estado, layouts de buffer, códigos de retorno).
@@ -28,6 +28,29 @@ bibliotecas Sony, SIF, módulos IRX, emulação de IOP) deixa de rodar.
 - Evidência de que a emulação do IOP é o lado frágil: o travamento de boot foi causado por uma
   substituição que **não imitava o bloqueio** de uma RPC (o receptor matou de fome a thread do jogo).
   Adaptadores que respondem na fronteira de alto nível evitam essa classe inteira de erro.
+
+## Fronteira medida (2026-10-23, `tools/boundary_inventory.py`)
+
+Método: o motor (MWCC) salva `ra` com `sq`; KCET, bibliotecas Sony e auxiliares EE-GCC usam `sd`. Uma aresta
+é uma chamada direta ou salto de cauda de uma função do motor para uma função EE-GCC ou de syscall.
+O relatório com endereços fica em `analysis/generated/boundary_inventory.json` (ignorado).
+
+| Região | Pontos de entrada | Funções do motor que chamam | Precisa de adaptador? |
+|---|---:|---:|---|
+| Syscalls EE (kernel) | 15 | 79 | Não por ora: `EeScheduler` fica (decisão 1) |
+| Bibliotecas Sony base (SIF, DMA, pad, cd, mc, gráficos) | 37 | 137 | **Sim**: toca hardware e IOP |
+| KCET (mouse, teclado, pad, cdvd, file, mc, kernel, hd) | 48 | 34 | **Sim**: é o alvo principal |
+| Auxiliares de C e libgcc (formatação, mem/str, qsort, float→int) | 30 | ~420 | Não: cálculo puro; podem seguir recompilados |
+| Fora da faixa (um ponto isolado) | 1 | 1 | A investigar |
+
+Leitura: cerca de **85 pontos de entrada** exigem adaptador (Sony base + KCET), chamados por poucas
+dezenas a ~170 funções do motor. O ponto mais quente (376 chamadores) é um auxiliar de float para inteiro
+do libgcc: puro, sem hardware, não é fronteira de compatibilidade.
+
+Limites da medida: a classificação é heurística. Das ~8.100 funções, 2.040 são folhas sem frame e ficam
+sem classe, então arestas do motor para uma folha de compatibilidade **não são contadas**; os números são
+um piso. Chamadas indiretas (vtables, ponteiros de função) também não entram. Validar com o log de
+execução (RPCs SIF vistos, syscalls) antes de dar o inventário por completo.
 
 ## Contrato do adaptador
 
@@ -65,8 +88,8 @@ bibliotecas Sony, SIF, módulos IRX, emulação de IOP) deixa de rodar.
 
 ## Etapas
 
-1. **Inventário da fronteira completa**: KCET (58), mais bibliotecas Sony e syscalls EE usadas pelo motor.
-   Classificar cada ponto: já substituído, adaptador novo, ou fica (kernel). Saída: tabela de papéis.
+1. **Inventário da fronteira completa**: medida estática feita (tabela acima). Falta cruzar com execução (RPCs SIF,
+   syscalls vistos) e atribuir papel a cada um dos ~85 pontos: já substituído, adaptador novo, ou fica.
 2. **Contrato e harness de diferença**: formato de gravação/reprodução (entrada → saída) sobre o
    original recompilado; primeiro módulo piloto pequeno (pad ou file).
 3. **Módulos por prioridade de boot**: file/cdvd → kernel/áudio de boot → pad/mc → resto.
