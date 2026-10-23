@@ -33,3 +33,20 @@ Roles only; no guest addresses (provenance rules). Local mapping: `tools/map_ove
 2. Overlay-aware generation + manifest rules (hashes/counts only).
 3. Runtime patch series and a host test with a synthetic two-overlay table.
 4. Remaining overlays; then run the lobby path.
+
+## Proof of concept (2026-10-23): one overlay recompiled
+
+The multi-menu overlay (smallest with real code) went through the whole chain locally:
+`tools/overlay_to_elf.py --code-only --entry <first function>` wraps header+text in a synthetic ELF;
+Ghidra headless imports the **code-only raw image** at the load address (language
+`MIPS:LE:64:64-32addr`) and runs the pipeline's `ExportPS2Functions.java`; `ps2_recomp` generates 40 C++
+files plus a register file. Lessons:
+
+- Analyze header+text only. With the whole file, Ghidra treated string data as code and the generator failed
+  on non-instructions; text size comes from the header, so no heuristic is needed.
+- The generator needs an entry function name: use a real function start as the synthetic ELF entry.
+- The overlay has an indirect jump (switch); the generator promotes fallback entries with a warning, as it
+  may in the main code. Recheck per overlay before trusting it.
+- The generated register file targets addresses outside the pinned runtime's table, so it cannot run until the
+  runtime patch series (step 3 above) exists.
+- Ghidra is not on the default environment: `GHIDRA_HOME` must point at the installed 12.1.x tree.
