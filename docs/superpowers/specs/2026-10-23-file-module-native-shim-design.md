@@ -39,6 +39,18 @@ O decomp é correspondência de bytes, mas usa nomes genéricos e tipos `void *`
 significado dos tipos vêm do assembly correspondente, que é a especificação final. Não há header do módulo no
 decomp.
 
+## Cobertura real do decomp (verificada em 2026-10-23)
+
+O dono indicou que kernel, gpu, servidor de CD e outros já estão decompilados. Lendo os fontes:
+- **kernel**: decompilado de fato (envoltórios de threads, semáforos, vsync, dumps).
+- **gpu**: parcial (despachante de comandos GS e alguns manipuladores).
+- **servidor de CD**: o fonte tem ~150 funções, mas ~140 são **corpos vazios** (`void f(void *p, ...) {}`);
+  só ~8 pequenas têm lógica. O módulo de arquivos depende justamente dessas funções (acessores da tabela de
+  arquivos e leitura de registros). Para elas o decomp **não** é especificação; vale o assembly.
+- Consequência: o contrato do módulo de arquivos sai do assembly nessas funções, e o teste diferencial contra o
+  original recompilado passa a ser a referência principal (não o decomp). Cada função só é tratada como
+  "coberta pelo decomp" se o corpo não for vazio.
+
 ## Objetivos
 
 - Atender cada ponto de entrada do módulo na fronteira (substituição por papel, mecanismo já existente no
