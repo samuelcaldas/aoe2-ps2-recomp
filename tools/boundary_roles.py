@@ -36,12 +36,21 @@ SID_RANGES = (
     (0x80000006, 0x80000006, "loadfile"),
 )
 HARDWARE_BYTES = (0x10, 0x11, 0x12, 0x13)
+# Small service ids are not 0x8000xxxx, so they are identified by the strings near their bind code.
+SMALL_SID_ROLES = {0x20: "audio_sd", 0x30: "audio_sd", 0x7E4: "network_config"}
+REG_A1 = 5
+BACKSCAN = 8
+LUI_SPAN = 6
 MAX_CLOSURE = 300
 
 
 def sid_role(value: int) -> str:
-    if value < SIF_COMMAND_LIMIT:
+    if value in SMALL_SID_ROLES:
+        return SMALL_SID_ROLES[value]
+    if SID_PREFIX <= value < SIF_COMMAND_LIMIT:
         return ROLE_TRANSPORT
+    if value < SID_PREFIX:
+        return f"sid_0x{value:x}"
     for low, high, role in SID_RANGES:
         if low <= value <= high:
             return role
@@ -64,6 +73,51 @@ def _built_constants(words: list) -> set:
     return values
 
 
+def _a1_constant(words: list, call_index: int) -> int | None:
+    """Constant most recently loaded into $a1 before a call, if it is a plain immediate or lui+ori/addiu."""
+    for index in range(call_index - 1, max(-1, call_index - 1 - BACKSCAN), -1):
+        word = words[index]
+        opcode, source, target = mips.opcode_of(word), mips.rs_of(word), mips.rt_of(word)
+        if target != REG_A1 or opcode not in (mips.OP_ADDIU, mips.OP_ORI):
+            continue
+        if source == 0:
+            return mips.immediate_of(word)
+        for back in range(index - 1, max(-1, index - 1 - LUI_SPAN), -1):
+            high = words[back]
+            if mips.opcode_of(high) == mips.OP_LUI and mips.rt_of(high) == source:
+                return mips._constant_built_into_any_register(high, word)
+        return None
+    return None
+
+
+def service_bind_sites(image, functions, rows: list, bind_function: int) -> dict:
+    """service id -> functions that pass it to the bind function."""
+    sites = defaultdict(set)
+    for start, end, _ in rows:
+        words = _function_words(image, start, end)
+        for index, target in ((i, t) for i, w in enumerate(words) for t in _jump_targets([w], start + 4 * i) if w >> 26 == 3):
+            value = _a1_constant(words, index)
+            if target == bind_function and value is not None:
+                sites[value].add(start)
+    return dict(sites)
+
+
+def find_bind_function(image, rows: list) -> int:
+    """The call target most often used right after a 0x8000xxxx service id is placed in $a1."""
+    votes = Counter()
+    for start, end, _ in rows:
+        words = _function_words(image, start, end)
+        for index, word in enumerate(words):
+            if word >> 26 != 3:
+                continue
+            value = _a1_constant(words, index)
+            if value is not None and value >= SIF_COMMAND_LIMIT and value & 0xFFFF0000 == SID_PREFIX:
+                votes[_jump_targets([word], start + 4 * index)[0]] += 1
+    if not votes:
+        raise ValueError("no service bind calls found")
+    return votes.most_common(1)[0][0]
+
+
 def _closure(image, functions, classes: dict, entry: int) -> list:
     seen, queue = {entry}, [entry]
     while queue and len(seen) < MAX_CLOSURE:
@@ -77,9 +131,10 @@ def _closure(image, functions, classes: dict, entry: int) -> list:
     return sorted(seen)
 
 
-def _evidence(image, functions, classes: dict, entry: int) -> tuple:
+def _evidence(image, functions, classes: dict, entry: int, binds: dict) -> tuple:
     sids, hardware, syscalls = set(), False, False
     for start in _closure(image, functions, classes, entry):
+        sids.update(sid_role(sid) for sid, callers in binds.items() if start in callers)
         end = functions.containing(start)[1]
         words = _function_words(image, start, end)
         syscalls = syscalls or classes.get(start) == SYSCALL
@@ -90,11 +145,11 @@ def _evidence(image, functions, classes: dict, entry: int) -> tuple:
     return sids, hardware, syscalls
 
 
-def assign_roles(image, functions, rows: list, edges: list) -> dict:
+def assign_roles(image, functions, rows: list, edges: list, binds: dict | None = None) -> dict:
     classes = {start: classify_function(_function_words(image, start, end)) for start, end, _ in rows}
     roles = {}
     for callee in sorted({edge.callee for edge in edges}):
-        sids, hardware, syscalls = _evidence(image, functions, classes, callee)
+        sids, hardware, syscalls = _evidence(image, functions, classes, callee, binds or {})
         services = sids - {ROLE_TRANSPORT}
         if services:
             roles[callee] = "+".join(sorted(services))
@@ -122,7 +177,8 @@ def main(argv: list | None = None) -> int:
         functions = FunctionMap.from_csv(args.function_map)
         rows = functions._rows
         edges = find_boundary(image, functions, rows)
-        roles = assign_roles(image, functions, rows, edges)
+        binds = service_bind_sites(image, functions, rows, find_bind_function(image, rows))
+        roles = assign_roles(image, functions, rows, edges, binds)
         callers = defaultdict(set)
         for edge in edges:
             callers[edge.callee].add(edge.caller)

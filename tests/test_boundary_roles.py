@@ -2,7 +2,7 @@ import unittest
 
 from tests.test_boundary_inventory import BASE, SD_RA, SQ_RA, SYSCALL_WORD, program
 from tools.boundary_inventory import find_boundary
-from tools.boundary_roles import ROLE_HARDWARE, ROLE_KERNEL, ROLE_UNKNOWN, assign_roles
+from tools.boundary_roles import ROLE_HARDWARE, ROLE_KERNEL, ROLE_UNKNOWN, assign_roles, find_bind_function, service_bind_sites
 from tools.kcet_resolver.mips import JR_RA, addiu, jal, lui, ori
 
 
@@ -53,6 +53,46 @@ class TestAssignRoles(unittest.TestCase):
         engine = [SQ_RA, jal(BASE + 16), 0, 0]
         compat = [SD_RA, JR_RA, 0]
         self.assertEqual(roles_for(engine, compat), {BASE + 16: ROLE_UNKNOWN})
+
+
+BIND = [SD_RA, JR_RA, 0]
+
+
+def bind_program(*callers):
+    return program(BIND, *callers)
+
+
+def caller_with(sid_words):
+    return [SD_RA, *sid_words, 0, JR_RA, 0]
+
+
+class TestBindSites(unittest.TestCase):
+    def test_reads_small_and_large_service_ids_passed_to_the_bind_function(self):
+        small = caller_with([addiu(5, 0, 0x30), jal(BASE)])
+        large = caller_with([lui(2, 0x8000), ori(5, 2, 0x0400), jal(BASE)])
+        image, functions, rows = bind_program(small, large)
+        sites = service_bind_sites(image, functions, rows, BASE)
+        self.assertEqual(sorted(sites), [0x30, 0x80000400])
+        self.assertEqual(sites[0x30], {BASE + 12})
+
+    def test_ignores_calls_to_other_functions(self):
+        image, functions, rows = bind_program(caller_with([addiu(5, 0, 0x30), jal(BASE + 4)]))
+        self.assertEqual(service_bind_sites(image, functions, rows, BASE), {})
+
+    def test_bind_function_is_the_common_target_after_large_service_ids(self):
+        a = caller_with([lui(2, 0x8000), ori(5, 2, 0x0400), jal(BASE)])
+        b = caller_with([lui(2, 0x8000), ori(5, 2, 0x0210), jal(BASE)])
+        image, functions, rows = bind_program(a, b)
+        self.assertEqual(find_bind_function(image, rows), BASE)
+
+    def test_role_comes_from_a_bind_inside_the_callee_closure(self):
+        engine = [SQ_RA, jal(BASE + 16), 0, 0]
+        wrapper = [SD_RA, addiu(5, 0, 0x30), jal(BASE + 16 + 24), 0, JR_RA, 0]
+        bind = [SD_RA, JR_RA, 0, 0, 0, 0]
+        image, functions, rows = program(engine, wrapper, bind)
+        edges = find_boundary(image, functions, rows)
+        sites = service_bind_sites(image, functions, rows, BASE + 16 + 24)
+        self.assertEqual(assign_roles(image, functions, rows, edges, sites), {BASE + 16: "audio_sd"})
 
 
 if __name__ == "__main__":

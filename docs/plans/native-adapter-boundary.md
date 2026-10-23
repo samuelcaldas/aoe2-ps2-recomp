@@ -65,13 +65,15 @@ serviço SIF (mapeados a papéis), bases de registradores de hardware e syscalls
 | sif_transport | 10 | Sony base e KCET | Some junto com o SIF: nada abaixo da fronteira executa |
 | hardware (DMA/GIF/GS/VIF) | 9 | 7 Sony base, 2 KCET | Ligam ao rasterizador/GS (fase própria, ver ADR 0001) |
 | cdvd | 2 | Sony base e KCET | Leitura nativa da ISO/arquivos soltos |
+| audio_sd (serviço de volume do SD) | 1 | KCET, chamado 3 vezes pelo motor | Adaptador de áudio do host |
 | pad, memory_card, usb_mouse, usb_keyboard | 1 cada | KCET | Adaptadores de entrada e de `mc0/` |
 
-Cruzamento com a execução: o log vê 5 serviços SIF; os papéis estáticos cobrem cdvd, pad, cartão, mouse e
-teclado. **Lacuna**: o áudio (serviço de volume/SD) e outros serviços com ids pequenos (não `0x8000xxxx`)
-não aparecem na análise estática; só o log os mostra. Próximo passo é procurar ids pequenos perto das
-chamadas de bind SIF e atribuir papel de áudio. O socket (i.LINK) já está substituído e fora desta contagem
-(a fronteira dele é `sceILsock*`, anterior às chamadas medidas).
+Serviços SIF ligados pelo binário (busca de binds, `service_bind_sites`): 28 ids. Por papel: cdvd (5), socket
+i.LINK (12), pad (2), memory card (1), mouse (1), teclado (1), loadfile (1), áudio SD (2 ids pequenos),
+configuração de rede (1 id pequeno, texto `ktNetCnf`), o comando de transporte (1), e **um id pequeno ligado
+direto pelo motor sem texto identificador** (a identificar pelo decomp). Os ids pequenos são nomeados pelas
+strings vizinhas ao bind, não por tabela. O log de execução vê 5 serviços e todos aparecem na lista estática;
+o resto ainda não foi exercido porque o boot não chegou lá.
 
 Conclusão operacional: dos 116 pontos, os que **precisam de lógica nova** são poucos (cdvd/file, pad, cartão,
 mouse/teclado, áudio, hardware gráfico). O grosso é kernel (já coberto pelo escalonador) e auxiliares puros.
@@ -112,8 +114,8 @@ mouse/teclado, áudio, hardware gráfico). O grosso é kernel (já coberto pelo 
 
 ## Etapas
 
-1. **Inventário da fronteira completa**: medida estática e papéis feitos (tabelas acima). Falta o áudio (ids
-   pequenos) e revisar um a um os `unknown` do KCET/Sony base.
+1. **Inventário da fronteira completa**: medida estática e papéis feitos (tabelas acima). Falta identificar o serviço
+   de id pequeno ligado direto pelo motor e revisar um a um os `unknown` do KCET/Sony base.
 2. **Contrato e harness de diferença**: formato de gravação/reprodução (entrada → saída) sobre o
    original recompilado; primeiro módulo piloto pequeno (pad ou file).
 3. **Módulos por prioridade de boot**: file/cdvd → kernel/áudio de boot → pad/mc → resto.
