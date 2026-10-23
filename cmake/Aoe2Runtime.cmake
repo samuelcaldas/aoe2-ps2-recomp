@@ -56,6 +56,11 @@ if(AOE2_BUILD_DECI2_RUNTIME_TESTS)
     target_link_libraries(aoe2_deci2_runtime_tests PRIVATE aoe2_ps2_runtime)
     add_test(NAME deci2_runtime COMMAND aoe2_deci2_runtime_tests)
     set_tests_properties(deci2_runtime PROPERTIES TIMEOUT 30)
+    add_executable(aoe2_overlay_dispatch_tests tests/cpp/overlay_dispatch_tests.cpp
+        "${PS2X_DIR}/ps2xTest/src/test_function_table.cpp")
+    target_link_libraries(aoe2_overlay_dispatch_tests PRIVATE aoe2_ps2_runtime)
+    add_test(NAME overlay_dispatch COMMAND aoe2_overlay_dispatch_tests)
+    set_tests_properties(overlay_dispatch PROPERTIES TIMEOUT 30)
     add_executable(aoe2_deci2_runner_tests ${AOE2_GAME_RUNNER_SOURCES}
         "${PS2X_DIR}/ps2xTest/src/test_function_table.cpp")
     target_link_libraries(aoe2_deci2_runner_tests PRIVATE aoe2_ps2_runtime)

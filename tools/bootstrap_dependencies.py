@@ -6,7 +6,8 @@ Manages external repositories:
 - libnx:     https://github.com/switchbrew/libnx.git (ISC)
 - deko3d:    https://github.com/devkitPro/deko3d.git (Zlib / MIT)
 
-Clones recursively into third_party/ (ignored by git).
+Clones recursively into third_party/ (ignored by git), then applies the local patch
+series in tools/patches/<dependency>/ (idempotent; the lock records the unpatched upstream SHA).
 Generates or updates a tracked lock/provenance file: third_party_provenance.lock.json
 """
 import argparse
@@ -18,6 +19,11 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+
+from tools.runtime_patches import PatchError, apply_patches, verify_patches  # noqa: E402
+
+PATCH_DIRECTORIES = {"PS2Recomp": REPO_ROOT / "tools" / "patches" / "ps2recomp"}
 
 DEPENDENCIES = {
     "PS2Recomp": {
@@ -89,7 +95,13 @@ def main():
         if not lock_file.exists():
             sys.stderr.write(f"Error: Lock file missing: {lock_file}\n")
             sys.exit(1)
-        print("All dependencies and lock file verified.")
+        try:
+            for name, patch_dir in PATCH_DIRECTORIES.items():
+                verify_patches(dest_dir / name, patch_dir)
+        except PatchError as error:
+            sys.stderr.write(f"Error: {error}\n")
+            sys.exit(1)
+        print("All dependencies, local patches, and lock file verified.")
         sys.exit(0)
 
     dest_dir.mkdir(parents=True, exist_ok=True)
@@ -115,6 +127,14 @@ def main():
                 cwd=repo_path,
                 check=True,
             )
+
+        if name in PATCH_DIRECTORIES:
+            try:
+                for applied in apply_patches(repo_path, PATCH_DIRECTORIES[name]):
+                    print(f"Applied local patch {applied} to {name}")
+            except PatchError as error:
+                sys.stderr.write(f"Error: {error}\n")
+                sys.exit(1)
 
         sha = get_git_head_sha(repo_path)
         lock_data["dependencies"][name] = {
