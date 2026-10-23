@@ -50,3 +50,22 @@ files plus a register file. Lessons:
 - The generated register file targets addresses outside the pinned runtime's table, so it cannot run until the
   runtime patch series (step 3 above) exists.
 - Ghidra is not on the default environment: `GHIDRA_HOME` must point at the installed 12.1.x tree.
+
+## Cross-check with the owner's overlay decompilation (2026-10-23)
+
+What the decomp's `*_overlay.c` files are: **word-for-word reassembly**, not decompiled C. Each function is an `__asm__`
+block of `.word` instruction values that reproduces the original bytes ("100% matching" is byte identity). They
+carry no semantics, so they cannot replace the recompiled overlays or seed native adapters. Their use here is
+as an independent check of the overlay images and of function boundaries.
+
+Findings (counts only):
+
+- **Load model confirmed.** The engine's calls into the lobby overlay land on genuine function prologues when the
+  whole file, header included, is mapped at the load address; with the header removed they land mid-code. The decomp
+  labels addresses relative to the first code word (header of 0x80 bytes stripped), so its VMA is the real address
+  minus 0x80 for the menu overlay.
+- **Function boundaries.** For the main-menu overlay, 135 of its 144 functions coincide exactly with the
+  functions the Ghidra export found (at the 0x80 offset); the export found 28 more. For the other overlays the
+  decomp's addresses drift (best offsets differ per overlay, 0x74 to 0x8c), so a straight address comparison is
+  not meaningful; do not use decomp addresses for overlays without recomputing them from the file.
+- **IOP.** No decompiled IRX/IOP sources were found in the decompilation repository (no files, no commits).
