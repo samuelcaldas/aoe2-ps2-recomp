@@ -52,6 +52,30 @@ sem classe, então arestas do motor para uma folha de compatibilidade **não sã
 um piso. Chamadas indiretas (vtables, ponteiros de função) também não entram. Validar com o log de
 execução (RPCs SIF vistos, syscalls) antes de dar o inventário por completo.
 
+### Papéis por evidência (2026-10-23, `tools/boundary_roles.py`)
+
+Para cada um dos 116 pontos de entrada, segue as chamadas diretas que não entram no motor e coleta ids de
+serviço SIF (mapeados a papéis), bases de registradores de hardware e syscalls. Sem evidência, o papel
+é `unknown`; nada é adivinhado. Os ids pequenos de comando do próprio SIF são tratados como transporte.
+
+| Papel | Pontos de entrada | Onde estão | Disposição |
+|---|---:|---|---|
+| kernel (alcança syscalls) | 54 | 25 no KCET (envoltórios de threads/semáforos/seção crítica), 19 Sony base, 8 C | Mapear ao `EeScheduler` (decisão 1); sem RPC |
+| unknown (sem evidência) | 37 | 20 auxiliares C/libgcc, 12 KCET, 5 Sony base | C/libgcc: puros, seguem recompilados. KCET/Sony: lógica de memória (filas, estado); revisar um a um |
+| sif_transport | 10 | Sony base e KCET | Some junto com o SIF: nada abaixo da fronteira executa |
+| hardware (DMA/GIF/GS/VIF) | 9 | 7 Sony base, 2 KCET | Ligam ao rasterizador/GS (fase própria, ver ADR 0001) |
+| cdvd | 2 | Sony base e KCET | Leitura nativa da ISO/arquivos soltos |
+| pad, memory_card, usb_mouse, usb_keyboard | 1 cada | KCET | Adaptadores de entrada e de `mc0/` |
+
+Cruzamento com a execução: o log vê 5 serviços SIF; os papéis estáticos cobrem cdvd, pad, cartão, mouse e
+teclado. **Lacuna**: o áudio (serviço de volume/SD) e outros serviços com ids pequenos (não `0x8000xxxx`)
+não aparecem na análise estática; só o log os mostra. Próximo passo é procurar ids pequenos perto das
+chamadas de bind SIF e atribuir papel de áudio. O socket (i.LINK) já está substituído e fora desta contagem
+(a fronteira dele é `sceILsock*`, anterior às chamadas medidas).
+
+Conclusão operacional: dos 116 pontos, os que **precisam de lógica nova** são poucos (cdvd/file, pad, cartão,
+mouse/teclado, áudio, hardware gráfico). O grosso é kernel (já coberto pelo escalonador) e auxiliares puros.
+
 ## Contrato do adaptador
 
 1. **Escopo**: cada papel `kcet.<módulo>.<operação>` ou chamada Sony usada pelo motor tem um adaptador.
@@ -88,8 +112,8 @@ execução (RPCs SIF vistos, syscalls) antes de dar o inventário por completo.
 
 ## Etapas
 
-1. **Inventário da fronteira completa**: medida estática feita (tabela acima). Falta cruzar com execução (RPCs SIF,
-   syscalls vistos) e atribuir papel a cada um dos ~85 pontos: já substituído, adaptador novo, ou fica.
+1. **Inventário da fronteira completa**: medida estática e papéis feitos (tabelas acima). Falta o áudio (ids
+   pequenos) e revisar um a um os `unknown` do KCET/Sony base.
 2. **Contrato e harness de diferença**: formato de gravação/reprodução (entrada → saída) sobre o
    original recompilado; primeiro módulo piloto pequeno (pad ou file).
 3. **Módulos por prioridade de boot**: file/cdvd → kernel/áudio de boot → pad/mc → resto.
