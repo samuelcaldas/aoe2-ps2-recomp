@@ -27,7 +27,7 @@ from tools import verify_function_map as guardrail  # noqa: E402
 from tools.kcet_resolver.elf_image import load_elf  # noqa: E402
 from tools.overlay_entries import entry_targets, seeds_for  # noqa: E402
 from tools.map_overlays import HEADER_BYTES, parse_overlay_header  # noqa: E402
-from tools.overlay_registration import build_registration, build_rename_header, parse_register_file  # noqa: E402
+from tools.overlay_registration import build_aggregate, build_registration, build_rename_header, parse_register_file  # noqa: E402
 from tools.overlay_to_elf import overlay_to_elf  # noqa: E402
 
 ANALYSIS = REPO_ROOT / "analysis" / "generated" / "overlays"
@@ -116,7 +116,8 @@ def process(entry: dict, raw: bytes, ghidra_home: Path, targets: list) -> dict:
     (out / "overlay_rename.h").write_text(build_rename_header((out / "ps2_recompiled_functions.h").read_text(), prefix))
     pairs = parse_register_file((out / "register_functions.cpp").read_text())
     (out / "overlay_registration.cpp").write_text(build_registration(pairs, header.overlay_id, prefix, name))
-    return {"name": name, "id": header.overlay_id, "sources": len(list(out.glob("*_0x*.cpp"))), "entries": len(pairs)}
+    return {"name": name, "id": header.overlay_id, "load_address": header.load_address,
+            "code_bytes": HEADER_BYTES + header.text, "sources": len(list(out.glob("*_0x*.cpp"))), "entries": len(pairs)}
 
 
 def main(argv: list | None = None) -> int:
@@ -147,6 +148,8 @@ def main(argv: list | None = None) -> int:
     except (OSError, PipelineError, guardrail.GuardrailInputError, ValueError) as error:
         print(f"Error: {error}", file=sys.stderr)
         return 1
+    if not args.only:
+        (GENERATED / "overlay_all.cpp").write_text(build_aggregate(results))
     for result in results:
         print(f"{result['name']}: id={result['id']} sources={result['sources']} entries={result['entries']}")
     print(f"Recompiled {len(results)} overlay(s).")

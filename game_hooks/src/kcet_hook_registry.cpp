@@ -7,6 +7,9 @@
 #include <iostream>
 #include <stdexcept>
 
+// Defined by the generated overlay registration, or by overlay_stub.cpp when none exist.
+int RegisterGeneratedOverlays(PS2Runtime& runtime);
+
 namespace {
 using aoe2::game_hooks::KcetHandlers;
 using aoe2::game_hooks::KcetHookConfig;
@@ -48,8 +51,9 @@ void apply_kcet_hooks(PS2Runtime& runtime) {
     const auto handlers = host_handlers();
     apply_replacements(runtime, config, handlers);
     apply_aliases(runtime, config);
+    const int overlays = RegisterGeneratedOverlays(runtime);
     std::cout << "[aoe2] KCET hooks applied: " << config.replacements.size()
-              << "/" << handlers.size() << "; aliases: " << config.aliases.size() << '\n';
+              << "/" << handlers.size() << "; aliases: " << config.aliases.size() << "; overlays: " << overlays << '\n';
 }
 }
 

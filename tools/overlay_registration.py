@@ -60,6 +60,35 @@ def build_registration(pairs: list, overlay_id: int, prefix: str, name: str) -> 
     return "\n".join(lines) + "\n"
 
 
+def merge_regions(overlays: list) -> list:
+    """One (base, size) per distinct load address, sized for the largest code image; reject overlaps."""
+    sizes = {}
+    for overlay in overlays:
+        base = overlay["load_address"]
+        sizes[base] = max(sizes.get(base, 0), overlay["code_bytes"])
+    regions = sorted(sizes.items())
+    for (base, size), (next_base, _) in zip(regions, regions[1:]):
+        if base + size > next_base:
+            raise OverlayRegistrationError("overlay code regions overlap; the id-selected table cannot tell them apart")
+    return regions
+
+
+def build_aggregate(overlays: list) -> str:
+    """Source adding every code region, then registering every overlay; returns the overlay count."""
+    names = [overlay["name"] for overlay in overlays]
+    if not all(NAME.match(name) for name in names):
+        raise OverlayRegistrationError("unsafe overlay name")
+    lines = ['#include "ps2_runtime.h"', "#include <stdexcept>", ""]
+    lines += [f"void RegisterOverlay_{name}(PS2Runtime& runtime);" for name in names]
+    lines += ["", "int RegisterGeneratedOverlays(PS2Runtime& runtime) {"]
+    for base, size in merge_regions(overlays):
+        lines.append(f"    if (!runtime.addOverlayRegion(0x{base:x}u, 0x{size:x}u, 0x{base + 4:x}u))")
+        lines.append(f'        throw std::runtime_error("cannot add overlay region 0x{base:x}");')
+    lines += [f"    RegisterOverlay_{name}(runtime);" for name in names]
+    lines += [f"    return {len(names)};", "}"]
+    return "\n".join(lines) + "\n"
+
+
 def _require_prefix(prefix: str) -> None:
     if not PREFIX.match(prefix):
         raise OverlayRegistrationError(f"prefix must be an identifier ending in '_': {prefix!r}")

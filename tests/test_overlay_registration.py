@@ -3,6 +3,7 @@ import unittest
 from pathlib import Path
 
 from tools.overlay_registration import (
+    build_aggregate, merge_regions,
     OverlayRegistrationError, build_registration, build_rename_header, parse_register_file)
 
 REGISTER = """#include "ps2_runtime.h"
@@ -56,6 +57,34 @@ class TestOverlayRegistration(unittest.TestCase):
                 build_registration(pairs, 4, prefix, "multimcd")
         with self.assertRaises(OverlayRegistrationError):
             build_registration(pairs, 4, "ov4_", "bad name")
+
+
+class TestAggregate(unittest.TestCase):
+    OVERLAYS = [
+        {"name": "a", "load_address": 0x1D98000, "code_bytes": 0x500},
+        {"name": "b", "load_address": 0x1D98000, "code_bytes": 0x900},
+        {"name": "c", "load_address": 0x1F68000, "code_bytes": 0x200},
+    ]
+
+    def test_regions_cover_the_largest_code_per_shared_base(self):
+        self.assertEqual(merge_regions(self.OVERLAYS), [(0x1D98000, 0x900), (0x1F68000, 0x200)])
+
+    def test_overlapping_regions_are_rejected(self):
+        overlapping = self.OVERLAYS + [{"name": "d", "load_address": 0x1D98400, "code_bytes": 0x100}]
+        with self.assertRaises(OverlayRegistrationError):
+            merge_regions(overlapping)
+
+    def test_aggregate_adds_regions_before_registering_every_overlay(self):
+        source = build_aggregate(self.OVERLAYS)
+        self.assertLess(source.index("addOverlayRegion(0x1d98000u, 0x900u, 0x1d98004u)"),
+                        source.index("RegisterOverlay_a(runtime)"))
+        for name in "abc":
+            self.assertIn(f"RegisterOverlay_{name}(runtime)", source)
+        self.assertIn("int RegisterGeneratedOverlays(PS2Runtime& runtime)", source)
+        self.assertIn("return 3;", source)
+
+    def test_aggregate_failure_to_add_a_region_is_an_error(self):
+        self.assertIn("throw std::runtime_error", build_aggregate(self.OVERLAYS))
 
 
 if __name__ == "__main__":
