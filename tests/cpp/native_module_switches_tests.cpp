@@ -34,6 +34,10 @@ int main() {
     switches = NativeModuleSwitches::Parse(configured);
     Check(switches.Enabled("kernel"), "kernel should be enabled");
     Check(!switches.Enabled("net") && !switches.Enabled("pad"), "off or unspecified module enabled");
+    std::istringstream pad_device_config{"pad_device=on\n"};
+    switches = NativeModuleSwitches::Parse(pad_device_config);
+    Check(switches.Enabled("pad_device"), "pad_device should be enabled");
+    Check(!switches.Enabled("pad"), "pad_device must not enable pad");
     switches = NativeModuleSwitches::AllOff();
     Check(!switches.Enabled("kernel"), "AllOff enabled kernel");
     for (auto invalid : {"kernel=maybe\n", "unknown=on\n", "kernel=on\nkernel=off\n", "kernel\n", "=on\n", "kernel=\n"}) Rejects(invalid);

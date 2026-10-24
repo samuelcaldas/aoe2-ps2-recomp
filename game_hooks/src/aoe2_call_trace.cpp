@@ -45,6 +45,10 @@ void traced_call(uint8_t* rdram, R5900Context* ctx, PS2Runtime* runtime)
                   << " ra=0x" << getRegU32(ctx, 31) << std::dec << std::endl;
     }
     slot.original(rdram, ctx, runtime);
+    if (should_log(call_number)) {
+        std::cerr << "[call-trace] ret addr=0x" << std::hex << slot.address << " v0=0x"
+                  << getRegU32(ctx, 2) << std::dec << std::endl;
+    }
 }
 
 using Trampoline = PS2Runtime::RecompiledFunction;
