@@ -403,3 +403,25 @@ reuse it, not duplicate it.
 **Open:** the assertion reporter of the original (a guest function) is log-only in the
 native module; differential testing against the original is still pending; the game's
 `ra=0` stop at about 4 minutes is a separate problem and is not addressed by this module.
+
+### Native pad device, desktop runs (2026-10-24)
+
+The pad is the second native replacement. Below the KCET pad module, the Sony pad library depended on an IOP
+pad service that does not exist here; the original therefore sat in the "command executing" state forever and
+reset the buttons every frame. The native device answers the library calls from a host backend.
+
+**Original (diagnostics build, 90 s):** the state query returned 5 on every poll; the per-state function that
+only resets the slot ran 256 or more times; read, actuator and mode calls never happened.
+
+**Native device with a connected pad (synthetic backend, since the validation host has no gamepad), 90 s:** the
+state query returns 6 for port 0 and 0 for port 1; the processing function runs 256 or more times; read is
+called 256 or more times and returns 8 bytes (analog report); the button update and the actuator update run on
+every poll. Without a pad (real backend, nothing attached) the device returns 0 on all 550 polls, which is the
+correct disconnected behaviour.
+
+**Verdict:** unchanged (`stalled_in_loop`); the pad was never the stall. The vibration path was not exercised
+by the game in the window (no actuator output requested), so it is verified by unit tests only.
+
+**Decomp finding:** the decomp of the pad module disagrees with the binary in the state dispatcher, the step
+function and two library calls (details in `docs/sot/pad-libpad-semantics.md`); the port of the module itself
+is on hold until the decomp is fixed.

@@ -1,5 +1,7 @@
 # Módulo nativo `pad` e vibração (plano 2 de 8 da camada KCET nativa) Implementation Plan
 
+> **Estado (2026-10-24):** Tasks 1 a 5 concluídas e verificadas em execução (dispositivo nativo `pad_device`). Tasks 6 a 9 (porta do próprio `kt_libpad` e interruptor `pad`) **adiadas por decisão do dono**, até o decomp do `kt_libpad` ser corrigido: ele diverge do binário em pelo menos quatro pontos (ver `docs/sot/pad-libpad-semantics.md`). Uma tentativa de agente da Task 6 foi descartada (cópia em `/tmp/pad-task6-wip`, fora do repositório). A vibração só está verificada por testes unitários.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Dar ao jogo um gamepad e vibração do host substituindo, nesta ordem, a libpad da Sony (sem IOP `padman` aqui) e o módulo `kt_libpad` do decomp, cada um atrás de um interruptor.

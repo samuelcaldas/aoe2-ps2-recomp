@@ -41,7 +41,12 @@ a partir do decomp do dono (`~/repos/aoe`), cuja cópia direta é autorizada (`C
 - **kernel:** nativo, atrás do interruptor `kernel` (38 de 39 funções; uma segue gerada). Aguardando verificação
   diferencial e uma medição mais longa; resultado de 60 s em `docs/sot/kcet-stall-log.md` (sem mudança de veredito).
   Plano: `docs/superpowers/plans/2026-10-24-native-kernel-module.md`.
-- Demais módulos: sem plano ainda, na ordem acima.
+- **pad e vibração:** o dispositivo nativo da libpad (`pad_device`) está feito e verificado em execução: com um
+  controle conectado (sintético, em ambiente sem gamepad) o `kt_libpad` gerado deixa o laço de reset e lê e
+  processa relatórios. A porta do próprio `kt_libpad` está **adiada** até o decomp ser corrigido (diverge do
+  binário em pelo menos quatro pontos; lista em `docs/sot/pad-libpad-semantics.md`). Vibração: só testes
+  unitários. Plano: `docs/superpowers/plans/2026-10-24-native-pad-module.md`.
+- Demais módulos: sem plano ainda, na ordem acima (próximo: mouse, teclado e teclado USB).
 
 ## Cobertura do decomp (medida em 2026-10-24)
 
