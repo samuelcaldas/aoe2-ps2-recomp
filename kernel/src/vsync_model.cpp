@@ -136,10 +136,10 @@ int VsyncModel::InitializeRange(int start, int end) {
 int VsyncModel::RegisterVblankStart() {
   if (vblank_start_initialized_)
     return 0;
+  vblank_start_initialized_ = true;
   int result = InitializeRange(0, 2);
   if (result < 0)
     return result;
-  vblank_start_initialized_ = true;
   result = services_.AddIntcHandler(2, callbacks_.vblank_start);
   services_.StoreWord(kHandlerTable, 2);
   services_.StoreWord(kHandlerTable + 4, static_cast<uint32_t>(result));
@@ -151,10 +151,10 @@ int VsyncModel::RegisterVblankStart() {
 int VsyncModel::RegisterVblankEnd() {
   if (vblank_end_initialized_)
     return 0;
+  vblank_end_initialized_ = true;
   int result = InitializeRange(2, 4);
   if (result < 0)
     return result;
-  vblank_end_initialized_ = true;
   result = services_.AddIntcHandler(3, callbacks_.vblank_end);
   services_.StoreWord(kHandlerTable + 8, 3);
   services_.StoreWord(kHandlerTable + 12, static_cast<uint32_t>(result));
