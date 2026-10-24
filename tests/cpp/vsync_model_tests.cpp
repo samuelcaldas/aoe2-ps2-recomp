@@ -74,6 +74,13 @@ void create_failure_rolls_back_all() {
     Check(model.Init(1) < 0, "failure result is negative");
     Check(Has(services.calls, "delete 1"), "created semaphore rolled back");
     Check(!Has(services.calls, "add_intc 2 4660"), "handler not registered after failure");
+    const auto failed_calls = services.calls.size();
+    services.fail_create_after = -1;
+    Check(model.Init(1) > 0, "retry after allocation failure succeeds");
+    Check(services.calls.size() > failed_calls, "retry performs initialization");
+    Check(model.VsyncSemaphore(0) >= 0 && model.VsyncSemaphore(1) >= 0,
+          "retry creates semaphores");
+    Check(Has(services.calls, "add_intc 2 4660"), "retry registers handler");
 }
 
 void wait_vblank_end_signals_then_waits() {
