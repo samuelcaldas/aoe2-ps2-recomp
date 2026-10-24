@@ -342,9 +342,11 @@ void install_native_kernel(PS2Runtime& runtime) {
         std::cout << "[aoe2] native kernel: off\n";
         return;
     }
+    // lookupFunction() returns a fallback for unknown addresses, so ask hasFunction(). An entry the generator
+    // folded into a neighbour has no original to replace; the handler still takes over calls to that address.
     for (const Entry& entry : kEntries) {
-        if (runtime.lookupFunction(entry.address) == nullptr)
-            throw std::runtime_error(std::string("Native kernel: no guest function for ") + entry.name);
+        if (!runtime.hasFunction(entry.address))
+            std::cout << "[aoe2] native kernel: " << entry.name << " has no recompiled original (replacement only)\n";
     }
     g_kernel = std::make_unique<NativeKernel>(runtime);
     for (const Entry& entry : kEntries) {
