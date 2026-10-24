@@ -8,6 +8,7 @@
 // mutex is outside this boundary and is not acquired by these handlers.
 #include <aoe2/game_hooks/kcet_pad_backend.hpp>
 #include <aoe2/game_hooks/native_module_switches.hpp>
+#include <aoe2/game_hooks/native_pad.hpp>
 #include <aoe2/pad/pad_device.hpp>
 
 #include "game_overrides.h"
@@ -83,6 +84,21 @@ PAD_HANDLER(slot_max, return pad.device.SlotMax(Arg(c, 0));)
 PAD_HANDLER(port_open, return pad.device.PortOpen(Arg(c, 0), Arg(c, 1), UArg(c, 2));)
 PAD_HANDLER(port_close, return pad.device.PortClose(Arg(c, 0), Arg(c, 1));)
 PAD_HANDLER(state, return pad.device.State(Arg(c, 0), Arg(c, 1));)
+// Diagnostics: AOE2_PAD_SNAPSHOT=1 logs a 64-bit FNV-1a of the slot that owns the report buffer (slot = report - 0xC4),
+// at read calls 1 to 4 and every 64th after, so runs with the generated and the native kt_libpad can be compared.
+void LogSlotSnapshot(uint8_t* memory, uint32_t report_address, int port) {
+    static const bool enabled = std::getenv("AOE2_PAD_SNAPSHOT") != nullptr;
+    static uint64_t reads = 0;
+    if (!enabled) return;
+    ++reads;
+    if (reads > 4 && reads % 64 != 0) return;
+    const uint8_t* slot = getMemPtr(memory, report_address - 0xC4);
+    if (slot == nullptr) return;
+    uint64_t hash = 14695981039346656037ull;
+    for (int i = 0; i < 0x200; ++i) hash = (hash ^ slot[i]) * 1099511628211ull;
+    std::cerr << "[pad-snapshot] n=" << reads << " port=" << port << " fnv=" << std::hex << hash << std::dec << '\n';
+}
+
 PAD_HANDLER(read,
     std::array<uint8_t, 32> report{};
     const int result = pad.device.Read(Arg(c, 0), Arg(c, 1), report);
@@ -91,6 +107,7 @@ PAD_HANDLER(read,
         if (destination == nullptr) throw std::runtime_error("Sony pad read: invalid guest report pointer");
         std::copy(report.begin(), report.end(), destination);
     }
+    LogSlotSnapshot(memory, UArg(c, 2), Arg(c, 0));
     return result;)
 PAD_HANDLER(req_state, return pad.device.ReqState(Arg(c, 0), Arg(c, 1));)
 PAD_HANDLER(info_act, return pad.device.InfoAct(Arg(c, 0), Arg(c, 1), Arg(c, 2), Arg(c, 3));)
@@ -114,11 +131,7 @@ const std::array<Entry, 14> kEntries = {{
 #undef PAD_DEVICE_ENTRY
 }};
 
-void install_native_pad_device(PS2Runtime& runtime) {
-    if (!LoadSwitches().Enabled("pad_device")) {
-        std::cout << "[aoe2] native pad device: off\n";
-        return;
-    }
+void InstallSonyHandlers(PS2Runtime& runtime) {
     for (const Entry& entry : kEntries) {
         if (!runtime.hasFunction(entry.address))
             std::cout << "[aoe2] native pad device: " << entry.name
@@ -135,7 +148,22 @@ void install_native_pad_device(PS2Runtime& runtime) {
     }
     std::cout << "[aoe2] native pad device: " << kEntries.size() << " functions replaced\n";
 }
+
+void install_native_pad_device(PS2Runtime& runtime) {
+    if (!LoadSwitches().Enabled("pad_device")) {
+        std::cout << "[aoe2] native pad device: off\n";
+        return;
+    }
+    aoe2::game_hooks::EnsureNativePadDevice(runtime);
+}
 } // namespace
+
+namespace aoe2::game_hooks {
+aoe2::pad::PadDevice& EnsureNativePadDevice(PS2Runtime& runtime) {
+    if (!g_pad) InstallSonyHandlers(runtime);
+    return g_pad->device;
+}
+}  // namespace aoe2::game_hooks
 
 PS2_REGISTER_GAME_OVERRIDE("aoe2 native pad device", "AOK.ELF", 0, 0,
                            install_native_pad_device)

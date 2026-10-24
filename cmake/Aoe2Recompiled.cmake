@@ -122,6 +122,7 @@ if(AOE2_BUILD_GAME)
         game_hooks/src/kcet_kernel.cpp
         game_hooks/src/kcet_pad_backend.cpp
         game_hooks/src/kcet_pad.cpp
+        game_hooks/src/kcet_libpad.cpp
     )
     if(NOT AOE2_OVERLAY_TARGETS)
         target_sources(aoe2_game PRIVATE game_hooks/src/overlay_stub.cpp)

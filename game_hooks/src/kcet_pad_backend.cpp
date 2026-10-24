@@ -81,10 +81,10 @@ private:
 
 class SyntheticPadBackend final : public aoe2::pad::PadBackend {
 public:
+    // Deterministic: Cross toggles every 100 samples of port 0 (not by time), so two runs see the same input.
     HostPadState Sample(int port) override {
         if (port != 0) return {};
-        const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - start_).count();
-        const bool cross_down = (elapsed / 500) % 2 == 0;
+        const bool cross_down = (samples_++ / 100) % 2 == 0;
         return {true, static_cast<uint16_t>(cross_down ? static_cast<uint16_t>(aoe2::pad::PadButton::kCross) : 0u),
                 0.0f, 0.0f, 0.0f, 0.0f};
     }
@@ -94,7 +94,7 @@ public:
     }
 
 private:
-    Clock::time_point start_ = Clock::now();
+    uint64_t samples_ = 0;
 };
 }  // namespace
 
