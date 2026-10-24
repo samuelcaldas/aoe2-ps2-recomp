@@ -59,8 +59,10 @@ int PadDevice::InfoMode(int, int, int term, int offset) const {
 }
 int PadDevice::SetMainMode(int port, int slot, int offset, int) {
     if (!Valid(port, slot) || !opened_[port]) return 0;
-    if (offset == 0x41) modes_[port] = PadMode::kDigital;
-    else if (offset == 0x73) modes_[port] = PadMode::kAnalog;
+    // The module passes an index into the mode table that InfoMode reports (0 digital, 1 analog); mode ids are
+    // also accepted so a caller that already holds an id works.
+    if (offset == 0 || offset == 0x41) modes_[port] = PadMode::kDigital;
+    else if (offset == 1 || offset == 0x73) modes_[port] = PadMode::kAnalog;
     else if (offset == 0x79) modes_[port] = PadMode::kPressure;
     else return 0;
     return 1;

@@ -78,6 +78,18 @@ void disconnect_stops_motor_and_allows_same_command_after_reconnect() {
 }
 }
 
+void set_main_mode_takes_a_mode_table_index_or_an_id() {
+    aoe2::pad::FakePadBackend backend;
+    aoe2::pad::PadDevice device(backend);
+    std::array<uint8_t, 32> report{};
+    Check(device.PortOpen(0, 0, 0) == 1, "open");
+    Check(device.SetMainMode(0, 0, 0, 0) == 1 && device.Read(0, 0, report) == 4, "index 0 is digital");
+    Check(device.SetMainMode(0, 0, 1, 0) == 1 && device.Read(0, 0, report) == 8, "index 1 is analog");
+    Check(device.SetMainMode(0, 0, 0x79, 0) == 1 && device.Read(0, 0, report) == 20, "id 0x79 is pressure");
+    Check(device.SetMainMode(0, 0, 7, 0) == 0, "unknown mode fails");
+    Check(device.InfoMode(0, 0, 4, 0) == 0x41 && device.InfoMode(0, 0, 4, 1) == 0x73, "table entries are ids");
+}
+
 void disconnect_clears_the_caller_buffer_and_align_validates_the_port() {
     aoe2::pad::FakePadBackend backend;
     aoe2::pad::PadDevice device(backend);
@@ -95,6 +107,7 @@ void disconnect_clears_the_caller_buffer_and_align_validates_the_port() {
 }
 
 int main() {
+    set_main_mode_takes_a_mode_table_index_or_an_id();
     disconnect_clears_the_caller_buffer_and_align_validates_the_port();
     device_reports_open_connected_port_as_stable();
     read_uses_current_mode_and_connection();
