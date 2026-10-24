@@ -2,15 +2,9 @@
 
 namespace aoe2::pad {
 namespace {
-// libpad state numbers and how long a freshly opened port lingers in each early state.
+// Native commands complete immediately; connectivity comes from the host backend.
 constexpr int kStateDisconnected = 0;
-constexpr int kStateFindPad = 1;
-constexpr int kStateFindController = 2;
-constexpr int kStateExecutingCommand = 5;
 constexpr int kStateStable = 6;
-constexpr int kFindPadPolls = 2;
-constexpr int kFindControllerPolls = 8;
-constexpr int kConfigurationCommandPolls = 0;
 }  // namespace
 
 PadDevice::PadDevice(PadBackend& backend) : backend_(backend) {}
@@ -26,10 +20,9 @@ bool PadDevice::Connected(int port) {
 }
 int PadDevice::PortOpen(int port, int slot, uint32_t) {
     if (!Valid(port, slot)) return 0;
+    StopRumble(port);
     opened_[port] = true;
     rumble_changed_[port] = false;
-    polls_since_open_[port] = 0;
-    busy_polls_[port] = 0;
     return 1;
 }
 int PadDevice::PortClose(int port, int slot) {
@@ -40,23 +33,10 @@ int PadDevice::PortClose(int port, int slot) {
 }
 int PadDevice::State(int port, int slot) {
     if (!Valid(port, slot) || !opened_[port]) return kStateDisconnected;
-    if (!Connected(port)) {
-        polls_since_open_[port] = 0;
-        return kStateDisconnected;
-    }
-    if (busy_polls_[port] > 0) {
-        --busy_polls_[port];
-        return kStateExecutingCommand;
-    }
-    const int poll = ++polls_since_open_[port];
-    if (poll <= kFindPadPolls) return kStateFindPad;
-    if (poll <= kFindPadPolls + kFindControllerPolls) return kStateFindController;
-    return kStateStable;
+    return Connected(port) ? kStateStable : kStateDisconnected;
 }
-// 2 (busy) while a configuration command is still executing, 0 (complete) otherwise.
-int PadDevice::ReqState(int port, int slot) const {
-    return Valid(port, slot) && busy_polls_[port] > 0 ? 2 : 0;
-}
+// Native configuration commands complete synchronously.
+int PadDevice::ReqState(int, int) const { return 0; }
 int PadDevice::Read(int port, int slot, std::array<uint8_t, 32>& out) {
     if (!Valid(port, slot) || !opened_[port]) return 0;
     const HostPadState state = backend_.Sample(port);
@@ -96,13 +76,11 @@ int PadDevice::SetMainMode(int port, int slot, int offset, int) {
     else if (offset == 1 || offset == 0x73) modes_[port] = PadMode::kAnalog;
     else if (offset == 0x79) modes_[port] = PadMode::kPressure;
     else return 0;
-    busy_polls_[port] = kConfigurationCommandPolls;
     return 1;
 }
 int PadDevice::InfoPressMode(int, int) const { return 1; }
 int PadDevice::SetActAlign(int port, int slot, const uint8_t[6]) {
     if (!Valid(port, slot) || !opened_[port]) return 0;
-    busy_polls_[port] = kConfigurationCommandPolls;
     return 1;
 }
 int PadDevice::SetActDirect(int port, int slot, const uint8_t data[6]) {

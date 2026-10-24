@@ -43,8 +43,6 @@ private:
     std::array<PadMode, 2> modes_{PadMode::kAnalog, PadMode::kAnalog};
     std::array<uint16_t, 2> rumble_{};
     std::array<bool, 2> rumble_changed_{};
-    std::array<int, 2> polls_since_open_{};  // drives the FINDPAD -> FINDCTP1 -> STABLE sequence
-    std::array<int, 2> busy_polls_{};        // polls left in EXECCMD after a configuration command
 };
 
 }

@@ -5,6 +5,7 @@
 #include "fake_pad_backend.hpp"
 #include "fake_pad_guest_memory.hpp"
 
+#include <array>
 #include <cstdlib>
 #include <iostream>
 
@@ -43,12 +44,243 @@ struct Fixture {
     uint32_t Slot(int index) { return kSlots + static_cast<uint32_t>(index) * 0x200; }
     void InitTwoPads() {
         model.Init(0, 2, kSlots, 1);
-        model.SetActMode(0, 0x41, 0x32);  // the game asks for the analog mode; the module reaches 'ready' after it
+        model.SetActMode(0, 0x73, 2);  // explicitly request analog mode for report tests
     }
     void RunFrames(int frames) {
         for (int i = 0; i < frames; ++i) model.Update();
     }
 };
+
+// Expectations reconstructed from the original generated functions, not the current decomp.
+void pressure_helpers_and_success_flag_follow_original() {
+    Fixture f;
+    const uint32_t slot = f.Slot(0);
+    for (int mode : {-1, 0, 1, 2, 3}) {
+        f.memory.Store32(slot + slot_field::kPressMode, static_cast<uint32_t>(mode));
+        Check(f.model.PressModeA(slot) == (mode == 1 || mode == 2), "pressure request predicate");
+        Check(f.model.PressModeB(slot) == (mode == 2), "pressure enter predicate");
+    }
+    for (uint32_t initial : {0x3000Cu, 0xB000Cu}) {
+        f.memory.Store32(slot + slot_field::kFlags, initial);
+        const auto before = [&] {
+            std::array<uint8_t, 512> bytes{};
+            f.memory.ReadBytes(slot, bytes.data(), bytes.size());
+            return bytes;
+        }();
+        auto expected = before;
+        expected[0xB2] |= 8;
+        Check(f.model.ApplyPressMode(slot) == 0, "no pending pressure request completes locally");
+        std::array<uint8_t, 512> actual{};
+        f.memory.ReadBytes(slot, actual.data(), actual.size());
+        Check(actual == expected, "InfoPressMode success sets only bit 0x80000, including B2 3 to 11");
+    }
+}
+
+void descriptor_search_scans_all_six_entries() {
+    Fixture f;
+    constexpr uint32_t descriptors = 0x1000;
+    constexpr uint32_t types = 0x004E2BD8; // original GP-relative actuator type table
+    f.memory.Store8(types + 2, 7);
+    f.memory.Store8(types + 3, 9);
+    for (int i = 0; i < 6; ++i) f.memory.Store8(descriptors + i * 4, 3);
+    f.memory.Store8(descriptors + 20, 7);
+    f.memory.Store8(descriptors + 21, 9);
+    Check(f.model.FindAlignment(descriptors, 1) == 5, "search finds descriptor six using indexed type pair");
+    Check(f.model.FindAlignment(descriptors, 0) == 255, "zero type is unused");
+    f.memory.Store8(descriptors + 21, 8);
+    Check(f.model.FindAlignment(descriptors, 1) == 255, "both descriptor bytes must match");
+}
+
+void alignment_uses_config_ids_and_descriptor_lengths() {
+    Fixture f;
+    const uint32_t slot = f.Slot(0);
+    f.memory.Store32(slot + slot_field::kFlags, slot_flag::kChanged);
+    f.memory.Store8(0x004E2BD8 + 2, 7);
+    f.memory.Store8(0x004E2BD8 + 3, 9);
+    f.memory.Store8(slot + 0x1C + 4, 7);
+    f.memory.Store8(slot + 0x1C + 5, 9);
+    f.memory.Store8(slot + 0x1C + 6, 2);
+    for (int i = 0; i < 4; ++i) f.memory.Store8(slot + 0x54 + i * 3, 1);
+    f.memory.Store8(slot + 0xA5 + 6, 0xAA);
+    Check(f.model.ConfigureAlignment(slot) == 0, "alignment without live device completes locally");
+    Check(f.memory.Load8(slot + 0xA4) == 1, "alignment uses config type to search mode descriptors");
+    Check(f.memory.Load8(slot + 0xA5 + 2) == 2, "descriptor length two advances output offset by two");
+    Check(f.memory.Load8(slot + 0xA5 + 6) == 0xAA, "overflow preserves previous offset");
+    Check(f.memory.Load8(slot + 0xA4 + 8) == 255, "unused actuator is marked unused");
+    f.memory.Store8(slot + 0x1C + 6, 0);
+    f.memory.Store32(slot + slot_field::kFlags, slot_flag::kChanged);
+    f.model.ConfigureAlignment(slot);
+    Check(f.memory.Load8(slot + 0xA5 + 2) == 1, "zero descriptor length consumes one output byte");
+}
+
+void apply_mode_preserves_requested_id_and_retries() {
+    Fixture f;
+    const uint32_t slot = f.Slot(0);
+    f.device.PortOpen(0, 0, 0);
+    f.memory.Store32(slot + slot_field::kFlags, slot_flag::kModePending);
+    f.memory.Store32(slot + slot_field::kActMode, 0x41);
+    f.memory.Store32(slot + slot_field::kActParam, 2);
+    Check(f.model.ApplyMode(slot) == 1, "explicit mode id is not xor-ed with parameter");
+    f.device.PortClose(0, 0);
+    f.memory.Store32(slot + slot_field::kFlags, slot_flag::kModePending);
+    Check(f.model.ApplyMode(slot) == -1, "failed mode command stays pending before retry limit");
+    Check(f.memory.Load32(slot + slot_field::kRetry) == 1, "failed command increments retry");
+    f.memory.Store32(slot + slot_field::kRetry, 6);
+    Check(f.model.ApplyMode(slot) == 0, "retry limit abandons ordinary request");
+    Check(f.memory.Load32(slot + slot_field::kRetry) == 0, "retry limit resets counter");
+    f.memory.Store32(slot + slot_field::kFlags, slot_flag::kModePending);
+    f.memory.Store32(slot + slot_field::kActParam, 3);
+    Check(f.model.ApplyMode(slot) == -1, "parameter three retains pending request");
+    Check(f.memory.Load32(slot + slot_field::kRetry) == 0, "parameter three does not increment counter");
+    f.memory.Store32(slot + slot_field::kRetry, 6);
+    Check(f.model.ApplyMode(slot) == -1, "parameter three stays pending at retry limit");
+    Check(f.memory.Load32(slot + slot_field::kRetry) == 0, "parameter three resets counter at limit");
+    f.device.PortOpen(0, 0, 0);
+    f.memory.Store32(slot + slot_field::kModeWord, 0x41);
+    f.memory.Store32(slot + slot_field::kActParam, 0);
+    f.memory.Store32(slot + slot_field::kFlags, slot_flag::kModePending);
+    Check(f.model.ApplyMode(slot) == 0, "parameter zero suppresses unchanged requested id");
+    f.memory.Store32(slot + slot_field::kActMode, 0x73);
+    f.memory.Store32(slot + slot_field::kFlags, slot_flag::kModePending);
+    Check(f.model.ApplyMode(slot) == 1, "parameter zero preserves differing requested id");
+    f.memory.Store32(slot + slot_field::kActMode, 0);
+    f.memory.Store32(slot + slot_field::kActParam, 2);
+    f.memory.Store32(slot + slot_field::kFlags, slot_flag::kModePending);
+    Check(f.model.ApplyMode(slot) == 1, "zero requested id uses current id with nonzero parameter");
+}
+
+void successful_alignment_clears_pending_and_waits_before_pressure() {
+    Fixture f;
+    f.InitTwoPads();
+    const uint32_t slot = f.Slot(0);
+    f.RunFrames(1);  // open
+    f.memory.Store32(slot + slot_field::kModel, 0x73);
+    f.memory.Store32(slot + slot_field::kPhase, 3);
+    f.memory.Store32(slot + slot_field::kFlags, slot_flag::kChanged | slot_flag::kActuatorsLive);
+    f.model.ProcessPhases(slot, 1);
+    Check((f.memory.Load32(slot + slot_field::kFlags) & slot_flag::kChanged) == 0,
+          "successful alignment clears the pending flag");
+    Check(f.memory.Load32(slot + slot_field::kPhase) == 4, "alignment advances to its completion phase");
+    f.model.ProcessPhases(slot, 1);
+    Check(f.memory.Load32(slot + slot_field::kPhase) == 5, "completed request advances to pressure phase");
+    f.model.ProcessPhases(slot, 1);
+    Check(f.memory.Load32(slot + slot_field::kPhase) == 7, "no pressure request skips its completion phase");
+}
+
+// Reconstruct the second observer mismatch without storing binary-derived snapshots.
+void second_snapshot_matches_all_512_bytes() {
+    Fixture f;
+    f.InitTwoPads();
+    const uint32_t slot = f.Slot(0);
+    f.model.OpenPort(slot);
+    // Isolate the three confirmed discrepancies; other setup effects already match.
+    f.memory.Store32(slot + slot_field::kFlags,
+                     slot_flag::kReportFailed | slot_flag::kChanged | slot_flag::kActuatorsLive);
+    f.memory.Store32(slot + slot_field::kModeWord, 0x41017973);
+    f.memory.Store32(slot + slot_field::kActMode, 0);
+    f.memory.Store32(slot + slot_field::kActParam, 0);
+    f.model.ReadActuatorInfo(slot);
+    f.model.ReadReport(slot);
+    std::array<uint8_t, 512> expected{}, previous{}, actual{};
+    f.memory.ReadBytes(slot, expected.data(), expected.size());
+    expected[0x37] = 115;
+    expected[0x88] = 3;
+    expected[0xBC] = 115;
+    previous = expected;
+    previous[0x37] = 65;
+    previous[0x88] = 1;
+    previous[0xBC] = 0;
+    const std::array<uint32_t, 3> offsets{0x37, 0x88, 0xBC};
+    std::size_t differences = 0;
+    for (uint32_t i = 0; i < expected.size(); ++i) {
+        if (previous[i] == expected[i]) continue;
+        Check(differences < offsets.size() && i == offsets[differences++],
+              "precisely the three observed second-snapshot offsets differ");
+    }
+    Check(differences == 3, "all three second-snapshot differences reproduced");
+    f.model.ProcessPhases(slot, 1);
+    f.memory.ReadBytes(slot, actual.data(), actual.size());
+    Check(actual == expected, "second snapshot agrees across all 512 bytes");
+}
+
+void phase_zero_runs_mode_and_read_result_controls_model() {
+    Fixture f;
+    f.InitTwoPads();
+    const uint32_t slot = f.Slot(0);
+    f.model.OpenPort(slot);
+    Check(f.model.ReadModeWord(slot) == 1, "first mode word query changes the slot");
+    Check(f.memory.Load32(slot + slot_field::kModeWord) == 0x73017973,
+          "chained offsets query current analog id, extended id, index, then analog table id");
+    Check(f.model.ReadModeWord(slot) == 0, "identical packed mode word reports unchanged");
+    f.model.ProcessPhases(slot, 1);
+    Check(f.memory.Load32(slot + slot_field::kPhase) == 2,
+          "phase zero initializes and executes a successful mode command in the same call");
+    f.memory.Store32(slot + slot_field::kPhase, 0);
+    f.memory.Store32(slot + slot_field::kModel, 0x71);
+    f.model.ProcessPhases(slot, 1);
+    Check(f.memory.Load32(slot + slot_field::kModel) == 0x73,
+          "successful read stores full model even when high nibble is unchanged");
+    Check(f.memory.Load32(slot + slot_field::kPhase) == 3,
+          "phase zero with unchanged mode skips directly through mode command");
+    f.backend.state.connected = false;
+    f.memory.Store32(slot + slot_field::kModel, 0x41);
+    f.memory.Store32(slot + slot_field::kPhase, 7);
+    f.model.ProcessPhases(slot, 1);
+    Check(f.memory.Load32(slot + slot_field::kModel) == 0x41,
+          "zero read result leaves model unchanged despite stale report");
+    Check(f.memory.Load32(slot + slot_field::kErrors) == 0,
+          "report processing receives zero read result");
+}
+
+// Observer n6 slot0: held Cross, recovery flag, centered sticks, 0x73 report.
+void report_recovery_matches_observed_edge_analog_and_pressure_bytes() {
+    Fixture f;
+    const uint32_t slot = f.Slot(0);
+    f.memory.Store32(slot + slot_field::kFlags, 0xB000C);
+    f.memory.Store32(slot + slot_field::kEnableMask, 0x90);
+    f.memory.Store32(slot + slot_field::kErrors, 7);
+    const std::array<uint8_t, 8> report{0, 0x73, 0xFF, 0xBF, 128, 128, 128, 128};
+    f.memory.WriteBytes(slot + slot_field::kReport, report.data(), report.size());
+    for (uint32_t i = 8; i < 32; ++i) f.memory.Store8(slot + slot_field::kReport + i, 255);
+    for (uint32_t i = 0; i < 4; ++i) {
+        const uint32_t config = slot + slot_field::kActData + i * 4;
+        f.memory.Store8(config, 1);
+        f.memory.Store8(config + 1, 37);
+        f.memory.Store8(config + 2, 120);
+        f.memory.Store8(config + 3, 128);
+    }
+    std::array<uint8_t, 512> expected{}, actual{};
+    f.memory.ReadBytes(slot, expected.data(), expected.size());
+    expected[0] = 64;
+    for (uint32_t i = 12; i < 16; ++i) expected[i] = 128;
+    expected[slot_field::kFlags + 2] = 0xA;
+    expected[slot_field::kModeId] = 7;
+    for (uint32_t i = 0; i < 4; ++i) expected[slot_field::kErrors + i] = 0;
+    Check(f.model.ProcessReport(slot, 8) == 1, "valid recovery report succeeds");
+    f.memory.ReadBytes(slot, actual.data(), actual.size());
+    Check(actual == expected, "all 512 bytes match original report recovery dataflow");
+    // Pin every byte of the actual first discrepancy, including untouched zero padding.
+    Check(actual[2] == 0, "recovery suppresses observed erroneous Cross pressed edge");
+    for (uint32_t i = 8; i < 12; ++i) Check(actual[i] == 0, "centered signed analog output is zero");
+    for (uint32_t i = 16; i < 28; ++i) Check(actual[i] == 0, "nonpressure report selects default data");
+    f.memory.Store16(slot, 0);
+    Check(f.model.ProcessReport(slot, 8) == 1 && f.memory.Load16(slot + 2) == 64,
+          "ordinary fresh press remains visible without recovery flag");
+    f.memory.Store8(slot + slot_field::kReport + 1, 0x79);
+    for (uint32_t i = 0; i < 12; ++i) f.memory.Store8(slot + slot_field::kReport + 8 + i, 10 + i);
+    Check(f.model.ProcessReport(slot, 20) == 1, "pressure report succeeds");
+    for (uint32_t i = 0; i < 12; ++i)
+        Check(f.memory.Load8(slot + slot_field::kData + i) == 10 + i, "pressure ID selects report payload");
+    f.memory.Store16(slot + slot_field::kRapid, 64);
+    f.memory.Store8(slot + slot_field::kRapid + 3, 0x23);
+    f.memory.Store16(slot, 0);
+    f.model.ProcessReport(slot, 20);
+    Check(f.memory.Load16(slot + 4) == 64 && f.memory.Load8(slot + slot_field::kRapid + 2) == 0x20,
+          "initial rapid edge and high nibble countdown follow original delay slot");
+    f.model.ProcessReport(slot, 20);
+    Check(f.memory.Load16(slot + 4) == 0 && f.memory.Load8(slot + slot_field::kRapid + 2) == 0x1F,
+          "held rapid countdown does not emit a release edge");
+}
 
 void pure_scaling_helpers_follow_the_decomp() {
     Check(ScaleValue(5, 0x100, 0, 0) == 0xFF, "zero range returns scale-1");
@@ -56,9 +288,12 @@ void pure_scaling_helpers_follow_the_decomp() {
     Check(ScaleValue(-5, 0x100, 0, 100) == 0, "below the range clamps to zero");
     Check(ScaleValue(50, 0x100, 0, 100) == 128, "midpoint");
     Check(ScaleByMode(0x1234, 0, 1, 2, 3) == 0x34, "mode 0 keeps the low byte");
-    Check(ScaleByMode(50, 2, 0, 0, 100) == ScaleClamp(50, 0, 100), "mode 2 clamps with b and c");
-    Check(ScaleWithThreshold(200, 5, 0x80) == ScaleClamp(200, 5, 0x100), "at or above the center uses the clamp");
-    Check(ScaleWithThreshold(10, 5, 20) == 0, "below the center and the low threshold gives zero");
+    Check(ScaleByMode(50, 2, 0, 100, 200) == ScaleClamp(50, 0, 100), "mode 2 clamps with a and b");
+    Check(ScaleWithThreshold(128, 37, 120, 128) == 0, "center is zero");
+    Check(ScaleWithThreshold(127, 37, 120, 128) == 0, "byte below center is zero");
+    Check(ScaleWithThreshold(200, 37, 120, 128) == 53, "positive signed scaling");
+    Check(ScaleWithThreshold(55, 37, 120, 128) == 203, "negative signed scaling wraps to byte");
+    Check(ScaleWithThreshold(255, 0, 255, 128) == 127, "high threshold clamps to distance limit minus one");
     Check(IsPressureModeId(0x79) && !IsPressureModeId(0x73), "only 0x79 is the pressure mode id");
     Check(!IsExtendedMode(4) && IsExtendedMode(7), "extended mode flag is value != 4");
 }
@@ -110,7 +345,7 @@ void update_walks_open_then_poll_and_reads_buttons() {
     Check(f.model.Buttons(0) == kKtCross, "Cross is held");
     f.backend.state.buttons = 0;
     f.RunFrames(1);
-    Check(f.model.Buttons(0) == 0 && f.model.ButtonsReleased(0) == kKtCross, "released edge");
+    Check(f.model.Buttons(0) == 0 && f.model.ButtonsReleased(0) == 0, "fourth StoreButtons argument is rapid output, not a release edge");
 }
 
 void pressed_edge_is_visible_on_the_frame_the_button_goes_down() {
@@ -142,7 +377,7 @@ void report_read_fills_the_tail_with_ff_and_stores_the_length() {
     f.device.PortOpen(0, 0, 0);
     Check(f.model.ReadReport(slot) == 8, "analog report is 8 bytes");
     Check(f.memory.Load32(slot + slot_field::kReadLength) == 8, "length stored at +0xC0");
-    Check(f.memory.Load8(slot + slot_field::kReport + 7) != 0xFF || true, "report bytes inside the length are real");
+    Check(f.memory.Load8(slot + slot_field::kReport + 7) == 128, "report bytes inside the length are real");
     Check(f.memory.Load8(slot + slot_field::kReport + 8) == 0xFF && f.memory.Load8(slot + slot_field::kReport + 31) == 0xFF,
           "bytes 8 to 31 are filled with 0xFF");
 }
@@ -177,6 +412,58 @@ void engine_api_validates_pad_numbers_like_the_decomp() {
     Check(f.memory.assertions.back().line == 0x52C, "clear actuator assertion");
 }
 
+// First fresh observer snapshots differ before any device sample. Model the two
+// destination layouts explicitly; do not exclude any of the 512 slot bytes.
+void first_snapshot_alignment_writes_config_types_only() {
+    Fixture f;
+    f.InitTwoPads();
+    const uint32_t slot = f.Slot(0);
+    constexpr uint32_t table = 0x00C00000;
+    const std::array<uint8_t, 6> types{1, 2, 0, 0, 0, 0};
+    std::array<uint8_t, 512> expected{}, prior_native{}, actual{};
+    f.memory.ReadBytes(slot, expected.data(), expected.size());
+    prior_native = expected;
+    for (uint32_t i = 0; i < types.size(); ++i) {
+        f.memory.Store8(table + i, types[i]);
+        expected[0x54 + i * 3] = types[i];
+        prior_native[0xA4 + i * 2] = types[i];
+    }
+    // SetActuatorAlign also marks the slot changed in both implementations.
+    expected[0xB0] |= 0x10;
+    prior_native[0xB0] |= 0x10;
+    const std::array<uint32_t, 4> offsets{0x54, 0x57, 0xA4, 0xA6};
+    const std::array<uint8_t, 4> original_values{1, 2, 0, 0};
+    const std::array<uint8_t, 4> native_values{0, 0, 1, 2};
+    std::size_t difference = 0;
+    for (uint32_t i = 0; i < expected.size(); ++i) {
+        if (expected[i] == prior_native[i]) continue;
+        Check(difference < offsets.size(), "no extra first-snapshot differences");
+        Check(i == offsets[difference] && expected[i] == original_values[difference]
+                  && prior_native[i] == native_values[difference],
+              "exact original/native first-snapshot byte difference");
+        ++difference;
+    }
+    Check(difference == offsets.size(), "all four observed differences reproduced");
+    f.model.SetActuatorAlign(0, table);
+    f.memory.ReadBytes(slot, actual.data(), actual.size());
+    Check(actual == expected, "alignment matches original across the entire slot before StepSlot");
+    Check(f.backend.rumble_calls.empty(), "configuration has not driven an actuator");
+
+    // Exercise every triple, preserve both value bytes and the derived alignment.
+    for (uint32_t i = 0; i < types.size(); ++i) {
+        f.memory.Store8(table + i, static_cast<uint8_t>(i + 1));
+        expected[0x54 + i * 3] = static_cast<uint8_t>(i + 1);
+        f.model.SetActuator(0, i, 0x30 + i, 0x20 + i);
+        expected[0x55 + i * 3] = static_cast<uint8_t>(0x20 + i);
+        expected[0x56 + i * 3] = static_cast<uint8_t>(0x30 + i);
+    }
+    f.model.SetActuatorAlign(0, table);
+    f.model.ClearActuator(0, -1);
+    for (uint32_t i = 0; i < types.size(); ++i) expected[0x55 + i * 3] = 0;
+    f.memory.ReadBytes(slot, actual.data(), actual.size());
+    Check(actual == expected, "setter/clear preserve type bytes and derived alignment for all six triples");
+}
+
 void actuator_values_reach_the_host_backend_once() {
     Fixture f;
     f.InitTwoPads();
@@ -185,9 +472,13 @@ void actuator_values_reach_the_host_backend_once() {
     // The library only receives actuator output while the slot is live (flag 0x20000), set by the mode phase.
     f.memory.Store32(slot + slot_field::kFlags, f.memory.Load32(slot + slot_field::kFlags) | slot_flag::kActuatorsLive);
     f.model.EnableRumble(0);
-    const uint8_t align[6] = {0, 1, 0xFF, 0xFF, 0xFF, 0xFF};
+    const uint8_t align[6] = {1, 2, 0, 0, 0, 0};
     for (uint32_t i = 0; i < 6; ++i) f.memory.Store8(0x00C00000 + i, align[i]);
     f.model.SetActuatorAlign(0, 0x00C00000);
+    // This output-only fixture supplies the derived descriptor indices explicitly;
+    // SetActuatorAlign sets type IDs, not this derived table.
+    for (uint32_t i = 0; i < 6; ++i)
+        f.memory.Store8(slot + slot_field::kActAlign + i * 2, i < 2 ? i : 0xFF);
     // Descriptor bytes: actuator 0 is on/off (descriptor[2] == 0), actuator 1 is graded.
     f.memory.Store8(slot + slot_field::kModeInfo + 0 * 4 + 2, 0);
     f.memory.Store8(slot + slot_field::kModeInfo + 1 * 4 + 2, 1);
@@ -277,8 +568,22 @@ void port_table_reset_sets_the_unused_marker() {
 
 }  // namespace
 
-int main() {
+int main(int argc, char** argv) {
+    if (argc > 1) {
+        const std::string test = argv[1];
+        if (test == "search") descriptor_search_scans_all_six_entries();
+        if (test == "alignment") alignment_uses_config_ids_and_descriptor_lengths();
+        if (test == "mode") apply_mode_preserves_requested_id_and_retries();
+        return 0;
+    }
+    descriptor_search_scans_all_six_entries();
+    alignment_uses_config_ids_and_descriptor_lengths();
+    apply_mode_preserves_requested_id_and_retries();
     (void)kAnalogDefault;
+    successful_alignment_clears_pending_and_waits_before_pressure();
+    second_snapshot_matches_all_512_bytes();
+    phase_zero_runs_mode_and_read_result_controls_model();
+    report_recovery_matches_observed_edge_analog_and_pressure_bytes();
     pure_scaling_helpers_follow_the_decomp();
     port_enumeration_matches_the_decomp();
     init_prepares_slots_and_requests_the_primary_ports();
@@ -289,6 +594,7 @@ int main() {
     report_read_fills_the_tail_with_ff_and_stores_the_length();
     rapid_entry_uses_the_binary_packing();
     engine_api_validates_pad_numbers_like_the_decomp();
+    first_snapshot_alignment_writes_config_types_only();
     actuator_values_reach_the_host_backend_once();
     clear_actuator_zeroes_the_first_byte_of_each_triple();
     state_dispatch_follows_the_binary_table();

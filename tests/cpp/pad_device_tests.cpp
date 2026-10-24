@@ -10,6 +10,26 @@ void Check(bool condition, const char* message) {
     if (!condition) { std::cerr << message << '\n'; std::exit(1); }
 }
 
+void connectivity_queries_sample_without_configuration_sampling() {
+    struct Backend final : aoe2::pad::PadBackend {
+        int samples = 0;
+        aoe2::pad::HostPadState Sample(int) override { ++samples; return {true}; }
+        void Rumble(int, uint8_t, uint8_t) override {}
+    } backend;
+    aoe2::pad::PadDevice device(backend);
+    const uint8_t bytes[6] = {};
+    std::array<uint8_t, 32> report{};
+    Check(device.PortOpen(0, 0, 0) == 1 && backend.samples == 0, "open does not sample");
+    Check(device.State(0, 0) == 6 && backend.samples == 1, "state samples connection once");
+    Check(device.Read(0, 0, report) > 0 && backend.samples == 2, "read samples report once");
+    Check(device.SetActAlign(0, 0, bytes) == 1 && device.InfoPressMode(0, 0) == 1 &&
+          backend.samples == 2, "alignment and pressure queries do not sample");
+    Check(device.SetActDirect(0, 0, bytes) == 1 && backend.samples == 3,
+          "stop actuators samples connection even with zero motor values");
+    Check(device.SetActDirect(0, 0, bytes) == 1 && backend.samples == 4,
+          "unchanged actuator values still check connection");
+}
+
 void device_reports_open_connected_port_as_stable() {
     using namespace aoe2::pad;
     FakePadBackend backend;
@@ -18,13 +38,16 @@ void device_reports_open_connected_port_as_stable() {
     Check(device.SlotMax(0) == 1 && device.SlotMax(1) == 1 && device.SlotMax(2) == 0, "slot max");
     Check(device.PortMax() == 2, "port max");
     Check(device.PortOpen(0, 0, 0) == 1, "open valid port");
-    Check(device.State(0, 0) == 1 && device.State(0, 0) == 1, "a fresh port is first found as a pad");
-    for (int poll = 0; poll < 8; ++poll) Check(device.State(0, 0) == 2, "then the controller type is checked");
-    Check(device.State(0, 0) == 6 && device.State(0, 0) == 6, "opened connected port becomes stable");
+    Check(device.State(0, 0) == 6 && device.State(0, 0) == 6, "opened connected port is immediately stable");
+    const uint8_t align[6] = {0, 1, 0xFF, 0xFF, 0xFF, 0xFF};
+    Check(device.SetMainMode(0, 0, 1, 0) == 1 && device.ReqState(0, 0) == 0 && device.State(0, 0) == 6,
+          "main-mode command completes immediately");
+    Check(device.SetActAlign(0, 0, align) == 1 && device.ReqState(0, 0) == 0 && device.State(0, 0) == 6,
+          "alignment command completes immediately");
     backend.state.connected = false;
     Check(device.State(0, 0) == 0, "an unplugged pad reads as disconnected");
     backend.state.connected = true;
-    Check(device.State(0, 0) == 1, "plugging it back restarts the sequence");
+    Check(device.State(0, 0) == 6, "reconnected open port is immediately stable");
     Check(device.PortClose(0, 0) == 1, "close port");
     Check(device.State(0, 0) == 0, "closed port is disconnected from libpad state");
 }
@@ -112,7 +135,22 @@ void disconnect_clears_the_caller_buffer_and_align_validates_the_port() {
     Check(report == std::array<uint8_t, 32>{}, "disconnected read leaves no stale bytes");
 }
 
+void repeated_port_open_stops_active_rumble() {
+    aoe2::pad::FakePadBackend backend;
+    aoe2::pad::PadDevice device(backend);
+    const uint8_t active[6] = {1, 200};
+    Check(device.PortOpen(0, 0, 0) == 1, "initial open");
+    Check(device.SetActDirect(0, 0, active) == 1, "start rumble");
+    Check(device.PortOpen(0, 0, 0) == 1, "repeated open");
+    Check(backend.rumble_calls.size() == 2 && backend.rumble_calls.back().port == 0 &&
+          backend.rumble_calls.back().small_motor == 0 && backend.rumble_calls.back().large_motor == 0,
+          "repeated open stops both active motors");
+    Check(device.PortClose(0, 0) == 1 && backend.rumble_calls.size() == 2, "close needs no second stop");
+}
+
 int main() {
+    connectivity_queries_sample_without_configuration_sampling();
+    repeated_port_open_stops_active_rumble();
     set_main_mode_takes_a_mode_table_index_or_an_id();
     disconnect_clears_the_caller_buffer_and_align_validates_the_port();
     device_reports_open_connected_port_as_stable();

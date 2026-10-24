@@ -9,6 +9,7 @@
 #include <aoe2/pad/host_button_map.hpp>
 
 #include <raylib.h>
+#include "pad_snapshot.hpp"
 
 #include <array>
 #include <chrono>
@@ -81,10 +82,12 @@ private:
 
 class SyntheticPadBackend final : public aoe2::pad::PadBackend {
 public:
-    // Deterministic: Cross toggles every 100 samples of port 0 (not by time), so two runs see the same input.
+    // Snapshot comparisons use the outer slot step, so extra connectivity queries cannot advance input.
+    // Without the observer, retain the standalone diagnostic backend's sample-count sequence.
     HostPadState Sample(int port) override {
+        if (port >= 0 && port < 2) ++diagnostics::input_samples[port];
         if (port != 0) return {};
-        const bool cross_down = (samples_++ / 100) % 2 == 0;
+        const bool cross_down = diagnostics::SyntheticCrossDown(samples_++);
         return {true, static_cast<uint16_t>(cross_down ? static_cast<uint16_t>(aoe2::pad::PadButton::kCross) : 0u),
                 0.0f, 0.0f, 0.0f, 0.0f};
     }

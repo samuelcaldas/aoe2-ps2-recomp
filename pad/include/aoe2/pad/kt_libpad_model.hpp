@@ -28,7 +28,8 @@ inline constexpr uint32_t kModeInfo = 0x1C;      // 6 actuators x 4 descriptor b
 inline constexpr uint32_t kModeWord = 0x34;
 inline constexpr uint32_t kRapid = 0x38;         // 3 channels x 4 bytes
 inline constexpr uint32_t kActData = 0x44;       // 4 channels x 4 bytes
-inline constexpr uint32_t kActConfig = 0x55;     // 6 actuators x 3 bytes
+inline constexpr uint32_t kActConfigTypes = 0x54; // type byte of each actuator triple
+inline constexpr uint32_t kActConfig = 0x55;     // first value byte of each actuator triple
 inline constexpr uint32_t kEnableMask = 0x68;
 inline constexpr uint32_t kPort = 0x6C;
 inline constexpr uint32_t kSlot = 0x70;
@@ -68,6 +69,7 @@ inline constexpr uint32_t kNoPressure = 0x80000;
 }  // namespace slot_flag
 
 struct KtLibpadGlobals {
+    uint32_t actuator_types = 0x004E2BD8;  // GP-relative table, 2 bytes per actuator type
     uint32_t work = 0x004EA148;            // PadWork: slots, n_pad, sema, flags
     uint32_t port_table = 0x004EA158;      // 4 words, -1 when unused
     uint32_t step_table = 0x0038C7B8;      // 3 guest function addresses
@@ -82,7 +84,7 @@ inline constexpr uint32_t kClosePortAddress = 0x00127750;
 // Pure helpers (func_00127D88 and friends).
 int ScaleValue(int value, int scale, int min_value, int max_value);
 int ScaleClamp(int value, int min_value, int max_value);
-int ScaleWithThreshold(int value, int low, int center);
+int ScaleWithThreshold(int value, int low, int high, int center);
 int ScaleByMode(int value, int mode, int a, int b, int c);
 bool IsPressureModeId(int id);
 bool IsExtendedMode(int value);
@@ -201,8 +203,6 @@ private:
     PadGuestMemory& memory_;
     PadDevice& device_;
     KtLibpadGlobals globals_;
-    uint8_t act_match_0_ = 0;   // s_act_0
-    uint8_t act_match_1_ = 0;   // s_act_1
     uint16_t vibration_0_ = 0;  // s_vibe_0
     uint16_t vibration_1_ = 0;  // s_vibe_1
 };

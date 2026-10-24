@@ -20,16 +20,19 @@ int ScaleClamp(int value, int min_value, int max_value) {
 }
 
 // func_00127DC8
-int ScaleWithThreshold(int value, int low, int center) {
+int ScaleWithThreshold(int value, int low, int high, int center) {
     const int threshold = center < 0x80 ? center : 0x100 - center;
-    if (value < center && low < threshold) return 0;
-    return ScaleClamp(value, low, 0x100);
+    if (high >= threshold) high = threshold - 1;
+    const bool below = value < center;
+    const int distance = below ? center - (value + 1) : value - center;
+    const int scaled = ScaleValue(distance, 0x80, low, high);
+    return (below ? -scaled : scaled) & 0xFF;
 }
 
 // func_00127D30
 int ScaleByMode(int value, int mode, int a, int b, int c) {
-    if (mode == 1) return ScaleWithThreshold(value, a, b);
-    if (mode == 2) return ScaleClamp(value, b, c);
+    if (mode == 1) return ScaleWithThreshold(value, a, b, c);
+    if (mode == 2) return ScaleClamp(value, a, b);
     return value & 0xFF;
 }
 

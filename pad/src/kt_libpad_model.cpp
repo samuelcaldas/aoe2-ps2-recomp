@@ -332,7 +332,7 @@ void KtLibpadModel::SetActuatorAlign(int pad, uint32_t table) {
     if (!ValidPad(pad, 0x3AD)) return;
     const uint32_t slot = SlotAddress(pad);
     for (uint32_t i = 0; i < kMaxActuators; ++i)
-        memory_.Store8(slot + slot_field::kActAlign + i * 2, memory_.Load8(table + i));
+        memory_.Store8(slot + slot_field::kActConfigTypes + i * 3, memory_.Load8(table + i));
     MarkPadChanged(pad);
 }
 

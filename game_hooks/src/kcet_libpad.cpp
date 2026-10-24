@@ -9,6 +9,7 @@
 #include <aoe2/pad/kt_libpad_model.hpp>
 
 #include "game_overrides.h"
+#include "pad_snapshot.hpp"
 #include "ps2_runtime.h"
 #include "runtime/ps2_memory.h"
 
@@ -40,28 +41,44 @@ public:
     void Store16(uint32_t address, uint16_t value) override { Store(address, value); }
     void Store32(uint32_t address, uint32_t value) override { Store(address, value); }
     void ReadBytes(uint32_t address, uint8_t* out, std::size_t count) override {
-        for (std::size_t i = 0; i < count; ++i) out[i] = Load8(address + static_cast<uint32_t>(i));
+        const uint8_t* source = Resolve(address, count);
+        if (!source) {
+            Bad(address);
+            if (count) std::memset(out, 0, count);
+            return;
+        }
+        if (count) std::memcpy(out, source, count);
     }
     void WriteBytes(uint32_t address, const uint8_t* in, std::size_t count) override {
-        for (std::size_t i = 0; i < count; ++i) Store8(address + static_cast<uint32_t>(i), in[i]);
+        uint8_t* destination = Resolve(address, count);
+        if (!destination) return Bad(address);
+        if (count) std::memcpy(destination, in, count);
     }
+
     void ReportAssertion(std::string_view file, int line, std::string_view expression) override {
         std::cerr << "[native-libpad] ASSERT " << file << ':' << line << " (0x" << std::hex << line << std::dec << ") "
                   << expression << std::endl;
     }
 
 private:
+    uint8_t* Resolve(uint32_t address, std::size_t count) {
+        uint32_t offset = 0;
+        bool scratch = false;
+        if (!rdram_ || !resolveEeGuestRange(address, count, offset, scratch)) return nullptr;
+        uint8_t* base = scratch ? ps2GetScratchpadHostPtr() : rdram_;
+        return base ? base + offset : nullptr;
+    }
     template <typename T>
     T Load(uint32_t address) {
         T value{};
-        const uint8_t* source = getMemPtr(rdram_, address);
+        const uint8_t* source = Resolve(address, sizeof(T));
         if (source == nullptr) return Bad(address), value;
         std::memcpy(&value, source, sizeof(T));
         return value;
     }
     template <typename T>
     void Store(uint32_t address, T value) {
-        uint8_t* destination = getMemPtr(rdram_, address);
+        uint8_t* destination = Resolve(address, sizeof(T));
         if (destination == nullptr) return Bad(address);
         std::memcpy(destination, &value, sizeof(T));
     }
@@ -103,7 +120,10 @@ void Run(std::size_t slot, const char* name, uint8_t* rdram, R5900Context* ctx, 
                   << std::dec << std::endl;
     g_libpad->memory.Bind(rdram);
     const uint32_t return_address = getRegU32(ctx, kRegRa);
+    const uint32_t slot_address = getRegU32(ctx, kRegA0);
+    if (slot == kSlot_StepSlot) aoe2::game_hooks::diagnostics::BeginPadStep(rdram, slot_address);
     const uint32_t result = body(g_libpad->model, ctx);
+    if (slot == kSlot_StepSlot) aoe2::game_hooks::diagnostics::LogPadStep(rdram, slot_address);
     if (returns_value) setReturnU32(ctx, result);
     ctx->pc = return_address;
 }
@@ -172,6 +192,7 @@ void install_native_libpad(PS2Runtime& runtime) {
         if (!runtime.replaceFunction(entry.address, entry.handler))
             throw std::runtime_error(std::string("Native kt_libpad: cannot replace ") + entry.name);
     }
+    aoe2::game_hooks::diagnostics::native_libpad_installed = true;
     std::cout << "[aoe2] native kt_libpad: " << kEntries.size() << " functions replaced\n";
 }
 

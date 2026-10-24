@@ -423,5 +423,24 @@ correct disconnected behaviour.
 by the game in the window (no actuator output requested), so it is verified by unit tests only.
 
 **Decomp finding:** the decomp of the pad module disagrees with the binary in the state dispatcher, the step
-function and two library calls (details in `docs/sot/pad-libpad-semantics.md`); the port of the module itself
-is on hold until the decomp is fixed.
+function and two library calls (details in `docs/sot/pad-libpad-semantics.md`); the implementation hold recorded at that point is superseded by the bounded native result below.
+
+
+### Native kt_libpad, bounded observer comparison (2026-10-24)
+
+Current coverage is 97 native replacements and eight deferred entries; `pad` stays
+off by default. Independent comparison of the supplied original-fresh and
+native-report-fixed 30-second captures finds 34 snapshots each, zero skips, identical
+keys and 34/34 equal complete 512-byte states. Native port-0 sample-call counts
+are one higher from logical step 3 onward; port-1 counts agree. Successful alignment's
+native stop-actuator connection check demonstrably samples; this is consistent
+with the offset, without a new per-call trace proving exclusive attribution.
+
+Synthetic input follows logical steps under the observer; recorded steps end at
+64, before the first Cross toggle at step 101. This covers Cross held and neutral
+sticks, not release cycles or real hardware/rumble. Other functions have not been
+exhaustively differential-tested. The supplied validator assessment remains
+`stalled_in_loop`, with no changed frames: no playability or whole-module equivalence
+claim. Host build succeeds; all 14 CTests pass; Python runs 302 tests with two skips.
+No game build/run was performed in this validation. Evidence and remaining gaps:
+`docs/sot/pad-libpad-semantics.md`.

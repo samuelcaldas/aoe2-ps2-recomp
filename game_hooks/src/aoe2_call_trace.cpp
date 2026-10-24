@@ -6,6 +6,7 @@
 // with what first argument, and from where" before any of them is replaced.
 // A missing list is not an error: nothing is wrapped.
 #include "game_overrides.h"
+#include "pad_snapshot.hpp"
 #include "ps2_runtime.h"
 
 #include <array>
@@ -44,7 +45,12 @@ void traced_call(uint8_t* rdram, R5900Context* ctx, PS2Runtime* runtime)
                   << " a0=0x" << std::hex << getRegU32(ctx, 4) << " a1=0x" << getRegU32(ctx, 5)
                   << " ra=0x" << getRegU32(ctx, 31) << std::dec << std::endl;
     }
+    const uint32_t slot_address = getRegU32(ctx, 4);
+    if (slot.address == 0x001273D8 && !aoe2::game_hooks::diagnostics::native_libpad_installed)
+        aoe2::game_hooks::diagnostics::BeginPadStep(rdram, slot_address);
     slot.original(rdram, ctx, runtime);
+    if (slot.address == 0x001273D8 && !aoe2::game_hooks::diagnostics::native_libpad_installed)
+        aoe2::game_hooks::diagnostics::LogPadStep(rdram, slot_address);
     if (should_log(call_number)) {
         std::cerr << "[call-trace] ret addr=0x" << std::hex << slot.address << " v0=0x"
                   << getRegU32(ctx, 2) << std::dec << std::endl;

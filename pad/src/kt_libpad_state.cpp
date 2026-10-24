@@ -143,13 +143,16 @@ void KtLibpadModel::ReadActuatorInfo(uint32_t slot) {
                            static_cast<uint8_t>(device_.InfoAct(port, unit, i, term)));
 }
 
-// func_00127900: current mode ids; reports whether the word changed
+// func_00127900: each returned byte becomes the next query offset; reports whether the word changed
 int KtLibpadModel::ReadModeWord(uint32_t slot) {
     const int port = static_cast<int>(Field32(slot, slot_field::kPort));
     const int unit = static_cast<int>(Field32(slot, slot_field::kSlot));
     uint32_t word = 0;
-    for (int i = 0; i < 4; ++i)
-        word |= static_cast<uint32_t>(static_cast<uint8_t>(device_.InfoMode(port, unit, i + 1, 0))) << (8 * i);
+    uint8_t offset = 0;
+    for (int i = 0; i < 4; ++i) {
+        offset = static_cast<uint8_t>(device_.InfoMode(port, unit, i + 1, offset));
+        word |= static_cast<uint32_t>(offset) << (8 * i);
+    }
     if (Field32(slot, slot_field::kModeWord) == word) return 0;
     SetField32(slot, slot_field::kModeWord, word);
     return 1;
@@ -220,6 +223,9 @@ int KtLibpadModel::ProcessReport(uint32_t slot, int flag) {
     if (!((Field32(slot, slot_field::kEnableMask) >> (mode_byte >> kPressureModeShift)) & 1)) return 0;
 
     const uint16_t held = static_cast<uint16_t>(~((memory_.Load8(report + 2) << 8) | memory_.Load8(report + 3)));
+    const uint16_t previous = memory_.Load16(slot + slot_field::kButtons);
+    uint16_t pressed = held & ~previous;
+    uint16_t rapid = 0;
     if (held != 0) {
         for (uint32_t i = 0; i < kRapidChannels; ++i) {
             const uint32_t entry = slot + slot_field::kRapid + i * kRapidStride;
@@ -227,9 +233,15 @@ int KtLibpadModel::ProcessReport(uint32_t slot, int flag) {
             const uint8_t mode = memory_.Load8(entry + 2);
             const uint8_t speed = memory_.Load8(entry + 3);
             if (!(mask & held)) continue;
-            if ((speed & 0xF0) == 0) memory_.Store8(entry + 2, speed & 0xF);
-            else if (mode != 0) memory_.Store8(entry + 2, static_cast<uint8_t>(mode - 1));
-            else memory_.Store8(entry + 2, speed & 0xF);
+            if (mask & pressed) {
+                rapid |= mask & pressed;
+                memory_.Store8(entry + 2, (speed & 0xF0) == 0 ? speed & 0xF : speed & 0xF0);
+            } else if (mode != 0) {
+                memory_.Store8(entry + 2, static_cast<uint8_t>(mode - 1));
+            } else {
+                rapid |= mask & held;
+                memory_.Store8(entry + 2, speed & 0xF);
+            }
         }
     }
 
@@ -240,20 +252,20 @@ int KtLibpadModel::ProcessReport(uint32_t slot, int flag) {
         for (uint32_t i = 0; i < 4; ++i) {
             const uint32_t channel = slot + slot_field::kActData + i * 4;
             const int value = memory_.Load8(report + 7 - i);
-            const int scaled = ScaleByMode(value, memory_.Load8(channel + 2), memory_.Load8(channel),
-                                           memory_.Load8(channel + 1), memory_.Load8(channel + 3));
+            const int scaled = ScaleByMode(value, memory_.Load8(channel), memory_.Load8(channel + 1),
+                                           memory_.Load8(channel + 2), memory_.Load8(channel + 3));
             sticks_raw = (sticks_raw << 8) | static_cast<uint32_t>(value);
             sticks_scaled = (sticks_scaled << 8) | static_cast<uint32_t>(scaled & 0xFF);
         }
     }
-    if (IsPressureModeId(static_cast<int>(mode_byte))) source = globals_.analog_default;
+    if (!IsPressureModeId(static_cast<int>(mode_byte))) source = globals_.analog_default;
 
     if (ReportFailed(slot) != 0) {
+        pressed = 0;  // original recovery path clears the edge before StoreButtons
         ClearReportFailed(slot);
         SetField32(slot, slot_field::kErrors, 0);
     }
-    const uint16_t previous = memory_.Load16(slot + slot_field::kButtons);
-    StoreButtons(slot, held, held & ~previous, previous & ~held);
+    StoreButtons(slot, held, pressed, rapid);
     StoreSlotData(slot, source, 12);
     SetField32(slot, slot_field::kModeId, mode_byte >> kPressureModeShift);
     SetField32(slot, slot_field::kAnalogLow, sticks_raw);
@@ -264,7 +276,13 @@ int KtLibpadModel::ProcessReport(uint32_t slot, int flag) {
 // func_00128130
 int KtLibpadModel::FindAlignment(uint32_t entry, int index) {
     if (index == 0) return 0xFF;
-    if (memory_.Load8(entry) == act_match_0_ && memory_.Load8(entry + 1) == act_match_1_) return 0;
+    const uint32_t type = globals_.actuator_types + static_cast<uint32_t>(index) * 2;
+    const uint8_t first = memory_.Load8(type);
+    const uint8_t second = memory_.Load8(type + 1);
+    for (uint32_t i = 0; i < kActuatorCount; ++i) {
+        if (memory_.Load8(entry + i * 4) == first && memory_.Load8(entry + i * 4 + 1) == second)
+            return static_cast<int>(i);
+    }
     return 0xFF;
 }
 
@@ -280,15 +298,17 @@ int KtLibpadModel::ConfigureAlignment(uint32_t slot) {
     for (uint8_t& value : found) value = static_cast<uint8_t>(kUnusedAlign);
     uint32_t used = 0;
     for (uint32_t i = 0; i < kActuatorCount; ++i) {
-        memory_.Store8(slot + slot_field::kActConfig + i * 3 + 1, 0);
+        memory_.Store8(slot + slot_field::kActConfigTypes + i * 3 + 1, 0);
         const uint32_t align = slot + slot_field::kActAlign + i * 2;
-        found[i] = static_cast<uint8_t>(FindAlignment(align, memory_.Load8(slot + slot_field::kModeInfo + i * 4)));
-        if (found[i] == kUnusedAlign) continue;
-        const uint32_t descriptor = memory_.Load8(slot + slot_field::kModeInfo + found[i] * 4u + 2);
-        const uint32_t step = descriptor ? 1 : descriptor;
-        memory_.Store8(align, found[i]);
+        const uint8_t match = static_cast<uint8_t>(FindAlignment(
+            slot + slot_field::kModeInfo, memory_.Load8(slot + slot_field::kActConfigTypes + i * 3)));
+        memory_.Store8(align, match);
+        if (match == kUnusedAlign) continue;
+        const uint32_t descriptor = memory_.Load8(slot + slot_field::kModeInfo + match * 4u + 2);
+        const uint32_t step = descriptor == 0 ? 1 : descriptor;
         if (used + step < 7) {
             memory_.Store8(align + 1, static_cast<uint8_t>(used));
+            found[used] = match;
             used += step;
         }
     }
@@ -299,6 +319,7 @@ int KtLibpadModel::ConfigureAlignment(uint32_t slot) {
         result = device_.SetActAlign(port, unit, found);
         if (result == 1) {
             StopActuators(port, unit);
+        } else {
             result = -1;
         }
     }
@@ -354,9 +375,11 @@ int KtLibpadModel::ApplyMode(uint32_t slot) {
     int param = static_cast<int>(Field32(slot, slot_field::kActParam));
     if (ModePending(slot) == 0) return 0;
     const int word = static_cast<int>(Field32(slot, slot_field::kModeWord)) & 0xFF;
-    if (param == 0) param = word;
-    if (mode == 0) mode = word;
-    mode ^= param;
+    if (param == 0) {
+        if (mode == word) mode = 0;
+    } else if (mode == 0) {
+        mode = word;
+    }
     if (mode <= 0) {
         SetField32(slot, slot_field::kFlags, Field32(slot, slot_field::kFlags) ^ slot_flag::kModePending);
         return 0;
@@ -369,11 +392,11 @@ int KtLibpadModel::ApplyMode(uint32_t slot) {
         if (device_.SetMainMode(port, unit, index, param) == 1) {
             result = 1;
         } else if (static_cast<int>(Field32(slot, slot_field::kRetry)) < kRetryLimit) {
-            SetField32(slot, slot_field::kRetry, Field32(slot, slot_field::kRetry) + 1);
-            result = param != 3 ? 0 : -1;
+            if (param != 3) SetField32(slot, slot_field::kRetry, Field32(slot, slot_field::kRetry) + 1);
+            result = -1;
         } else {
             SetField32(slot, slot_field::kRetry, 0);
-            result = param != 3 ? -1 : 0;
+            result = 0;
         }
     }
     if (param == 3 && result == 0) result = -1;
@@ -389,12 +412,12 @@ int KtLibpadModel::PressPending(uint32_t slot) { return (Field32(slot, slot_fiel
 
 int KtLibpadModel::PressModeA(uint32_t slot) {
     const int mode = static_cast<int>(Field32(slot, slot_field::kPressMode));
-    return mode == 1 ? 1 : 2;
+    return mode == 1 || mode == 2 ? 1 : 0;
 }
 
 int KtLibpadModel::PressModeB(uint32_t slot) {
     const int mode = static_cast<int>(Field32(slot, slot_field::kPressMode));
-    return mode == 1 || mode < 2 ? 1 : 2;
+    return mode == 2 ? 1 : 0;
 }
 
 void KtLibpadModel::ClearPressPending(uint32_t slot) {
@@ -406,7 +429,8 @@ int KtLibpadModel::ApplyPressMode(uint32_t slot) {
     const uint32_t flags = Field32(slot, slot_field::kFlags);
     const bool supported = device_.InfoPressMode(static_cast<int>(Field32(slot, slot_field::kPort)),
                                                  static_cast<int>(Field32(slot, slot_field::kSlot))) == 1;
-    SetField32(slot, slot_field::kFlags, supported ? flags & ~slot_flag::kNoPressure : flags | slot_flag::kNoPressure);
+    // Original movz clears this bit only when the query result is not 1 (legacy name is misleading).
+    SetField32(slot, slot_field::kFlags, supported ? flags | slot_flag::kNoPressure : flags & ~slot_flag::kNoPressure);
     if (PressPending(slot) == 0) return 0;
     const int is_pressure = IsPressureModeId(static_cast<int>(Field32(slot, slot_field::kModel))) ? 1 : 0;
     if (PressModeA(slot) == is_pressure) PressModeB(slot);
@@ -414,15 +438,16 @@ int KtLibpadModel::ApplyPressMode(uint32_t slot) {
     return 0;
 }
 
-// func_001279C8: phase machine. Phase 0 reads the mode word and descriptors; 1 applies a requested mode; 2 sets
-// the actuator alignment; 3 applies the pressure mode; 4 and above process the report.
+// func_001279C8: setup falls through to mode in the same call; later phases wait/configure/report.
 void KtLibpadModel::ProcessPhases(uint32_t slot, int flag) {
     int phase = static_cast<int>(Field32(slot, slot_field::kPhase));
     int event = 0;
-    if (ReadReport(slot) == 0) {
+    const int read_length = ReadReport(slot);
+    if (read_length != 0) {
         const uint8_t reported = memory_.Load8(slot + slot_field::kReport + 1);
-        if ((reported & 0xF0) != (Field32(slot, slot_field::kModel) & 0xF0)) {
-            SetField32(slot, slot_field::kModel, reported);
+        const bool changed = (reported & 0xF0) != (Field32(slot, slot_field::kModel) & 0xF0);
+        SetField32(slot, slot_field::kModel, reported);
+        if (changed) {
             phase = 0;
             event = 1;
         }
@@ -440,17 +465,22 @@ void KtLibpadModel::ProcessPhases(uint32_t slot, int flag) {
                 SetField32(slot, flags, flag ? Field32(slot, flags) | slot_flag::kActuatorsLive : Field32(slot, flags) & ~slot_flag::kActuatorsLive);
             }
             ++phase;
-            break;
+            [[fallthrough]];
         case 1:
-        case 2:
-        case 3: {
-            int result = phase == 1 ? ApplyMode(slot) : phase == 2 ? ConfigureAlignment(slot) : ApplyPressMode(slot);
+        case 3:
+        case 5: {
+            int result = phase == 1 ? ApplyMode(slot) : phase == 3 ? ConfigureAlignment(slot) : ApplyPressMode(slot);
             result = result == 0 ? 2 : (result == 1 ? 1 : 0);
             if (result > 0) {
                 SetField32(slot, slot_field::kFailures, 0);
                 phase += result;
                 break;
             }
+            break;
+        }
+        case 2:
+        case 4:
+        case 6: {
             const int request = device_.ReqState(static_cast<int>(Field32(slot, slot_field::kPort)),
                                                  static_cast<int>(Field32(slot, slot_field::kSlot)));
             int next = phase;
@@ -461,7 +491,7 @@ void KtLibpadModel::ProcessPhases(uint32_t slot, int flag) {
             break;
         }
         default:
-            ProcessReport(slot, 1);
+            ProcessReport(slot, read_length);
             UpdateActuators(slot);
             if (ModePending(slot) == 0 && NeedsAlignment(slot) == 0 && PressPending(slot) == 0) {
                 SetField32(slot, flags, Field32(slot, flags) | slot_flag::kReady);
