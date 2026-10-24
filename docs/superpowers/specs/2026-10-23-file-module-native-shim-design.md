@@ -1,7 +1,9 @@
 # Shim nativo do módulo de arquivos (primeira fatia da troca do runtime abaixo do motor)
 
-Sem endereços, nomes de funções nem trechos do binário (regras de proveniência). Papéis e contagens apenas;
-os detalhes por função ficam em artefatos ignorados (`analysis/generated/`, `game/`).
+Atualização (2026-10-24): o dono autorizou o uso direto do código do decomp neste repositório (ver `CLAUDE.md` e
+`docs/sot/prior-art-and-reuse.md` §4). Este documento segue por papéis por escolha de estilo; código do decomp pode
+ser versionado com indicação de origem. Binários, ISOs, exportações do Ghidra, mapas de funções, disassembly e
+C++ gerado continuam fora do git.
 
 ## Intenção
 

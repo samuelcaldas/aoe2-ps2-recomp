@@ -8,7 +8,7 @@ No PS2 game has a native Nintendo Switch port yet; the entries below are the clo
 | Source | License | Allowed use |
 | :--- | :--- | :--- |
 | PS2Recomp (pinned in `third_party_provenance.lock.json`) | GPL-3.0 | Link and reuse; already a dependency. |
-| `samuelcaldas/age-of-empires-2-decomp` (local: `../aoe`) | Owner's project, no license file | **Authorized by the owner** as a reference when the generated code alone is not enough: mouse and other peripherals, input polling, structure layouts, game behavior. See §4. |
+| `samuelcaldas/age-of-empires-2-decomp` (local: `../aoe`) | Owner's project, no license file | **Authorized by the owner**, including copying its code into tracked files (2026-10-24), as a reference and a source when the generated code alone is not enough: mouse and other peripherals, input polling, structure layouts, game behavior. See §4. |
 | Play! PS2 Emulator (`jpd002/Play-`) | BSD 2-Clause | **Runtime Source of Truth (SOT)** for reference hardware behavior, SIF/IOP HLE contracts, boot handshakes, and overlay loading (see `docs/sot/play-emulator-sot.md`). |
 | `KIexster/god-of-war-recomp` | GPL-3.0 | Code reuse allowed (GPL-compatible with PS2Recomp); game-specific overrides do not apply to AoE2. |
 | `centollOS/SwitchWakerHD` | MPL-2.0 (vendored parts: see repo) | Code reuse allowed per file, keeping MPL-2.0 headers on reused files. |
@@ -77,7 +77,8 @@ Rules:
 - Matched C/C++ from it may be used in host-side override hooks when that is simpler than reverse-engineering the generated code again.
 - **Authorized for KCET replacement (2026-10-20):** it is the reference for replacing the game's KCET hardware layer (mouse, keyboard, pad, CD/DVD, files, memory card, GS dispatch); see `docs/adr/0001-kcet-boundary-replacement.md`.
 - **Authorized for porting any subsystem (2026-10-22):** the owner wrote the decompilation and has changed the rule. Any decompiled code related to KCET, mouse, keyboard, network (`mydplay`/`socketee`, see `docs/sot/multiplayer-lan-architecture.md`), graphics, or other subsystems may be ported into this recompilation, replacing generated code where needed. Replacement happens through host-side override hooks; generated C++ is still not edited or committed.
-- Tracked files in this repository still must not contain game function names, hex addresses, disassembly, or code snippets taken from the binary. Keep address-specific glue in ignored or generated locations, or derive it at build time.
+- **Authorized to copy decomp code into this repository (2026-10-24):** the owner wrote the decompilation and authorizes using its code directly in tracked files here, including function names, addresses and structure layouts that appear in it, and its sidecar metadata. Each such file states its origin (decomp repository and commit). This covers compiling it for the host (debugging, native replacement of PS2-only code).
+- **Still not tracked:** game binaries, ISOs, Ghidra projects/exports, function maps, disassembly produced from the binary, and generated C++. Address-specific glue that is derived from the ELF (resolved hook addresses) stays in ignored locations or is derived at build time.
 - Do not modify the decomp repository from here.
 
 ## 5. Sources
