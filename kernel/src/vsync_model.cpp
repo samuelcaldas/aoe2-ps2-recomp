@@ -75,7 +75,7 @@ int VsyncModel::OnVblankStart() {
   const int sem1 = VsyncSemaphore(1);
   if (sem0 >= 0)
     while (services_.PollSemaphore(sem0) == sem0)
-      SignalSemaphoreFromInterrupt(sem1);
+      services_.SignalSemaphoreFromInterrupt(sem1);
   return 0;
 }
 
@@ -85,7 +85,7 @@ int VsyncModel::OnVblankEnd() {
   const int sem3 = VsyncSemaphore(3);
   if (sem2 >= 0)
     while (services_.PollSemaphore(sem2) == sem2)
-      SignalSemaphoreFromInterrupt(sem3);
+      services_.SignalSemaphoreFromInterrupt(sem3);
   return 0;
 }
 
@@ -186,7 +186,7 @@ int VsyncModel::WaitPair(int signal_semaphore, int wait_semaphore) {
     services_.Log("invalid vsync semaphore");
     return 0;
   }
-  if (SignalSemaphore(signal_semaphore) != signal_semaphore)
+  if (services_.SignalSemaphore(signal_semaphore) != signal_semaphore)
     return 0;
   return WaitSemaphore(wait_semaphore);
 }

@@ -74,6 +74,10 @@ void create_failure_rolls_back_all() {
     Check(model.Init(1) < 0, "failure result is negative");
     Check(Has(services.calls, "delete 1"), "created semaphore rolled back");
     Check(!Has(services.calls, "add_intc 2 4660"), "handler not registered after failure");
+    // The decomp sets its initialized flag before allocating and never clears it on
+    // failure, so a second init reports success without retrying; keep that.
+    const auto count = services.calls.size();
+    Check(model.Init(1) == 0 && services.calls.size() == count, "retry after failure is a no-op, as in the decomp");
 }
 
 void wait_vblank_end_signals_then_waits() {
