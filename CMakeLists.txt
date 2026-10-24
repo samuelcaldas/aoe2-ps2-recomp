@@ -19,6 +19,7 @@ add_library(aoe2_interfaces STATIC
     input/src/usb_mouse_rpc.cpp
     input/src/usb_keyboard_rpc.cpp
     game_hooks/src/kcet_hook_config.cpp
+    game_hooks/src/native_module_switches.cpp
     net/src/ilink_address.cpp
     net/src/ilink_socket_model.cpp
     net/src/in_memory_hub.cpp
@@ -90,6 +91,10 @@ add_test(NAME asset_tests COMMAND aoe2_asset_tests)
 add_executable(aoe2_kcet_hook_config_tests tests/cpp/kcet_hook_config_tests.cpp)
 target_link_libraries(aoe2_kcet_hook_config_tests PRIVATE aoe2_interfaces)
 add_test(NAME kcet_hook_config_tests COMMAND aoe2_kcet_hook_config_tests)
+
+add_executable(aoe2_native_module_switches_tests tests/cpp/native_module_switches_tests.cpp)
+target_link_libraries(aoe2_native_module_switches_tests PRIVATE aoe2_interfaces)
+add_test(NAME native_module_switches COMMAND aoe2_native_module_switches_tests)
 
 # i.LINK socket model tests (in-memory network)
 add_executable(aoe2_net_tests tests/cpp/net_tests.cpp)
