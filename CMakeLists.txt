@@ -21,6 +21,7 @@ add_library(aoe2_interfaces STATIC
     game_hooks/src/kcet_hook_config.cpp
     game_hooks/src/native_module_switches.cpp
     kernel/src/vsync_model.cpp
+    kernel/src/thread_model.cpp
     net/src/ilink_address.cpp
     net/src/ilink_socket_model.cpp
     net/src/in_memory_hub.cpp
@@ -102,6 +103,10 @@ add_test(NAME native_module_switches COMMAND aoe2_native_module_switches_tests)
 add_executable(aoe2_vsync_model_tests tests/cpp/vsync_model_tests.cpp)
 target_link_libraries(aoe2_vsync_model_tests PRIVATE aoe2_interfaces)
 add_test(NAME vsync_model COMMAND aoe2_vsync_model_tests)
+
+add_executable(aoe2_thread_model_tests tests/cpp/thread_model_tests.cpp)
+target_link_libraries(aoe2_thread_model_tests PRIVATE aoe2_interfaces)
+add_test(NAME thread_model COMMAND aoe2_thread_model_tests)
 
 # i.LINK socket model tests (in-memory network)
 add_executable(aoe2_net_tests tests/cpp/net_tests.cpp)
