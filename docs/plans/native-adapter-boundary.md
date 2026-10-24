@@ -89,8 +89,10 @@ mouse/teclado, áudio, hardware gráfico). O grosso é kernel (já coberto pelo 
 4. **Verificação por diferença** (o ganho principal): o código original recompilado ainda existe no
    binário. Em testes, rodar o original sob o runtime, gravar pares (entrada → saída/efeitos), e exigir
    que o adaptador reproduza o mesmo. Sem captura de hardware, essa é a referência mais forte.
-5. **Proveniência**: adaptadores são código novo em termos de papéis, endereços resolvidos localmente.
-   O código portado do decomp serve de especificação; não entra nome/endereço/trecho em arquivo versionado.
+5. **Proveniência (atualizado 2026-10-24)**: o dono autorizou copiar o código do decomp para este repositório
+   (ver `CLAUDE.md`). Adaptadores podem ser o C do decomp compilado para o host, com indicação de origem
+   (repositório e commit) e uma ponte de adaptação separada. Continuam fora do git: binários, ISOs, exportações
+   do Ghidra, mapas de funções, disassembly e C++ gerado. Endereços resolvidos a partir do ELF ficam em ignorados.
 
 ## Mapa por módulo (disposição)
 
@@ -116,7 +118,10 @@ mouse/teclado, áudio, hardware gráfico). O grosso é kernel (já coberto pelo 
 
 1. **Inventário da fronteira completa**: medida estática e papéis feitos (tabelas acima). Falta identificar o serviço
    de id pequeno ligado direto pelo motor e revisar um a um os `unknown` do KCET/Sony base.
-2. **Contrato e harness de diferença**: formato de gravação/reprodução (entrada → saída) sobre o
+2. **Contrato, harness de diferença e cópia do decomp**: script que copia os fontes do decomp para o repositório
+   com a origem registrada, mais a ponte de memória/tipos do host (design em
+   `docs/superpowers/specs/2026-10-23-file-module-native-shim-design.md`).
+   **Contrato e harness de diferença**: formato de gravação/reprodução (entrada → saída) sobre o
    original recompilado; primeiro módulo piloto pequeno (pad ou file).
 3. **Módulos por prioridade de boot**: file/cdvd → kernel/áudio de boot → pad/mc → resto.
 4. **Parar de carregar IRX/SIF** quando o último consumidor do boot for coberto; medir o boot.

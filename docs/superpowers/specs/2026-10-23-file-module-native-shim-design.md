@@ -55,6 +55,23 @@ A leitura de 2026-10-23 estava desatualizada: o fonte do servidor de CD foi pree
   assembly e contra o original recompilado (teste diferencial) antes de ser tratado como contrato; a forma
   literal pode esconder diferenças de largura/sinal.
 
+## Decomp compilado para o host (decidido 2026-10-24)
+
+Com a autorização de copiar o decomp para este repositório, o substituto de uma função pode ser **o próprio C do
+decomp compilado para o host**, em vez de uma reescrita. Serve a três usos: depuração com logs internos sem tocar
+no ELF, troca de código só de PS2 por caminho nativo, e especificação executável para o teste diferencial.
+- **Origem versionada:** os fontes copiados ficam em um diretório próprio do repositório, cada arquivo com a
+  origem (repositório do decomp e commit). Nada é editado à mão depois da cópia além da camada de adaptação.
+- **Camada de adaptação (ponte):** tipos de largura fixa, leitura e escrita na memória guest, chamadas a funções
+  que continuam sendo código gerado pelo despacho do runtime, e globais do guest acessadas por nome. O C copiado
+  não é alterado para compilar; a diferença fica na ponte.
+- **Atualização por script:** uma ferramenta copia do decomp local para o diretório acima e registra o commit de
+  origem; fica proibido editar a cópia na mão.
+- **Fidelidade:** a correspondência de bytes vale para o compilador do PS2, não para o host. Largura, sinal e
+  comportamento indefinido podem divergir; o teste diferencial contra o original recompilado é obrigatório.
+- **Debug:** a versão compilada para o host aceita instrumentação por macros desligadas por padrão, sem alterar
+  o caminho normal.
+
 ## Objetivos
 
 - Atender cada ponto de entrada do módulo na fronteira (substituição por papel, mecanismo já existente no
@@ -71,6 +88,7 @@ A leitura de 2026-10-23 estava desatualizada: o fonte do servidor de CD foi pree
 
 - Trocar o escalonador, a CPU, a memória ou a tabela de funções do upstream.
 - Os outros módulos do KCET e o GS/GPU (documentos próprios).
+- Compilar o motor (fora do KCET) a partir do decomp: ele não está decompilado e segue vindo do PS2Recomp.
 - Editar `third_party/PS2Recomp`, o código gerado ou o decomp.
 - Resolver o travamento atual do jogo (pump de mensagens, `ra=0`): independe desta entrega.
 
