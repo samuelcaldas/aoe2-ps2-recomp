@@ -35,6 +35,7 @@ public:
 
 private:
     bool Valid(int port, int slot) const;
+    void StopRumble(int port);
     PadBackend& backend_;
     std::array<bool, 2> opened_{};
     std::array<PadMode, 2> modes_{PadMode::kAnalog, PadMode::kAnalog};

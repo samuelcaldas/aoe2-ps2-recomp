@@ -15,6 +15,7 @@ int PadDevice::PortOpen(int port, int slot, uint32_t) {
 }
 int PadDevice::PortClose(int port, int slot) {
     if (!Valid(port, slot) || !opened_[port]) return 0;
+    StopRumble(port);
     opened_[port] = false;
     return 1;
 }
@@ -61,7 +62,10 @@ int PadDevice::InfoPressMode(int, int) const { return 1; }
 int PadDevice::SetActAlign(int, int, const uint8_t[6]) { return 1; }
 int PadDevice::SetActDirect(int port, int slot, const uint8_t data[6]) {
     if (!Valid(port, slot) || !opened_[port]) return 0;
-    if (!backend_.Sample(port).connected) return 1;
+    if (!backend_.Sample(port).connected) {
+        StopRumble(port);
+        return 1;
+    }
     const uint16_t pair = static_cast<uint16_t>((data[0] ? 0x100 : 0) | data[1]);
     if (!rumble_changed_[port] || rumble_[port] != pair) {
         backend_.Rumble(port, data[0] ? 255 : 0, data[1]);
@@ -69,5 +73,12 @@ int PadDevice::SetActDirect(int port, int slot, const uint8_t data[6]) {
         rumble_changed_[port] = true;
     }
     return 1;
+}
+
+void PadDevice::StopRumble(int port) {
+    if (!rumble_changed_[port] || rumble_[port] == 0) return;
+    backend_.Rumble(port, 0, 0);
+    rumble_[port] = 0;
+    rumble_changed_[port] = true;
 }
 }

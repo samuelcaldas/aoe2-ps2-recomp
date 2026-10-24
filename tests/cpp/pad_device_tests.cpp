@@ -58,6 +58,23 @@ void actuator_updates_are_deduplicated_and_zero_stops() {
     Check(backend.rumble_calls.size() == 2, "duplicate rumble suppressed");
     Check(backend.rumble_calls.back().small_motor == 0 && backend.rumble_calls.back().large_motor == 0, "zero stops motors");
 }
+
+void disconnect_stops_motor_and_allows_same_command_after_reconnect() {
+    using namespace aoe2::pad;
+    FakePadBackend backend;
+    PadDevice device(backend);
+    device.PortOpen(0, 0, 0);
+    const std::array<uint8_t, 6> active{1, 200};
+    const std::array<uint8_t, 6> stopped{0, 0};
+    device.SetActDirect(0, 0, active.data());
+    backend.state.connected = false;
+    device.SetActDirect(0, 0, stopped.data());
+    Check(backend.rumble_calls.size() == 2, "disconnect stops active motor");
+    Check(backend.rumble_calls.back().small_motor == 0 && backend.rumble_calls.back().large_motor == 0, "disconnect sends stop pair");
+    backend.state.connected = true;
+    device.SetActDirect(0, 0, active.data());
+    Check(backend.rumble_calls.size() == 3, "reconnect forwards same command after stop");
+}
 }
 
 int main() {
@@ -65,4 +82,5 @@ int main() {
     read_uses_current_mode_and_connection();
     invalid_port_or_slot_fails();
     actuator_updates_are_deduplicated_and_zero_stops();
+    disconnect_stops_motor_and_allows_same_command_after_reconnect();
 }
