@@ -1,6 +1,6 @@
 #pragma once
 
-#include <aoe2/pad/pad_guest_memory.hpp>
+#include <aoe2/runtime/guest_access.hpp>
 
 #include <cstdint>
 #include <map>
@@ -8,7 +8,7 @@
 #include <vector>
 
 // Sparse little-endian guest memory for the kt_libpad tests; unwritten bytes read as zero.
-class FakePadGuestMemory final : public aoe2::pad::PadGuestMemory {
+class FakePadGuestMemory final : public aoe2::runtime::GuestAccess {
 public:
     uint8_t Load8(uint32_t address) override {
         const auto found = bytes.find(address);

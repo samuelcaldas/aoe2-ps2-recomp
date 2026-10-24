@@ -1,7 +1,6 @@
 // Shared diagnostics at return from the outer per-slot kt_libpad step, for both implementations.
 #pragma once
-#include "runtime/ps2_memory.h"
-#include "../../third_party/PS2Recomp/ps2xRuntime/src/lib/Kernel/Syscalls/Common.h"
+#include "guest_rdram_access.hpp"
 #include <array>
 #include <cstdlib>
 #include <cstring>

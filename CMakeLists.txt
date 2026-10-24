@@ -142,3 +142,7 @@ if(UNIX AND NOT NINTENDO_SWITCH)
     target_link_libraries(aoe2_udp_transport_tests PRIVATE aoe2_udp_transport)
     add_test(NAME udp_transport_tests COMMAND aoe2_udp_transport_tests)
 endif()
+
+add_executable(aoe2_guest_access_tests tests/cpp/guest_access_tests.cpp)
+target_link_libraries(aoe2_guest_access_tests PRIVATE aoe2_interfaces)
+add_test(NAME guest_access COMMAND aoe2_guest_access_tests)

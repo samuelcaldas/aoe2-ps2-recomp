@@ -1,8 +1,5 @@
-// Exercise the actual runtime adapter without installing its override handlers.
-#include "game_overrides.h"
-#undef PS2_REGISTER_GAME_OVERRIDE
-#define PS2_REGISTER_GAME_OVERRIDE(...)
-#include "../../game_hooks/src/kcet_libpad.cpp"
+// Exercise the shared runtime adapter without installing override handlers.
+#include "../../game_hooks/src/guest_rdram_access.hpp"
 
 #include <cstdlib>
 #include <vector>
@@ -10,7 +7,7 @@
 
 int main() {
     std::vector<uint8_t> ram(PS2_RAM_SIZE + 8, 0xA5);
-    RdramPadMemory memory;
+    aoe2::game_hooks::RdramGuestAccess memory;
     memory.Bind(ram.data());
     memory.Store32(PS2_RAM_SIZE - 2, 0);
     if (ram[PS2_RAM_SIZE - 2] != 0xA5 || ram[PS2_RAM_SIZE] != 0xA5) return 1;

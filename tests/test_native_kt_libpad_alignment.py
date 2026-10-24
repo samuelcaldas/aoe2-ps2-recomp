@@ -11,7 +11,7 @@ def alignment_command(output, state_source=None):
     sources = [ROOT / 'pad/src' / name for name in
                ('kt_libpad_model.cpp', 'kt_libpad_math.cpp', 'pad_device.cpp', 'pad_report.cpp')]
     sources.append(state_source or ROOT / 'pad/src/kt_libpad_state.cpp')
-    return ['g++', '-std=c++20', f'-I{ROOT / "pad/include"}',
+    return ['g++', '-std=c++20', f'-I{ROOT / "pad/include"}', f'-I{ROOT / "runtime/include"}',
             str(ROOT / 'tests/cpp/kt_libpad_alignment_buffer_tests.cpp'),
             *map(str, sources), '-Wl,--wrap=_ZN4aoe23pad9PadDevice11SetActAlignEiiPKh',
             '-o', str(output)]

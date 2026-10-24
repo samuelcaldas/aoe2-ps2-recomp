@@ -14,7 +14,7 @@ class TestNativeKtLibpadPressure(unittest.TestCase):
             sources = [ROOT / 'pad/src' / name for name in
                        ('kt_libpad_model.cpp', 'kt_libpad_math.cpp', 'kt_libpad_state.cpp',
                         'pad_device.cpp', 'pad_report.cpp')]
-            command = ['g++', '-std=c++20', f'-I{ROOT / "pad/include"}',
+            command = ['g++', '-std=c++20', f'-I{ROOT / "pad/include"}', f'-I{ROOT / "runtime/include"}',
                        str(ROOT / 'tests/cpp/kt_libpad_pressure_flag_tests.cpp'),
                        *map(str, sources),
                        '-Wl,--wrap=_ZNK4aoe23pad9PadDevice13InfoPressModeEii',
