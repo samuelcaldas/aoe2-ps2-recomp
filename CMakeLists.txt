@@ -37,6 +37,8 @@ target_include_directories(aoe2_interfaces PUBLIC
     runtime/include
     platform/desktop/include
     game_hooks/include
+    kernel/include
+    tests/cpp
 )
 
 # Desktop host smoke test executable
