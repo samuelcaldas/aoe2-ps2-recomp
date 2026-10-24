@@ -2,6 +2,7 @@
 #include <aoe2/game_hooks/kcet_handlers.hpp>
 #include <aoe2/input/guest_keyboard.hpp>
 #include <aoe2/input/usb_keyboard_rpc.hpp>
+#include "input_synthetic.hpp"
 #include <bitset>
 #include <utility>
 #include "raylib.h"
@@ -51,8 +52,14 @@ void ReturnToCaller(R5900Context* ctx, uint32_t value) {
 void SampleHostKeyboard() {
     g_keyboard_model.SetConnected(true);
     std::bitset<256> current;
-    for (const auto& [host_key, usage] : kHostKeyboardUsages) {
-        current.set(usage, IsKeyDown(static_cast<KeyboardKey>(host_key)));
+    if (aoe2::game_hooks::synthetic::Enabled()) {
+        using aoe2::game_hooks::synthetic::LogicalSteps;
+        using aoe2::game_hooks::synthetic::Module;
+        current = aoe2::game_hooks::synthetic::KeyboardState(LogicalSteps(Module::kKeyboard).load());
+    } else {
+        for (const auto& [host_key, usage] : kHostKeyboardUsages) {
+            current.set(usage, IsKeyDown(static_cast<KeyboardKey>(host_key)));
+        }
     }
     for (const auto& event : aoe2::input::DiffPressedKeys(g_previous_host_keys, current)) {
         g_keyboard_adapter.Submit(event);

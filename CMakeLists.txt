@@ -122,6 +122,16 @@ add_executable(aoe2_kt_libpad_model_tests tests/cpp/kt_libpad_model_tests.cpp)
 target_link_libraries(aoe2_kt_libpad_model_tests PRIVATE aoe2_interfaces)
 add_test(NAME kt_libpad_model COMMAND aoe2_kt_libpad_model_tests)
 
+add_executable(aoe2_input_synthetic_tests tests/cpp/input_synthetic_tests.cpp)
+target_include_directories(aoe2_input_synthetic_tests PRIVATE game_hooks/src)
+target_link_libraries(aoe2_input_synthetic_tests PRIVATE aoe2_interfaces)
+add_test(NAME input_synthetic COMMAND aoe2_input_synthetic_tests)
+
+add_executable(aoe2_state_snapshot_tests tests/cpp/state_snapshot_tests.cpp)
+target_include_directories(aoe2_state_snapshot_tests PRIVATE game_hooks/src)
+target_link_libraries(aoe2_state_snapshot_tests PRIVATE aoe2_interfaces)
+add_test(NAME state_snapshot COMMAND aoe2_state_snapshot_tests)
+
 add_executable(aoe2_pad_device_tests tests/cpp/pad_device_tests.cpp)
 target_link_libraries(aoe2_pad_device_tests PRIVATE aoe2_interfaces)
 add_test(NAME pad_device COMMAND aoe2_pad_device_tests)

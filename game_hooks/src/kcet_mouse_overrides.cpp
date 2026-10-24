@@ -1,6 +1,7 @@
 // KCET host input replacements; guest addresses are loaded from local configuration.
 #include <aoe2/game_hooks/kcet_handlers.hpp>
 #include <aoe2/input/usb_mouse_rpc.hpp>
+#include "input_synthetic.hpp"
 #include "raylib.h"
 #include "runtime/ps2_memory.h"
 
@@ -16,6 +17,7 @@ using aoe2::input::UsbMouseRpcModel;
 std::mutex g_mouse_mutex;
 UsbMouseRpcModel g_mouse_model;
 Vector2 g_last_position{};
+aoe2::game_hooks::synthetic::SyntheticMouse g_synthetic_mouse;
 bool g_has_last_position = false;
 void ReturnToCaller(R5900Context* ctx, uint32_t value) {
     setReturnU32(ctx, value);
@@ -32,7 +34,15 @@ uint32_t HostButtons() {
 
 // Deltas come from absolute positions so repeated polls within one host frame
 // never count the same motion twice.
+void SampleSyntheticMouse() {
+    using aoe2::game_hooks::synthetic::LogicalSteps;
+    using aoe2::game_hooks::synthetic::Module;
+    g_mouse_model.SetConnected(true);
+    g_mouse_model.Submit(g_synthetic_mouse.Next(LogicalSteps(Module::kMouse).load()));
+}
+
 void SampleHostMouse() {
+    if (aoe2::game_hooks::synthetic::Enabled()) return SampleSyntheticMouse();
     const Vector2 position = GetMousePosition();
     const Vector2 last = g_has_last_position ? g_last_position : position;
     g_last_position = position;
