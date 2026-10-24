@@ -201,12 +201,15 @@ public:
     const int stack_size = static_cast<int>(spec.stack_size);
     if (stack_size < 0)
       return kKeError;
+    // 64-bit end address: a stack near the top of the 32-bit space must not wrap into valid RAM.
+    const uint64_t stack_last =
+        static_cast<uint64_t>(spec.stack) + static_cast<uint64_t>(stack_size) - 1u;
     const bool stack_resolves =
         spec.stack == 0u ||
         (getMemPtr(rdram_, spec.stack) != nullptr &&
          (stack_size == 0 ||
-          getMemPtr(rdram_, spec.stack + static_cast<uint32_t>(stack_size) -
-                                1u) != nullptr));
+          (stack_last <= 0xFFFFFFFFull &&
+           getMemPtr(rdram_, static_cast<uint32_t>(stack_last)) != nullptr)));
     if (!stack_resolves)
       return kKeError;
     return ee().createThread(EeThreadCreateParams{
