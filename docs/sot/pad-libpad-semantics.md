@@ -81,3 +81,30 @@ pressure-mode query returns 1. Rumble was not exercised: the game did not reques
 
 The validator still ends `stalled_in_loop` (the game's own stall is a separate problem; this module neither
 fixes nor worsens it in this window).
+
+## Where the decomp of `kt_libpad` disagrees with the binary
+
+Found while preparing the native port by comparing the decomp with the generated code of the same functions
+(the binary is the authority). Each item needs a fix in the decomp before that function is ported from it.
+
+1. **`func_001275A0` (per-state poll).** The decomp maps state 5 to `func_00127BD8`, 6 to `func_001279B8` and
+   7 to `func_001279C0`. The binary maps 5 to `func_001279B8`, 6 to `func_001279C0` and 7 to `func_00127BD8`
+   (table above).
+2. **`func_001273D8` (per-slot step).** The decomp always advances the step and resets the state. The binary
+   advances the step (wrapping at 3) and resets the state only when the step function returns non-zero; the
+   flags bit `0x40000` is cleared before the call either way. The step table in the ELF is
+   `[func_00127488 (open port), func_001275A0 (poll state), func_00127750 (close port)]`, so a pad that is open
+   and polling stays on step 1.
+3. **`func_00127820` (actuator descriptors).** The call that reads one actuator descriptor byte is
+   `(port, slot, actuator, term)` with four arguments; the decomp shows a fifth, spurious `-1`.
+4. **`func_001285F8` / `func_00127900` (mode info).** The decomp lost an argument: the count call passes the
+   mode-table selector (4) and leaves the offset register as the caller left it; the library meaning is
+   offset `-1` for the count. The mode-id loop leaves the offset unset (ignored for selectors 1 to 3).
+5. **Not in the decomp at all:** `func_00125A70` (slot address by index), `func_00125AA8` and `func_00125AC8`
+   (the semaphore lock and unlock) and `func_00125AE8`; they sit inside the module range but have no
+   definition in `kt_libpad.c`.
+
+Consequence for the plan: the native device (Tasks 3 to 5) is unaffected and already works. Tasks 6 to 8 (the
+port of the module itself) cannot rely on the decomp for control flow in the branch-heavy functions
+(`func_00127488`, `func_001276B8`, `func_00127750`, `func_001279C8`, `func_00127E68`, `func_00128390`,
+`func_001281C0`, `func_001286A8`, `func_00128878`, `func_00126C30`) until each is checked against the binary.
