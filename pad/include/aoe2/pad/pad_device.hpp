@@ -19,6 +19,7 @@ public:
     explicit PadDevice(PadBackend& backend);
     int Init(int mode);
     int Start(int arg);
+    int End();
     int SlotMax(int port) const;
     int PortMax() const;
     int PortOpen(int port, int slot, uint32_t dma_buffer);
@@ -42,6 +43,8 @@ private:
     std::array<PadMode, 2> modes_{PadMode::kAnalog, PadMode::kAnalog};
     std::array<uint16_t, 2> rumble_{};
     std::array<bool, 2> rumble_changed_{};
+    std::array<int, 2> polls_since_open_{};  // drives the FINDPAD -> FINDCTP1 -> STABLE sequence
+    std::array<int, 2> busy_polls_{};        // polls left in EXECCMD after a configuration command
 };
 
 }

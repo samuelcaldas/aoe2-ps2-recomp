@@ -18,7 +18,13 @@ void device_reports_open_connected_port_as_stable() {
     Check(device.SlotMax(0) == 1 && device.SlotMax(1) == 1 && device.SlotMax(2) == 0, "slot max");
     Check(device.PortMax() == 2, "port max");
     Check(device.PortOpen(0, 0, 0) == 1, "open valid port");
-    Check(device.State(0, 0) == 6, "opened connected port is stable");
+    Check(device.State(0, 0) == 1 && device.State(0, 0) == 1, "a fresh port is first found as a pad");
+    for (int poll = 0; poll < 8; ++poll) Check(device.State(0, 0) == 2, "then the controller type is checked");
+    Check(device.State(0, 0) == 6 && device.State(0, 0) == 6, "opened connected port becomes stable");
+    backend.state.connected = false;
+    Check(device.State(0, 0) == 0, "an unplugged pad reads as disconnected");
+    backend.state.connected = true;
+    Check(device.State(0, 0) == 1, "plugging it back restarts the sequence");
     Check(device.PortClose(0, 0) == 1, "close port");
     Check(device.State(0, 0) == 0, "closed port is disconnected from libpad state");
 }

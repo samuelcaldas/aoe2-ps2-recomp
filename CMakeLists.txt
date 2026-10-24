@@ -23,6 +23,9 @@ add_library(aoe2_interfaces STATIC
     kernel/src/vsync_model.cpp
     kernel/src/thread_model.cpp
     pad/src/pad_report.cpp
+    pad/src/kt_libpad_math.cpp
+    pad/src/kt_libpad_model.cpp
+    pad/src/kt_libpad_state.cpp
     pad/src/pad_device.cpp
     pad/src/host_button_map.cpp
     net/src/ilink_address.cpp
@@ -115,6 +118,10 @@ add_test(NAME thread_model COMMAND aoe2_thread_model_tests)
 add_executable(aoe2_pad_report_tests tests/cpp/pad_report_tests.cpp)
 target_link_libraries(aoe2_pad_report_tests PRIVATE aoe2_interfaces)
 add_test(NAME pad_report COMMAND aoe2_pad_report_tests)
+add_executable(aoe2_kt_libpad_model_tests tests/cpp/kt_libpad_model_tests.cpp)
+target_link_libraries(aoe2_kt_libpad_model_tests PRIVATE aoe2_interfaces)
+add_test(NAME kt_libpad_model COMMAND aoe2_kt_libpad_model_tests)
+
 add_executable(aoe2_pad_device_tests tests/cpp/pad_device_tests.cpp)
 target_link_libraries(aoe2_pad_device_tests PRIVATE aoe2_interfaces)
 add_test(NAME pad_device COMMAND aoe2_pad_device_tests)
