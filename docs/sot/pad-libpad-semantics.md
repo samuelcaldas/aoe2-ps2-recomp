@@ -108,3 +108,42 @@ Consequence for the plan: the native device (Tasks 3 to 5) is unaffected and alr
 port of the module itself) cannot rely on the decomp for control flow in the branch-heavy functions
 (`func_00127488`, `func_001276B8`, `func_00127750`, `func_001279C8`, `func_00127E68`, `func_00128390`,
 `func_001281C0`, `func_001286A8`, `func_00128878`, `func_00126C30`) until each is checked against the binary.
+
+## Second pass: verification of every function (2026-10-24)
+
+A two-verifier plus judge pass over all 105 functions of the module (decomp at main commit `3ca89e917`)
+produced a noisy result: 25 functions marked as diverging, 14 undetermined. Many verifiers could not locate or
+follow the generated code (the whole first group came back undetermined), judges disagreed with verifiers, and
+several claims were wrong when checked by hand. The raw output is not tracked (it is not trustworthy as a
+contract). What was **confirmed by hand against the generated code**:
+
+Real divergences (the decomp must be fixed; the binary behaviour is):
+
+- **`func_00126BC0` (rapid-fire setup).** The binary writes at `slot + 0x38 + ch*4`: a 16-bit mask at offset 0,
+  zero at offset 2, and the byte `((mode + 0xF) & 0xF0) | (speed & 0xF)` at offset 3. The decomp writes into
+  the mode-info area at `+0x1C` with the raw mode and speed bytes.
+- **`func_00127488` (port request).** The buffer handed to the library's port open is `slot + 0x100` (256
+  bytes, 64-byte aligned, owned by the library), and the alignment check is on that address. The decomp uses
+  `dma_buffer` at `+0xC0`. Consequently the decomp header is also wrong: the pad report area is the 0x40 bytes
+  at `+0xC0` (report bytes start at `+0xC4`), not a 0x140-byte `dma_buffer`.
+- **`func_00127BE8` (report read).** After the read into `slot + 0xC4` with result `r`: when `r` is in 1..31
+  the bytes `report[r..31]` are filled with `0xFF`; in every case `r` is stored as a 32-bit word at `slot + 0xC0`
+  and `r` itself is returned (also when it is 0 or 32 and above). The decomp returns 0 for an out-of-range
+  result, returns the result otherwise, and neither fills nor stores.
+- **Comparisons against 3.** `func_00125F68` and `func_00126140` compare `n_pad` and `n_ports` as unsigned.
+  Harmless for valid input.
+
+Claims that were **wrong** (the decomp is right there): `func_00127750` (the `xori` is followed by a
+conditional move that yields "result equals 1"), `func_00127900` (returns 1 when the word changed, 0 when equal),
+`func_00127C88` (stores exactly what the decomp says), `func_00127820` (the per-actuator term runs 1 to 4, the
+decomp's `j + 1`), and the zeroing offsets claimed for `func_00125DB8`.
+
+Not checked (the judges' claims on `func_001279C8`, `func_00127E68`, `func_00128130`, `func_001281C0`,
+`func_00128390`, `func_001286A8`, `func_00128878`, `func_00128990`, `func_00128A90`, `func_00128B68`,
+`func_00127D88`, `func_00127DC8`, `func_001287E8`, `func_00128820`): they involve large jump tables or helper
+calls and need a careful read of each function; do not trust the claims, and do not port from the decomp for these
+until someone has.
+
+Consequence: the port of the module itself is on hold again. A faithful port needs an oracle that does not
+depend on reading assembly: run the original recompiled function and the native one on the same guest memory
+and compare results (see the shadow-mode proposal in the status report of this work).
