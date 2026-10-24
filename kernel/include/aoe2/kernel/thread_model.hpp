@@ -17,6 +17,8 @@ public:
     int CreateAndStart(uint32_t entry, uint32_t stack, int stack_size, int priority, uint32_t arg, int option);
     int Status(int id);
     std::optional<std::string> StatusName(int status);
+    // Guest address of the table's name pointer for the status, 0 when unknown (what the original returns).
+    uint32_t StatusNameAddress(int status);
     void Dump(int id);
     void DumpAll();
 private:

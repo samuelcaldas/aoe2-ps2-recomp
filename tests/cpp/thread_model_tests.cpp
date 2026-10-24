@@ -64,6 +64,8 @@ void TestStatusNameReadsGuestTable() {
     aoe2::kernel::ThreadModel model(services, 0, table);
     Check(model.StatusName(13) == std::optional<std::string>("status3"), "status name");
     Check(!model.StatusName(99), "unknown status");
+    Check(model.StatusNameAddress(13) == 0x1000 + 3 * 4, "status name address is the table pointer");
+    Check(model.StatusNameAddress(99) == 0, "unknown status has no address");
 }
 void TestDumpAllSkipsUnknownAndCoversIds() {
     FakeKernelServices services;

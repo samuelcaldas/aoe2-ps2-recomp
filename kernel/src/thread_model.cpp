@@ -38,12 +38,19 @@ int ThreadModel::CreateAndStart(uint32_t entry, uint32_t stack, int stack_size, 
     return id;
 }
 int ThreadModel::Status(int id) { KernelServices::ThreadInfo info{}; services_.ReferThread(id, info); return static_cast<int>(info.status); }
-std::optional<std::string> ThreadModel::StatusName(int status) {
+// Port of func_00134AF0.
+uint32_t ThreadModel::StatusNameAddress(int status) {
     for (uint32_t i = 0; i < 6; ++i) {
         uint32_t base = status_table_address_ + i * 8;
-        if (services_.LoadWord(base) == static_cast<uint32_t>(status)) return services_.LoadString(services_.LoadWord(base + 4));
+        if (services_.LoadWord(base) == static_cast<uint32_t>(status)) return services_.LoadWord(base + 4);
     }
-    return std::nullopt;
+    return 0;
+}
+
+std::optional<std::string> ThreadModel::StatusName(int status) {
+    const uint32_t address = StatusNameAddress(status);
+    if (address == 0) return std::nullopt;
+    return services_.LoadString(address);
 }
 // Port of func_00134A78 and func_00134BB0: the single dump falls back to a placeholder
 // for unknown statuses, the dump-all skips them and also prints the wait fields.

@@ -33,14 +33,14 @@ public:
   int DrainSemaphoreReporting(int id);
   void DumpSemaphore(int id, bool from_interrupt);
   void DumpAllSemaphores(bool from_interrupt);
-
-private:
   int InitializeRange(int start, int end);
   int RegisterVblankStart();
   int RegisterVblankEnd();
   void RemoveHandlers();
   void DeleteVsyncSemaphores();
   int WaitPair(int signal_semaphore, int wait_semaphore);
+
+private:
   void ReportSemaphoreResult(std::string_view operation, int requested,
                              int returned);
 
