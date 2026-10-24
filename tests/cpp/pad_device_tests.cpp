@@ -77,7 +77,24 @@ void disconnect_stops_motor_and_allows_same_command_after_reconnect() {
 }
 }
 
+void disconnect_clears_the_caller_buffer_and_align_validates_the_port() {
+    aoe2::pad::FakePadBackend backend;
+    aoe2::pad::PadDevice device(backend);
+    std::array<uint8_t, 32> report{};
+    const uint8_t align[6] = {0, 1, 0xFF, 0xFF, 0xFF, 0xFF};
+    backend.state.connected = true;
+    backend.state.buttons = 0x4000;
+    Check(device.SetActAlign(0, 0, align) == 0, "align on a closed port fails");
+    Check(device.PortOpen(0, 0, 0) == 1 && device.SetActAlign(0, 0, align) == 1, "align on an open port");
+    Check(device.SetActAlign(2, 0, align) == 0 && device.SetActAlign(0, 1, align) == 0, "align on invalid port or slot fails");
+    Check(device.Read(0, 0, report) > 0 && report[3] != 0xFF, "connected read fills the report");
+    backend.state.connected = false;
+    Check(device.Read(0, 0, report) == 0, "disconnected read returns zero");
+    Check(report == std::array<uint8_t, 32>{}, "disconnected read leaves no stale bytes");
+}
+
 int main() {
+    disconnect_clears_the_caller_buffer_and_align_validates_the_port();
     device_reports_open_connected_port_as_stable();
     read_uses_current_mode_and_connection();
     invalid_port_or_slot_fails();

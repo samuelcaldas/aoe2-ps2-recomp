@@ -27,7 +27,10 @@ int PadDevice::ReqState(int, int) const { return 0; }
 int PadDevice::Read(int port, int slot, std::array<uint8_t, 32>& out) {
     if (!Valid(port, slot) || !opened_[port]) return 0;
     const HostPadState state = backend_.Sample(port);
-    if (!state.connected) return 0;
+    if (!state.connected) {
+        out.fill(0);  // an all-released report; no stale buttons survive a disconnect
+        return 0;
+    }
     const PadReport report = BuildReport(state, modes_[port]);
     out = report.bytes;
     return report.length;
@@ -59,7 +62,7 @@ int PadDevice::SetMainMode(int port, int slot, int offset, int) {
     return 1;
 }
 int PadDevice::InfoPressMode(int, int) const { return 1; }
-int PadDevice::SetActAlign(int, int, const uint8_t[6]) { return 1; }
+int PadDevice::SetActAlign(int port, int slot, const uint8_t[6]) { return Valid(port, slot) && opened_[port] ? 1 : 0; }
 int PadDevice::SetActDirect(int port, int slot, const uint8_t data[6]) {
     if (!Valid(port, slot) || !opened_[port]) return 0;
     if (!backend_.Sample(port).connected) {
