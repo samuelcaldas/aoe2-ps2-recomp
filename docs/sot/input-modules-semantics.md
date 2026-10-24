@@ -36,3 +36,21 @@ updates of the module), not of RPC reads or time, so original and native see the
 The game calls 22 of 45 functions of `kt_mouse`, 24 of 42 of `kt_keybd` and 4 of 6 of `kt_usbkeybd_drv`. The 6 functions of
 `kt_usbkeybd_drv` and 4 of `kt_mouse` (bind, get info, read, device info) are already native through the host device
 layer. The decomp owner's audit confirmed the six USB keyboard functions against the binary.
+
+## Baseline determinism (2026-10-24)
+
+Two independent 30 s runs of the ORIGINAL code (diagnostics build rebuilt after the observer commit; pad on; synthetic pad, mouse
+and keyboard; `AOE2_STATE_SNAPSHOT=1`; call trace limited to the two update functions), both ending `stalled_in_loop`:
+
+| Region | Snapshots run A / run B | Common keys | Byte-identical | Skips |
+|---|---|---|---|---|
+| mouse (0x3C0 bytes) | 17 / 17 | 17 | 17 | 0 |
+| keyboard (0x280 bytes) | 17 / 17 | 17 | 17 | 0 |
+
+The comparison instrument is therefore noise-free for this scenario: any later difference between original and native is a
+real behavioural difference. Snapshots cover logical steps 1..16 and 64.
+
+How much the oracle sees: the mouse area has 17 non-zero bytes at step 1 and 24 at step 64 (seven bytes differ between the
+first and last snapshot, two distinct hashes); the keyboard area has 21 non-zero bytes throughout (three bytes differ, three
+distinct hashes). The window reaches the first synthetic mouse motion (step 50) but not the first button toggle (step 200) nor the
+second keyboard press (step 120). A longer window (60 s or more) would widen coverage and should be used before declaring parity.
