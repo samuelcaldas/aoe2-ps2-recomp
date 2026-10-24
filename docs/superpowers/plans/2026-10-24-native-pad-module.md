@@ -108,7 +108,7 @@
 - Modify: `CMakeLists.txt` (fonte do mapeamento, teste), `cmake/Aoe2Recompiled.cmake` (acrescentar só `game_hooks/src/kcet_pad_backend.cpp` às fontes de `aoe2_game`; o `kcet_pad.cpp` é acrescentado na Task 5, quando o arquivo passa a existir)
 
 **Interfaces:**
-- Produces: `enum class HostButton { kCross, kCircle, kSquare, kTriangle, kL1, kR1, kL2, kR2, kSelect, kStart, kL3, kR3, kUp, kDown, kLeft, kRight }` e `uint16_t ToPadButtons(const std::array<bool,16>& down_by_host_button)` (puro, testado). `class RaylibPadBackend final : public aoe2::pad::PadBackend` (gamepad 0 do raylib; `Sample(0)` lê botões e eixos; `Sample(1)` devolve desconectado; `Rumble` chama `SetGamepadVibration(0, large/255.0f, small ? 1.0f : 0.0f, 0.2f)` ou `StopGamepadVibration` se ambos forem zero; reaplica a vibração a cada 150 ms enquanto estiver ligada para cobrir a duração curta).
+- Produces: `enum class HostButton { kCross, kCircle, kSquare, kTriangle, kL1, kR1, kL2, kR2, kSelect, kStart, kL3, kR3, kUp, kDown, kLeft, kRight }` e `uint16_t ToPadButtons(const std::array<bool,16>& down_by_host_button)` (puro, testado). `std::unique_ptr<aoe2::pad::PadBackend> aoe2::game_hooks::MakeRaylibPadBackend()` em `game_hooks/include/aoe2/game_hooks/kcet_pad_backend.hpp` (gamepad 0 do raylib; `Sample(0)` lê botões e eixos; `Sample(1)` devolve desconectado; `Rumble` chama `SetGamepadVibration(0, large/255.0f, small ? 1.0f : 0.0f, 0.2f)` ou `StopGamepadVibration` se ambos forem zero; reaplica a vibração a cada 150 ms enquanto estiver ligada para cobrir a duração curta).
 
 - [ ] **Step 1: Write the failing test** `host_button_map_tests.cpp`: nenhum botão → 0; só `kCross` → `0x4000`; só `kStart` → `0x0008`; os 16 botões → `0xFFFF`; cada `HostButton` aciona exatamente um bit distinto.
 - [ ] **Step 2: Run** `cmake --build build --target aoe2_host_button_map_tests` — Expected: falha de compilação.
@@ -126,7 +126,7 @@
 - Modify: `cmake/Aoe2Recompiled.cmake` (acrescentar `game_hooks/src/kcet_pad.cpp` às fontes de `aoe2_game`), `docs/sot/pad-libpad-semantics.md`
 
 **Interfaces:**
-- Consumes: `PadDevice`, `RaylibPadBackend`, `NativeModuleSwitches` (`Enabled("pad_device")`).
+- Consumes: `PadDevice`, `MakeRaylibPadBackend()`, `NativeModuleSwitches` (`Enabled("pad_device")`).
 - Produces: `pad_device_entries.def` com uma linha `PAD_DEVICE_ENTRY(<papel>, 0x<endereço>)` por chamada Sony: `init` 0x10CCB0, `start` 0x10DEC0, `slot_max` 0x10DDF0, `port_open` 0x10CF10, `port_close` 0x10D0F8, `state` 0x10D2E0, `read` 0x10D260, `req_state` 0x10D3F8, `info_act` 0x10D480, `info_mode` 0x10D6C0, `set_main_mode` 0x10D7F8, `set_act_direct` 0x10D8B0, `set_act_align` 0x10D968, `info_press_mode` 0x10DBA8. O mapeamento endereço→API vem dos pontos de chamada no `kt_libpad.c` (confiança alta em `state`, `read`, `port_open`, `req_state`, `set_act_direct`, `set_act_align`, `set_main_mode`, `info_mode`; média em `init`, `slot_max`, `info_act`, `info_press_mode`; `start` é desconhecido). Cada handler lê `a0..a3` (inclusive os registradores que o decomp mostra como argumentos variádicos) e, em `read`/`set_act_*`, traduz o ponteiro guest com `getMemPtr`.
 
 - [ ] **Step 1: Write the failing test** `test_native_pad_device_entries.py`: o `.def` tem 14 entradas, endereços únicos e alinhados a 4, e cada endereço aparece como chamada externa em `~/repos/aoe/src/kcet/kt_libpad.c` (`unittest.skip` se o decomp faltar).
@@ -180,7 +180,7 @@
 - Modify: `cmake/Aoe2Recompiled.cmake`, `docs/superpowers/specs/2026-10-24-kcet-native-layer-design.md` (estado do módulo)
 
 **Interfaces:**
-- Consumes: `KtLibpadModel`, `PadDevice`, `RaylibPadBackend`, o serviço de guest do adaptador do kernel (mesmo padrão: `Bind(rdram, ctx)`, `ctx->pc = ra`, retorno em `v0`).
+- Consumes: `KtLibpadModel`, `PadDevice`, `MakeRaylibPadBackend()`, o serviço de guest do adaptador do kernel (mesmo padrão: `Bind(rdram, ctx)`, `ctx->pc = ra`, retorno em `v0`).
 - Produces: `kt_libpad_entries.def` com `KT_LIBPAD_ENTRY(<nome>, 0x<endereço>)` para todas as funções do módulo; as que dependem de algo fora dele ficam como `KT_LIBPAD_DEFERRED(endereço, motivo)` (por exemplo as funções de alocação e pausa de thread chamadas pelo módulo, que seguem como código gerado: `func_00128A68`, `func_00128A90`, `func_00128B18`, `func_00128B38`, `func_00128B68`, `func_00128B08` — o motivo registrado é a dependência em chamadas de thread e RPC que este plano não porta). Instalação só com o interruptor `pad` e exigindo `pad_device` ligado (senão, erro claro no log e nada é instalado). O endereço de cada global vem do decomp.
 
 - [ ] **Step 1: Write the failing test** `test_native_kt_libpad_coverage.py`: usa `tools.trace_addresses.parse_function_addresses` sobre `kt_libpad.c` e exige que `ENTRY ∪ DEFERRED` seja exatamente o conjunto do decomp, sem duplicatas (`unittest.skip` se o decomp faltar).
