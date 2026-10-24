@@ -24,6 +24,7 @@ add_library(aoe2_interfaces STATIC
     kernel/src/thread_model.cpp
     pad/src/pad_report.cpp
     pad/src/pad_device.cpp
+    pad/src/host_button_map.cpp
     net/src/ilink_address.cpp
     net/src/ilink_socket_model.cpp
     net/src/in_memory_hub.cpp
@@ -117,6 +118,9 @@ add_test(NAME pad_report COMMAND aoe2_pad_report_tests)
 add_executable(aoe2_pad_device_tests tests/cpp/pad_device_tests.cpp)
 target_link_libraries(aoe2_pad_device_tests PRIVATE aoe2_interfaces)
 add_test(NAME pad_device COMMAND aoe2_pad_device_tests)
+add_executable(aoe2_host_button_map_tests tests/cpp/host_button_map_tests.cpp)
+target_link_libraries(aoe2_host_button_map_tests PRIVATE aoe2_interfaces)
+add_test(NAME host_button_map COMMAND aoe2_host_button_map_tests)
 
 # i.LINK socket model tests (in-memory network)
 add_executable(aoe2_net_tests tests/cpp/net_tests.cpp)
