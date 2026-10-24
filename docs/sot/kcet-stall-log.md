@@ -370,3 +370,36 @@ semaphore and the screen stays black apart from the cursor. The pump method is a
 method that normally returns to its caller, so something invoked it as a root context.
 Not yet determined who dispatches it. Not yet tried: a non-diagnostics build, where the
 busy delays are far shorter.
+
+### Native kernel module, 60-second desktop runs (2026-10-24)
+
+The first native replacement below the engine (the KCET kernel module: semaphores,
+threads, vsync) was run in the diagnostics build, desktop, Xvfb, 60 s each, with the module
+off (default) and on (`kernel=on` in `native_modules.ini`, git-ignored). 38 of the module's
+39 functions are replaced; one stays generated code (it depends on two helpers outside the
+module).
+
+**Calls from the game into the module (same in both runs):** vsync init 2, semaphore create
+8, create-and-start thread 1, semaphore wait 1, current-thread priority 2, and the
+end-of-frame interrupt callback 128 or more times. The baseline trace also showed the
+module's internal calls (accessors, range init, per-vblank registration); with the module
+on those happen inside the native model and no longer reach the dispatcher. No function the
+baseline called is missing from the native counters.
+
+**Verdict:** unchanged. Both runs end `stalled_in_loop` in the 60 s window with the
+validator failing, and the real-frame count varies between runs (0 to 3) with no
+relation to the module. This is expected: the earlier entries show the game needs well over
+60 s in this log-heavy build to reach its own loading screen, so the window cannot show
+whether the module helps. A longer run, and the non-diagnostics build, are the next
+measurements.
+
+**Found on the way:** the runtime's function lookup returns a fallback for an address that
+has no recompiled function, so "found" must be checked with the existence query; one of the
+module's functions has no recompiled original (the generator folded it into a neighbour),
+and the native handler is its only implementation. The module's remove-handler helper lives
+in the mouse module of the decomp and is ported inside the adapter; the mouse plan must
+reuse it, not duplicate it.
+
+**Open:** the assertion reporter of the original (a guest function) is log-only in the
+native module; differential testing against the original is still pending; the game's
+`ra=0` stop at about 4 minutes is a separate problem and is not addressed by this module.

@@ -36,6 +36,13 @@ a partir do decomp do dono (`~/repos/aoe`), cuja cópia direta é autorizada (`C
 5. Dados de disco vêm de arquivos já extraídos no SD, incluindo assets (2026-10-23, mantida).
 6. **Teste diferencial fica para depois** da implementação das camadas (2026-10-24), com a ressalva abaixo.
 
+## Estado dos módulos
+
+- **kernel:** nativo, atrás do interruptor `kernel` (38 de 39 funções; uma segue gerada). Aguardando verificação
+  diferencial e uma medição mais longa; resultado de 60 s em `docs/sot/kcet-stall-log.md` (sem mudança de veredito).
+  Plano: `docs/superpowers/plans/2026-10-24-native-kernel-module.md`.
+- Demais módulos: sem plano ainda, na ordem acima.
+
 ## Cobertura do decomp (medida em 2026-10-24)
 
 - Estruturado: kernel, arquivos, `kt_hd`, mouse, teclado, teclado USB, `libscf`, `sles_boot`, pad (~1.700 linhas).
