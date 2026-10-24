@@ -35,6 +35,7 @@ public:
 
 private:
     bool Valid(int port, int slot) const;
+    bool Connected(int port);
     void StopRumble(int port);
     PadBackend& backend_;
     std::array<bool, 2> opened_{};

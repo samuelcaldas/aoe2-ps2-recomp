@@ -7,6 +7,10 @@ int PadDevice::Start(int) { return 1; }
 int PadDevice::SlotMax(int port) const { return port == 0 || port == 1 ? 1 : 0; }
 int PadDevice::PortMax() const { return 2; }
 bool PadDevice::Valid(int port, int slot) const { return port >= 0 && port < 2 && slot == 0; }
+bool PadDevice::Connected(int port) {
+    const HostPadState state = backend_.Sample(port);
+    return state.connected;
+}
 int PadDevice::PortOpen(int port, int slot, uint32_t) {
     if (!Valid(port, slot)) return 0;
     opened_[port] = true;
@@ -21,7 +25,7 @@ int PadDevice::PortClose(int port, int slot) {
 }
 int PadDevice::State(int port, int slot) {
     if (!Valid(port, slot) || !opened_[port]) return 0;
-    return backend_.Sample(port).connected ? 6 : 0;
+    return Connected(port) ? 6 : 0;
 }
 int PadDevice::ReqState(int, int) const { return 0; }
 int PadDevice::Read(int port, int slot, std::array<uint8_t, 32>& out) {
@@ -65,7 +69,7 @@ int PadDevice::InfoPressMode(int, int) const { return 1; }
 int PadDevice::SetActAlign(int port, int slot, const uint8_t[6]) { return Valid(port, slot) && opened_[port] ? 1 : 0; }
 int PadDevice::SetActDirect(int port, int slot, const uint8_t data[6]) {
     if (!Valid(port, slot) || !opened_[port]) return 0;
-    if (!backend_.Sample(port).connected) {
+    if (!Connected(port)) {
         StopRumble(port);
         return 1;
     }

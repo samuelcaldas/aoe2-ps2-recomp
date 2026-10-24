@@ -48,3 +48,36 @@ opened makes the data path run, which settles the open question of the plan.
   anything outside 1..31, so 32 is never returned.
 - Unknown: the meaning of the Sony call made right after init (`func_0010DEC0`, argument 0). The device returns
   1 and logs it; revisit when the module's behaviour shows what it needs.
+
+## Native `pad_device` execution (Task 5)
+
+Handler contract taken from `samuelcaldas/age-of-empires-2-decomp`, `src/kcet/kt_libpad.c` and
+`include/kt_libpad.h` (clean working tree at the time). The 14 Sony pad entry points were identified by their
+call sites in `kt_libpad.c` and the arguments passed: init and start (`func_00125C58`), slot maximum
+(`func_00126040`), port open (`func_00127488`), port close (`func_00127750`), state (`func_001275A0`), read
+(`func_00127E68`), request state, actuator info (`func_00127820`), mode info (`func_00127900`), main mode,
+direct actuator set (`func_00128390`), actuator alignment, and the pressure-mode query.
+
+**Run 1** (headless, real gamepad backend, no gamepad attached; 90 s): the device reported state 0 for the
+port in every one of 550 polls, because the host reports no controller. The generated module therefore kept
+resetting, exactly as it must for a disconnected pad. This says nothing about the stable-state hypothesis; it
+shows the device is faithful when nothing is connected.
+
+**Run 2** (same, with the diagnostics-only synthetic backend, `AOE2_PAD_SYNTHETIC=1`: port 0 connected,
+Cross toggling every 500 ms): the hypothesis holds.
+
+| observation | original (no native pad) | native `pad_device` |
+|---|---|---|
+| state returned | 5 forever | 6 for port 0, 0 for port 1 (no pad) |
+| per-state function | `func_001279B8` (reset), 256+ | `func_001279C0` (process, flag 1), 256+ |
+| read called | never | 256+, returns 8 (analog report) |
+| report processing, buttons update | never | `func_00127E68`, `func_00127C88`: 256+ |
+| actuator update | never | `func_00128390`: 256+ |
+| init, slot max, open | returned 1 (inferred) | 1, 1 for both ports, 1 for both ports |
+
+The mode-info call answers 0x41 for table entry 0 (digital) and the module then selects the analog mode; the
+pressure-mode query returns 1. Rumble was not exercised: the game did not request any actuator output in 90 s
+(no `[synthetic-pad] rumble` line), so the vibration path is verified only by unit tests so far.
+
+The validator still ends `stalled_in_loop` (the game's own stall is a separate problem; this module neither
+fixes nor worsens it in this window).

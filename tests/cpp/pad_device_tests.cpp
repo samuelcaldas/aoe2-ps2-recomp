@@ -19,7 +19,8 @@ void device_reports_open_connected_port_as_stable() {
     Check(device.PortMax() == 2, "port max");
     Check(device.PortOpen(0, 0, 0) == 1, "open valid port");
     Check(device.State(0, 0) == 6, "opened connected port is stable");
-    Check(device.PortClose(0, 0) == 1 && device.State(0, 0) == 0, "close port");
+    Check(device.PortClose(0, 0) == 1, "close port");
+    Check(device.State(0, 0) == 0, "closed port is disconnected from libpad state");
 }
 
 void read_uses_current_mode_and_connection() {

@@ -12,6 +12,7 @@
 
 #include <array>
 #include <chrono>
+#include <iostream>
 
 namespace aoe2::game_hooks {
 namespace {
@@ -77,7 +78,26 @@ private:
     bool active_ = false;
     Clock::time_point last_applied_{};
 };
+
+class SyntheticPadBackend final : public aoe2::pad::PadBackend {
+public:
+    HostPadState Sample(int port) override {
+        if (port != 0) return {};
+        const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - start_).count();
+        const bool cross_down = (elapsed / 500) % 2 == 0;
+        return {true, static_cast<uint16_t>(cross_down ? static_cast<uint16_t>(aoe2::pad::PadButton::kCross) : 0u),
+                0.0f, 0.0f, 0.0f, 0.0f};
+    }
+    void Rumble(int port, uint8_t small_motor, uint8_t large_motor) override {
+        std::cerr << "[synthetic-pad] rumble port=" << port << " small=" << int(small_motor)
+                  << " large=" << int(large_motor) << std::endl;
+    }
+
+private:
+    Clock::time_point start_ = Clock::now();
+};
 }  // namespace
 
 std::unique_ptr<aoe2::pad::PadBackend> MakeRaylibPadBackend() { return std::make_unique<RaylibPadBackend>(); }
+std::unique_ptr<aoe2::pad::PadBackend> MakeSyntheticPadBackend() { return std::make_unique<SyntheticPadBackend>(); }
 }  // namespace aoe2::game_hooks
