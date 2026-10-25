@@ -6,8 +6,8 @@
 
 namespace aoe2::game_hooks {
 
-inline constexpr std::array<std::string_view, 10> kNativeModuleNames{
-    "kernel", "pad_device", "pad", "mouse", "keyboard", "file_cd", "memory_card", "hd", "gpu", "net"};
+inline constexpr std::array<std::string_view, 12> kNativeModuleNames{
+    "kernel", "pad_device", "pad", "mouse", "keyboard", "file_cd", "file", "cdvd", "memory_card", "hd", "gpu", "net"};
 
 class NativeModuleSwitches {
 public:
