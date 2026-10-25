@@ -7,6 +7,7 @@
 // A missing list is not an error: nothing is wrapped.
 #include "game_overrides.h"
 #include <aoe2/game_hooks/native_input.hpp>
+#include "file_snapshot.hpp"
 #include "pad_snapshot.hpp"
 #include "state_snapshot_capture.hpp"
 #include "ps2_runtime.h"
@@ -58,6 +59,10 @@ void traced_call(uint8_t* rdram, R5900Context* ctx, PS2Runtime* runtime)
         aoe2::game_hooks::diagnostics::OnModuleUpdate(rdram, aoe2::game_hooks::synthetic::Module::kMouse);
     if (slot.address == 0x00137000 && !aoe2::game_hooks::NativeKeyboardModuleInstalled())
         aoe2::game_hooks::diagnostics::OnModuleUpdate(rdram, aoe2::game_hooks::synthetic::Module::kKeyboard);
+    if (slot.address == 0x0012D540 || slot.address == 0x0012CCE8)
+        aoe2::game_hooks::diagnostics::ObserveFileState(rdram, call_number);
+    if (slot.address == 0x00129B10)
+        aoe2::game_hooks::diagnostics::ObserveCdvdState(rdram, call_number);
     if (should_log(call_number)) {
         std::cerr << "[call-trace] ret addr=0x" << std::hex << slot.address << " v0=0x"
                   << getRegU32(ctx, 2) << std::dec << std::endl;
