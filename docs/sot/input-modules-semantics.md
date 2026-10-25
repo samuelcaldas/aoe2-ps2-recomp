@@ -136,3 +136,27 @@ compute `entry + 6 + size` (entry +5 for size -1), with wrapping 32-bit address 
 Runtime adapters remain Task 6; no keyboard switch was enabled and no game build/run or
 original/native snapshot comparison was performed in this task. Unit tests and static
 binary review do not establish runtime parity.
+
+## Native module adapters and switches (Task 6, 2026-10-25)
+
+`game_hooks/src/kcet_mouse_module.cpp` and `kcet_keyboard_module.cpp` wire the native models
+to the runtime via `PS2_REGISTER_GAME_OVERRIDE`, gated behind `native_modules.ini` switches
+(`mouse=on` and `keyboard=on`).
+
+Design and execution contract:
+- The device RPC services (`MouseRpc`, `KeyboardRpc`) are exposed as shared thread-safe singletons
+  in `native_input_services.cpp` via `EnsureMouseRpc()` and `EnsureKeyboardRpc()`, so device handlers
+  and native module handlers invoke the same state without coupling initialization order.
+- Each module adapter verifies that the device layer is configured and present in `kcet_hooks.ini`.
+  If a module switch is enabled but device hooks are missing, module installation fails fast
+  with a descriptive error.
+- Function replacements require `hasFunction(address)`. The four binary alignment padding
+  functions (mouse `0x134F18`, `0x135D98`; keyboard `0x135F90`, `0x137200`) are valid empty returns
+  in the owned binary that do not have generated function units; the validator explicitly permits them.
+- Per-frame snapshots (`OnModuleUpdate`) occur exactly once per frame at the return of `ProcessEvents`.
+  When a native module is installed, `aoe2_call_trace.cpp` suppresses call-trace snapshot capture
+  for that module to avoid duplicate records.
+- Argument binding translates guest registers `a0..a3` and `t0..t3` into typed values, sets `pc = ra`,
+  and assigns `v0` for value-returning functions. Model execution is atomic within each handler,
+  honoring the non-blocking recompilation contract.
+

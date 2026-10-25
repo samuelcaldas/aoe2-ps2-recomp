@@ -6,6 +6,7 @@
 // with what first argument, and from where" before any of them is replaced.
 // A missing list is not an error: nothing is wrapped.
 #include "game_overrides.h"
+#include <aoe2/game_hooks/native_input.hpp>
 #include "pad_snapshot.hpp"
 #include "state_snapshot_capture.hpp"
 #include "ps2_runtime.h"
@@ -53,9 +54,9 @@ void traced_call(uint8_t* rdram, R5900Context* ctx, PS2Runtime* runtime)
     if (slot.address == 0x001273D8 && !aoe2::game_hooks::diagnostics::native_libpad_installed)
         aoe2::game_hooks::diagnostics::LogPadStep(rdram, slot_address);
     // Module update boundary for the original code; native handlers call the same function at their own return.
-    if (slot.address == 0x00135BF0)
+    if (slot.address == 0x00135BF0 && !aoe2::game_hooks::NativeMouseModuleInstalled())
         aoe2::game_hooks::diagnostics::OnModuleUpdate(rdram, aoe2::game_hooks::synthetic::Module::kMouse);
-    if (slot.address == 0x00137000)
+    if (slot.address == 0x00137000 && !aoe2::game_hooks::NativeKeyboardModuleInstalled())
         aoe2::game_hooks::diagnostics::OnModuleUpdate(rdram, aoe2::game_hooks::synthetic::Module::kKeyboard);
     if (should_log(call_number)) {
         std::cerr << "[call-trace] ret addr=0x" << std::hex << slot.address << " v0=0x"

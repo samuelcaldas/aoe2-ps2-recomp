@@ -2,11 +2,17 @@
 #include <aoe2/game_hooks/kcet_handlers.hpp>
 #include <aoe2/input/usb_mouse_rpc.hpp>
 #include "input_synthetic.hpp"
+#include "native_input_internal.hpp"
 #include "raylib.h"
 #include "runtime/ps2_memory.h"
 
 #include <cstring>
 #include <mutex>
+
+namespace aoe2::game_hooks::detail {
+std::mutex g_mouse_mutex;
+aoe2::input::UsbMouseRpcModel g_mouse_model;
+}  // namespace aoe2::game_hooks::detail
 
 namespace {
 constexpr int kRegA0 = 4;
@@ -14,8 +20,8 @@ constexpr int kRegA1 = 5;
 constexpr int kRegRa = 31;
 using aoe2::input::HostMouseReport;
 using aoe2::input::UsbMouseRpcModel;
-std::mutex g_mouse_mutex;
-UsbMouseRpcModel g_mouse_model;
+using aoe2::game_hooks::detail::g_mouse_mutex;
+using aoe2::game_hooks::detail::g_mouse_model;
 Vector2 g_last_position{};
 aoe2::game_hooks::synthetic::SyntheticMouse g_synthetic_mouse;
 bool g_has_last_position = false;
@@ -41,6 +47,7 @@ void SampleSyntheticMouse() {
     g_mouse_model.Submit(g_synthetic_mouse.Next(LogicalSteps(Module::kMouse).load()));
 }
 
+namespace aoe2::game_hooks::detail {
 void SampleHostMouse() {
     if (aoe2::game_hooks::synthetic::Enabled()) return SampleSyntheticMouse();
     const Vector2 position = GetMousePosition();
@@ -50,6 +57,10 @@ void SampleHostMouse() {
     g_mouse_model.SetConnected(true);
     g_mouse_model.Submit(HostMouseReport{position.x - last.x, position.y - last.y, HostButtons(), 0, GetMouseWheelMove()});
 }
+}  // namespace aoe2::game_hooks::detail
+
+namespace {
+using aoe2::game_hooks::detail::SampleHostMouse;
 
 void WriteReply(uint8_t* rdram, uint32_t guest_address, const UsbMouseRpcModel::Reply& reply) {
     uint8_t* destination = getMemPtr(rdram, guest_address);
