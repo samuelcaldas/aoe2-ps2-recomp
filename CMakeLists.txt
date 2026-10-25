@@ -198,5 +198,11 @@ add_executable(aoe2_cdvd_model_tests tests/cpp/cdvd_model_tests.cpp)
 target_link_libraries(aoe2_cdvd_model_tests PRIVATE aoe2_interfaces)
 add_test(NAME cdvd_model COMMAND aoe2_cdvd_model_tests)
 
+add_executable(aoe2_native_file_adapter_tests tests/cpp/native_file_adapter_tests.cpp)
+target_include_directories(aoe2_native_file_adapter_tests PRIVATE game_hooks/src)
+target_link_libraries(aoe2_native_file_adapter_tests PRIVATE aoe2_interfaces)
+add_test(NAME native_file_adapters COMMAND aoe2_native_file_adapter_tests)
+
+
 
 
