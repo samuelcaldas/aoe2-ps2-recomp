@@ -180,3 +180,9 @@ add_executable(aoe2_native_input_adapter_tests tests/cpp/native_input_adapter_te
 target_include_directories(aoe2_native_input_adapter_tests PRIVATE game_hooks/src)
 target_link_libraries(aoe2_native_input_adapter_tests PRIVATE aoe2_interfaces)
 add_test(NAME native_input_adapters COMMAND aoe2_native_input_adapter_tests)
+
+add_executable(aoe2_file_snapshot_tests tests/cpp/file_snapshot_tests.cpp)
+target_include_directories(aoe2_file_snapshot_tests PRIVATE game_hooks/src)
+target_link_libraries(aoe2_file_snapshot_tests PRIVATE aoe2_interfaces)
+add_test(NAME file_snapshot COMMAND aoe2_file_snapshot_tests)
+
