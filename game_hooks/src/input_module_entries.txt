@@ -1,0 +1,90 @@
+# Classification of the kt_mouse and kt_keybd functions for the native input modules.
+# Format: <module> <ENTRY|DEVICE|DEFERRED> <guest address> <reason>.
+# Derived from the decomp call graph; direct kernel users confirmed against the generated code (see docs/sot/input-modules-semantics.md).
+mouse DEFERRED 0x00134DE8 interrupt-handler removal; implemented by the kernel module services and called by generated kernel and disc-server code
+mouse ENTRY 0x00134E50 native
+mouse ENTRY 0x00134F18 native
+mouse DEFERRED 0x00134F20 reaches sema_create (sleeps or manages kernel objects); stays generated
+mouse DEFERRED 0x00134F50 reaches sema_delete (sleeps or manages kernel objects); stays generated
+mouse DEFERRED 0x00134F90 mouse sema wait (module lock); the native port is atomic inside a handler
+mouse DEFERRED 0x00134FB8 mouse sema signal (module unlock); the native port is atomic inside a handler
+mouse ENTRY 0x00134FE0 native
+mouse ENTRY 0x00135008 native
+mouse ENTRY 0x00135058 native
+mouse ENTRY 0x00135090 native
+mouse ENTRY 0x001350E0 native
+mouse ENTRY 0x00135118 native
+mouse ENTRY 0x001351B0 native
+mouse ENTRY 0x001351B8 native
+mouse ENTRY 0x00135238 native
+mouse ENTRY 0x00135258 native
+mouse ENTRY 0x001352D8 native
+mouse ENTRY 0x001353C0 native
+mouse ENTRY 0x00135478 native
+mouse ENTRY 0x001354A0 native
+mouse DEFERRED 0x001354C8 reaches sema_create,vblank_wait,vsync_init (sleeps or manages kernel objects); stays generated
+mouse DEFERRED 0x00135508 reaches sema_delete (sleeps or manages kernel objects); stays generated
+mouse ENTRY 0x00135530 native
+mouse ENTRY 0x00135598 native
+mouse ENTRY 0x001355D0 native
+mouse ENTRY 0x00135638 native
+mouse ENTRY 0x001356D8 native
+mouse ENTRY 0x001356E8 native
+mouse ENTRY 0x00135798 native
+mouse ENTRY 0x00135870 native
+mouse ENTRY 0x00135980 native
+mouse ENTRY 0x001359B8 native
+mouse ENTRY 0x001359D0 native
+mouse ENTRY 0x00135A38 native
+mouse ENTRY 0x00135AB8 native
+mouse ENTRY 0x00135B88 native
+mouse DEFERRED 0x00135BE8 reaches vblank_wait (sleeps or manages kernel objects); stays generated
+mouse ENTRY 0x00135BF0 native
+mouse DEFERRED 0x00135D60 reaches vblank_wait (sleeps or manages kernel objects); stays generated
+mouse ENTRY 0x00135D98 native
+mouse DEVICE 0x00135DA0 kcet.mouse.bind
+mouse DEVICE 0x00135DE8 kcet.mouse.get_info
+mouse DEVICE 0x00135E30 kcet.mouse.read
+mouse DEVICE 0x00135E78 kcet.mouse.device_info
+keyboard ENTRY 0x00135EC0 native
+keyboard ENTRY 0x00135F90 native
+keyboard DEFERRED 0x00135F98 reaches sema_create (sleeps or manages kernel objects); stays generated
+keyboard DEFERRED 0x00135FC8 reaches sema_delete (sleeps or manages kernel objects); stays generated
+keyboard DEFERRED 0x00136008 keyboard sema wait (module lock); the native port is atomic inside a handler
+keyboard DEFERRED 0x00136030 keyboard sema signal (module unlock); the native port is atomic inside a handler
+keyboard ENTRY 0x00136058 native
+keyboard ENTRY 0x00136080 native
+keyboard ENTRY 0x001360D0 native
+keyboard ENTRY 0x00136108 native
+keyboard ENTRY 0x00136158 native
+keyboard ENTRY 0x00136190 native
+keyboard ENTRY 0x00136228 native
+keyboard ENTRY 0x00136230 native
+keyboard ENTRY 0x001362B8 native
+keyboard ENTRY 0x001362D8 native
+keyboard ENTRY 0x00136360 native
+keyboard ENTRY 0x00136450 native
+keyboard ENTRY 0x00136508 native
+keyboard ENTRY 0x00136598 native
+keyboard DEFERRED 0x00136628 reaches sema_create,vblank_wait,vsync_init (sleeps or manages kernel objects); stays generated
+keyboard DEFERRED 0x00136668 reaches sema_delete (sleeps or manages kernel objects); stays generated
+keyboard ENTRY 0x00136690 native
+keyboard ENTRY 0x001366F8 native
+keyboard ENTRY 0x00136730 native
+keyboard ENTRY 0x00136798 native
+keyboard ENTRY 0x00136840 native
+keyboard ENTRY 0x00136850 native
+keyboard ENTRY 0x00136908 native
+keyboard ENTRY 0x001369E8 native
+keyboard ENTRY 0x00136B50 native
+keyboard ENTRY 0x00136BE0 native
+keyboard ENTRY 0x00136C90 native
+keyboard ENTRY 0x00136D20 native
+keyboard ENTRY 0x00136DD0 native
+keyboard ENTRY 0x00136DE8 native
+keyboard ENTRY 0x00136E50 native
+keyboard ENTRY 0x00136ED0 native
+keyboard ENTRY 0x00136FA0 native
+keyboard ENTRY 0x00137000 native
+keyboard DEFERRED 0x001371C8 reaches vblank_wait (sleeps or manages kernel objects); stays generated
+keyboard ENTRY 0x00137200 native

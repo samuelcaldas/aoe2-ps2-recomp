@@ -54,3 +54,20 @@ How much the oracle sees: the mouse area has 17 non-zero bytes at step 1 and 24 
 first and last snapshot, two distinct hashes); the keyboard area has 21 non-zero bytes throughout (three bytes differ, three
 distinct hashes). The window reaches the first synthetic mouse motion (step 50) but not the first button toggle (step 200) nor the
 second keyboard press (step 120). A longer window (60 s or more) would widen coverage and should be used before declaring parity.
+
+## Function coverage map (2026-10-25)
+
+`game_hooks/src/input_module_entries.txt` classifies every function of both modules exactly once, checked by
+`tests/test_input_modules_coverage.py` (and against the decomp sources when the checkout is present).
+
+| Module | Functions | ENTRY (native port) | DEVICE (already native) | DEFERRED |
+|---|---|---|---|---|
+| kt_mouse | 45 | 32 | 4 (RPC bind/get_info/read/device_info) | 9 |
+| kt_keybd | 42 | 35 | 0 | 7 |
+| kt_usbkeybd_drv | 6 | the six `kcet.keyboard.*` roles | | |
+
+Deferral evidence:
+- The four lock/unlock functions (mouse 0x134F90/0x134FB8, keyboard 0x136008/0x136030) are called only from inside
+  their own module. Native ports run atomically inside one handler and skip module semaphores, so they are not replaced.
+- Semaphore creation and the wait loop (e.g. 0x134F20, 0x135D60) reach kernel services and stay with the kernel adapter.
+- 0x134DE8 removes an interrupt handler; it is a kernel-module service also called by generated kernel and disc-server code.
