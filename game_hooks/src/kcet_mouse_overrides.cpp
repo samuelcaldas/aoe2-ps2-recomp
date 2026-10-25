@@ -46,6 +46,7 @@ void SampleSyntheticMouse() {
     g_mouse_model.SetConnected(true);
     g_mouse_model.Submit(g_synthetic_mouse.Next(LogicalSteps(Module::kMouse).load()));
 }
+}  // namespace
 
 namespace aoe2::game_hooks::detail {
 void SampleHostMouse() {

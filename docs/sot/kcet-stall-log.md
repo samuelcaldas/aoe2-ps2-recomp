@@ -444,3 +444,20 @@ exhaustively differential-tested. The supplied validator assessment remains
 claim. Host build succeeds; all 14 CTests pass; Python runs 302 tests with two skips.
 No game build/run was performed in this validation. Evidence and remaining gaps:
 `docs/sot/pad-libpad-semantics.md`.
+
+### Native kt_mouse and kt_keybd, bounded observer comparison (2026-10-25)
+
+A 30-second differential game capture was performed on desktop Linux (`AOE2_INPUT_SYNTHETIC=1 AOE2_STATE_SNAPSHOT=1`)
+comparing the recompiled game code baseline (`mouse=off, keyboard=off`) with the native C++ module
+replacements (`mouse=on, keyboard=on`).
+
+Both runs produced exactly 34 state snapshots across mouse and keyboard ports with zero skips or duplicates.
+All 34 snapshots matched byte-for-byte with identical FNV-1a checksums and state buffers:
+- Keyboard: step 1 `4a55d94f060a8109`, steps 2–16 `fce31a51e47fb209`, step 64 `c0e5ba9190a348b9`
+- Mouse: steps 1–16 `4a64f49b7f28aa53`, step 64 `1e1c37cab910a075`
+
+Validator status remained `stalled_in_loop` (`real_frames=4, frames_changed=False`) in both cases,
+demonstrating that neither mouse nor keyboard causes the boot stall.
+Host unit test suites (`kt_mouse_model_tests`, `kt_keybd_model_tests`, `native_input_adapter_tests`)
+pass cleanly (20/20 CTests green). Evidence and boundaries: `docs/sot/input-modules-semantics.md`.
+

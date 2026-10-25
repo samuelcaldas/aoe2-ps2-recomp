@@ -54,6 +54,7 @@ void ReturnToCaller(R5900Context* ctx, uint32_t value) {
     setReturnU32(ctx, value);
     ctx->pc = getRegU32(ctx, kRegRa);
 }
+}  // namespace
 
 namespace aoe2::game_hooks::detail {
 void SampleHostKeyboard() {
