@@ -29,6 +29,7 @@ add_library(aoe2_interfaces STATIC
     mouse/src/kt_mouse_mid.cpp
     mouse/src/kt_mouse_top.cpp
     file/src/kt_file_model.cpp
+    cdvd/src/cdvd_model.cpp
     pad/src/pad_report.cpp
     pad/src/kt_libpad_math.cpp
     pad/src/kt_libpad_model.cpp
@@ -57,6 +58,7 @@ target_include_directories(aoe2_interfaces PUBLIC
     mouse/include
     keyboard/include
     file/include
+    cdvd/include
     tests/cpp
 )
 
@@ -191,5 +193,10 @@ add_test(NAME file_snapshot COMMAND aoe2_file_snapshot_tests)
 add_executable(aoe2_kt_file_model_tests tests/cpp/kt_file_model_tests.cpp)
 target_link_libraries(aoe2_kt_file_model_tests PRIVATE aoe2_interfaces)
 add_test(NAME kt_file_model COMMAND aoe2_kt_file_model_tests)
+
+add_executable(aoe2_cdvd_model_tests tests/cpp/cdvd_model_tests.cpp)
+target_link_libraries(aoe2_cdvd_model_tests PRIVATE aoe2_interfaces)
+add_test(NAME cdvd_model COMMAND aoe2_cdvd_model_tests)
+
 
 
