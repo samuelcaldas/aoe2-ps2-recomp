@@ -99,3 +99,40 @@ allocation exhaustion, full/disconnected queues, payload clamping, conditional r
 reports and draining until empty. These tests are not original/native snapshot evidence.
 Runtime registration and shared RPC adapters remain Task 6; no mouse switch is enabled by
 this change and no new game run or parity claim is made here.
+
+## Native keyboard model (Task 5, 2026-10-25)
+
+`keyboard/` implements the 35 keyboard ENTRY functions over `GuestAccess`, with an abstract
+`KeyboardRpc` for the six-function device layer. Slots are 0x78 bytes; four 0x14-byte queue
+entries begin at +0x28. Each entry contains a ready word and a 16-byte packet (two header
+bytes plus up to 13 payload bytes, zero-filled through the 14-byte payload area). Lengths
+of 14 or more trigger the original assertion. Full queues discard new packets but return
+success for an allocated port. Init accepts zero or one keyboard; two triggers the assertion.
+The two alignment entries were verified as empty returns directly in the owned ELF.
+
+Binary review did not confirm the earlier suspected discrepancy at `func_00136850`:
+negative mutation indices return -1, allocated ports can change state, and upper bounds
+invoke the original assertion. No decomp control-flow correction was required for this task.
+
+Request naming must not be used to infer device command identity. The decomp's Repeat
+request (+0x14) calls the device SetLed RPC; its Led request (+0x18) calls SetCapsType.
+The native model preserves that mapping. Both mark pending requests with bit 31, send
+only the low byte, and acknowledge only on a zero device return. `KeyboardRpc` command
+methods take both the device index and value, like the original USB wrappers. No new
+repeat timer is introduced: repeated packets, presses and releases are preserved in order.
+
+The signed packet-length assertion does not reject a negative length; the original memcpy
+helper interprets its count as unsigned 32-bit. The port preserves this conversion rather
+than silently treating negative sizes as zero. The normal device path supplies an unsigned
+byte length. Invalid-memory behavior for an enormous copy is not claimed equivalent.
+
+Host tests cover allocation exhaustion, empty/full/wrapped queues, packet header truncation,
+13/14-byte boundaries and zero padding, payload clamping, release/reset, request retry and
+acknowledgment, RPC errors, and press/repeat/release drained within the same update.
+Model and processing tests are separate translation units of the same CTest target.
+A review claim that negative-size padding differed was rejected: both original and native
+compute `entry + 6 + size` (entry +5 for size -1), with wrapping 32-bit address arithmetic.
+
+Runtime adapters remain Task 6; no keyboard switch was enabled and no game build/run or
+original/native snapshot comparison was performed in this task. Unit tests and static
+binary review do not establish runtime parity.

@@ -121,11 +121,11 @@
 - Consumes: `GuestAccess`, `KeyboardRpc` (interface pura análoga: `Info`, `Read`, `DeviceInfo`, `SetLed(mask)`, `SetCapsType(type)`).
 - Produces: `class KtKeybdModel(GuestAccess&, KeyboardRpc&)`, mesma organização em camadas (folhas: alocação e estado da fila, payload e preenchimento, requisição de LED e repetição; topo: atualização por quadro). O teclado sintético do host chega pelo `KeyboardRpc::Read` existente.
 
-- [ ] **Step 1: Write the failing tests**: init e alocação; payload da fila com preenchimento; fila vazia; repetição; requisição de LED e de tipo de caps; tecla pressionada e solta no mesmo quadro (Review Focus 3); asserções do original. Esperados do código gerado.
-- [ ] **Step 2: Run** `cmake --build build --target aoe2_kt_keybd_model_tests` — Expected: falha de compilação.
-- [ ] **Step 3: Implement** camada por camada, conferindo o fluxo de controle de cada função no código gerado.
-- [ ] **Step 4: Run** `ctest` — Expected: passa.
-- [ ] **Step 5: Commit** `feat: native kt_keybd model over guest memory`.
+- [x] **Step 1: Write the failing tests**: init/alocação, filas vazias/cheias/envolvimento, payload e preenchimento, repetição e press/release no mesmo quadro, requisições e asserções. Testes de modelo e processamento separados para manter arquivos abaixo de 200 linhas.
+- [x] **Step 2: Run** `cmake --build build --target aoe2_kt_keybd_model_tests` — falhou pelo cabeçalho ausente e depois pelos métodos ainda não implementados.
+- [x] **Step 3: Implement** folhas, camada média e topo; 35 ENTRY mapeadas. Revisão binária não confirmou a suspeita anterior em `func_00136850`. `KeyboardRpc::SetLed` e `SetCapsType` recebem índice e valor como os wrappers originais.
+- [x] **Step 4: Run** `ctest` e Python — 19/19 CTests; Python 308 testes, dois skips. A regressão do limite de 14 bytes foi verificada por mutação RED→GREEN. Sem paridade de runtime reivindicada.
+- [x] **Step 5: Commit** `feat: native kt_keybd model over guest memory`.
 
 ---
 
