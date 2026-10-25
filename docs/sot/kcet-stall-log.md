@@ -461,3 +461,16 @@ demonstrating that neither mouse nor keyboard causes the boot stall.
 Host unit test suites (`kt_mouse_model_tests`, `kt_keybd_model_tests`, `native_input_adapter_tests`)
 pass cleanly (20/20 CTests green). Evidence and boundaries: `docs/sot/input-modules-semantics.md`.
 
+### Native kt_file and kt_libcdvd_server, bounded observer comparison (2026-10-25)
+
+A 30-second differential capture on desktop Linux (`AOE2_INPUT_SYNTHETIC=1 AOE2_STATE_SNAPSHOT=1`)
+evaluated the native file table and CDVD server replacements (`file=on, cdvd=on`) against the recompiled baseline.
+
+Both runs recorded 34 state snapshots across steps 1..16 and 64, with 34/34 matching byte-for-byte (0 mismatches).
+Native overrides installed and active in the log (`native kt_file: installed 4/5 functions`,
+`native kt_libcdvd_server: installed 5/6 functions`).
+Validator status remained `stalled_in_loop` (`real_frames=2, frames_changed=False`).
+Host unit and differential tests (`kt_file_model`, `cdvd_model`, `file_snapshot`, `native_file_adapters`,
+`file_differential`) all pass (25/25 CTests green). Evidence: `docs/sot/file-cdvd-semantics.md`.
+
+
