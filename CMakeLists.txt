@@ -28,6 +28,7 @@ add_library(aoe2_interfaces STATIC
     mouse/src/kt_mouse_leaf.cpp
     mouse/src/kt_mouse_mid.cpp
     mouse/src/kt_mouse_top.cpp
+    file/src/kt_file_model.cpp
     pad/src/pad_report.cpp
     pad/src/kt_libpad_math.cpp
     pad/src/kt_libpad_model.cpp
@@ -55,6 +56,7 @@ target_include_directories(aoe2_interfaces PUBLIC
     pad/include
     mouse/include
     keyboard/include
+    file/include
     tests/cpp
 )
 
@@ -185,4 +187,9 @@ add_executable(aoe2_file_snapshot_tests tests/cpp/file_snapshot_tests.cpp)
 target_include_directories(aoe2_file_snapshot_tests PRIVATE game_hooks/src)
 target_link_libraries(aoe2_file_snapshot_tests PRIVATE aoe2_interfaces)
 add_test(NAME file_snapshot COMMAND aoe2_file_snapshot_tests)
+
+add_executable(aoe2_kt_file_model_tests tests/cpp/kt_file_model_tests.cpp)
+target_link_libraries(aoe2_kt_file_model_tests PRIVATE aoe2_interfaces)
+add_test(NAME kt_file_model COMMAND aoe2_kt_file_model_tests)
+
 
