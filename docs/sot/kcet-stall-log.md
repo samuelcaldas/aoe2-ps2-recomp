@@ -484,5 +484,18 @@ Validator status remained `stalled_in_loop` (`real_frames=4, frames_changed=Fals
 Host unit and differential test suites (`kt_mc_model`, `mc_storage_model`, `mc_snapshot`, `native_mc_adapters`,
 `mc_differential`) pass cleanly (30/30 CTests green). Evidence: `docs/sot/mc-semantics.md`.
 
+### Native kt_hd, bounded observer comparison (2026-10-25)
+
+A 30-second differential capture on desktop Linux (`AOE2_INPUT_SYNTHETIC=1 AOE2_STATE_SNAPSHOT=1`)
+evaluated the native hard drive / virtual disc subsystem replacement (`hd=on`) against the recompiled baseline.
+
+Both runs recorded 38 state snapshots across steps 1..16 and 64, including 4 HD snapshots at steps 1..4 (`fnv=8421ae126c7ced25`),
+with 38/38 matching byte-for-byte (0 mismatches).
+Native override active in log (`native kt_hd: installed 5/7 functions`).
+Validator status remained `stalled_in_loop` (`real_frames=4, frames_changed=False`).
+Host unit and differential tests (`kt_hd_model`, `hd_storage_model`, `hd_snapshot`, `native_hd_adapters`,
+`hd_differential`) all pass (35/35 CTests green). Evidence: `docs/sot/hd-semantics.md`.
+
+
 
 
