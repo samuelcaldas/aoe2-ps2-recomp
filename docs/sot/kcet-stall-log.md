@@ -473,4 +473,16 @@ Validator status remained `stalled_in_loop` (`real_frames=2, frames_changed=Fals
 Host unit and differential tests (`kt_file_model`, `cdvd_model`, `file_snapshot`, `native_file_adapters`,
 `file_differential`) all pass (25/25 CTests green). Evidence: `docs/sot/file-cdvd-semantics.md`.
 
+### Native kt_mc_2, bounded observer comparison (2026-10-25)
+
+A 30-second differential game capture on desktop Linux (`AOE2_INPUT_SYNTHETIC=1 AOE2_STATE_SNAPSHOT=1`)
+evaluated the native memory card module replacement (`memory_card=on`) against the recompiled baseline.
+
+Both runs recorded 34 state snapshots across steps 1..16 and 64 with 34/34 matching byte-for-byte (0 mismatches).
+Native override active in log (`native kt_mc_2: installed 4/11 functions`).
+Validator status remained `stalled_in_loop` (`real_frames=4, frames_changed=False`).
+Host unit and differential test suites (`kt_mc_model`, `mc_storage_model`, `mc_snapshot`, `native_mc_adapters`,
+`mc_differential`) pass cleanly (30/30 CTests green). Evidence: `docs/sot/mc-semantics.md`.
+
+
 
