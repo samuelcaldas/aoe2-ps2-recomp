@@ -22,6 +22,9 @@ add_library(aoe2_interfaces STATIC
     game_hooks/src/native_module_switches.cpp
     kernel/src/vsync_model.cpp
     kernel/src/thread_model.cpp
+    mouse/src/kt_mouse_leaf.cpp
+    mouse/src/kt_mouse_mid.cpp
+    mouse/src/kt_mouse_top.cpp
     pad/src/pad_report.cpp
     pad/src/kt_libpad_math.cpp
     pad/src/kt_libpad_model.cpp
@@ -47,8 +50,13 @@ target_include_directories(aoe2_interfaces PUBLIC
     game_hooks/include
     kernel/include
     pad/include
+    mouse/include
     tests/cpp
 )
+
+add_executable(aoe2_kt_mouse_model_tests tests/cpp/kt_mouse_model_tests.cpp)
+target_link_libraries(aoe2_kt_mouse_model_tests PRIVATE aoe2_interfaces)
+add_test(NAME kt_mouse_model COMMAND aoe2_kt_mouse_model_tests)
 
 # Desktop host smoke test executable
 add_executable(aoe2_smoke_test

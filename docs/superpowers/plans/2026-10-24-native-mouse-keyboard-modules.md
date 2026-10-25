@@ -103,11 +103,11 @@
 - Produces: `aoe2::mouse::MouseRpc` (interface pura: `Info(uint32_t reply)`, `Read(int port, uint32_t reply)`, `DeviceInfo(int port, uint32_t reply)` escrevendo os 32 bytes de resposta) e `class KtMouseModel(GuestAccess&, MouseRpc&)` com um método por função portada (nome pelo papel, comentário com o símbolo do decomp), em camadas de dependência: folhas (índices e acessores do anel de leitura e escrita, `func_00134E50` init, `func_00135008`, `func_00135058`, `func_00135090`, `func_001350E0`, `func_001351B0`, `func_001351B8`, `func_00135238`), camada média (`func_00135118`, `func_001352D8`, `func_001353C0`, `func_00135530`, `func_001356E8`, `func_00135798`) e topo (`func_00135870` posta evento, `func_00135BF0` processa eventos). O processamento de eventos chama o `MouseRpc` onde o original chama os RPCs (`func_00135DE8`, `func_00135E30`, `func_00135E78`).
 - Layout das estruturas (`KT_MOUSE` de 0xB0 bytes, `KT_MOUSE_WORK`, blocos de 0xC) **conferido no código gerado**, não no cabeçalho do decomp.
 
-- [ ] **Step 1: Write the failing tests** `kt_mouse_model_tests.cpp`, por camada: init com `n_mouse` 1 (e 0, 2 pela asserção do original); escrita e leitura no anel com 0/1/N/N+1 eventos e envolvimento do índice; `PostEvent` seguido de `ReadPacket` devolve botões, `dx`, `dy` e roda conforme o original; `ProcessEvents` com um `MouseRpc` falso devolvendo um evento de 4 bytes grava um evento no anel e repete até esvaziar; cada ramo de erro do original (porta inexistente, fila cheia) reproduzido por teste. Os valores esperados vêm do código gerado, não do decomp.
-- [ ] **Step 2: Run** `cmake --build build --target aoe2_kt_mouse_model_tests` — Expected: falha de compilação.
-- [ ] **Step 3: Implement** camada por camada (folhas, média, topo), um commit parcial local por camada se necessário; cada função confere seu fluxo de controle com o código gerado antes de escrever.
-- [ ] **Step 4: Run** `ctest --test-dir build --output-on-failure` — Expected: passa.
-- [ ] **Step 5: Commit** `feat: native kt_mouse model over guest memory`.
+- [x] **Step 1: Write the failing tests** `kt_mouse_model_tests.cpp`, por camada: init com `n_mouse` 0, 1 e 2 aceitos e 3 causando a asserção (conferido no binário); escrita e leitura no anel com 0/1/N/N+1 eventos e envolvimento do índice; `PostEvent` seguido de `ReadPacket` devolve botões, `dx`, `dy` e roda conforme o original; `ProcessEvents` com um `MouseRpc` falso devolvendo eventos de 4 bytes grava eventos no anel e repete até esvaziar; porta inexistente e fila cheia reproduzidas por teste. Os valores esperados vêm do código gerado, não do decomp.
+- [x] **Step 2: Run** `cmake --build build --target aoe2_kt_mouse_model_tests` — falhou pela ausência do cabeçalho; depois, pelos métodos ainda não implementados.
+- [x] **Step 3: Implement** camadas folha, média e topo; 32 funções ENTRY mapeadas, com revisão independente do fluxo de controle. Os dois retornos de alinhamento foram conferidos diretamente no ELF.
+- [x] **Step 4: Run** `ctest --test-dir build --output-on-failure` — 18/18; Python 308 testes, dois skips. Revisão independente sem achados acionáveis. Sem medição de paridade nesta task.
+- [x] **Step 5: Commit** `feat: native kt_mouse model over guest memory`.
 
 ---
 

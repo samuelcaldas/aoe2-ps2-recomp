@@ -60,7 +60,7 @@ second keyboard press (step 120). A longer window (60 s or more) would widen cov
 `game_hooks/src/input_module_entries.txt` classifies every function of both modules exactly once, checked by
 `tests/test_input_modules_coverage.py` (and against the decomp sources when the checkout is present).
 
-| Module | Functions | ENTRY (native port) | DEVICE (already native) | DEFERRED |
+| Module | Functions | ENTRY (planned replacement set) | DEVICE (already native) | DEFERRED |
 |---|---|---|---|---|
 | kt_mouse | 45 | 32 | 4 (RPC bind/get_info/read/device_info) | 9 |
 | kt_keybd | 42 | 35 | 0 | 7 |
@@ -71,3 +71,31 @@ Deferral evidence:
   their own module. Native ports run atomically inside one handler and skip module semaphores, so they are not replaced.
 - Semaphore creation and the wait loop (e.g. 0x134F20, 0x135D60) reach kernel services and stay with the kernel adapter.
 - 0x134DE8 removes an interrupt handler; it is a kernel-module service also called by generated kernel and disc-server code.
+
+## Native mouse model (Task 4, 2026-10-25)
+
+`mouse/` implements the 32 ENTRY functions as a host-only guest-memory model: initialization,
+ring access, allocation, payloads, record reconciliation and event processing. The two alignment
+entries are genuine empty returns, verified directly in the owned ELF; they are not device stubs.
+`MouseRpc` supplies the existing device boundary without introducing a guest dispatch or wait.
+The origin commit is recorded in each ported source/header.
+
+Binary checks preserve the following non-obvious behavior:
+- Initialization accepts zero and two mice (and does not reject negative counts); only counts above
+  two trigger the original assertion. The plan's wording suggesting assertions for zero/two was wrong.
+- Slots are 0xB0 bytes; four 0x24-byte entries start at +0x20. ResetQueue receives slot +0x14,
+  clears +0x0C for 0x90 bytes, then resets its +8 and +4 indices. An occupied write entry drops
+  the new event but PostEvent still returns success for an allocated port.
+- A negative payload length is clamped to eight through the original unsigned comparison.
+  The reader does not impose an additional length cap. Negative mutation indices return -1;
+  upper bounds invoke the original assertion instead of silently clamping.
+- Device-info count and event bytes are signed; buttons, dx, dy and wheel are sign-extended
+  to the queued words. A report type below four suppresses the wheel, even when negative.
+- Port-state access is signed 16-bit. A reset of inactive ports changes only that state;
+  it does not clear payloads or queues. Forced resets count every slot, including disconnected ones.
+
+The model tests cover initialization boundaries, 0/1/4/5 queued events, wrapping and reuse,
+allocation exhaustion, full/disconnected queues, payload clamping, conditional release, signed
+reports and draining until empty. These tests are not original/native snapshot evidence.
+Runtime registration and shared RPC adapters remain Task 6; no mouse switch is enabled by
+this change and no new game run or parity claim is made here.
