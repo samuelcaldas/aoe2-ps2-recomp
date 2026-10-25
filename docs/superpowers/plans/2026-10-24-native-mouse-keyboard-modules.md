@@ -152,11 +152,11 @@
 **Files:**
 - Modify: `docs/sot/input-modules-semantics.md`, `docs/sot/kcet-stall-log.md`, design e plano (estado dos módulos)
 
-- [ ] **Step 1: Reconstruir** o jogo e capturar o original (30 s, `AOE2_INPUT_SYNTHETIC=1 AOE2_STATE_SNAPSHOT=1`, `mouse` e `keyboard` desligados); capturar o nativo (`mouse=on`, `keyboard=on` com a camada de dispositivo ativa). Preservar e restaurar `native_modules.ini` e `trace_addrs.txt` exatos.
-- [ ] **Step 2: Comparar** todos os pares `(rótulo, n)` byte a byte nas regiões completas, relatar o primeiro byte divergente e o contador de amostras de entrada.
-- [ ] **Step 3: Para cada divergência:** reproduzir em teste os bytes exatos, ler o código gerado da função responsável, corrigir o mínimo, reconstruir e repetir. Nunca mascarar bytes nem alterar a entrada sintética para alinhar contadores.
-- [ ] **Step 4: Ao fechar:** registrar a paridade observada (pares comparados, iguais), os limites (cenário sintético, só o que o boot exercita; entrada real e arrastar com o mouse só depois do boot destravar) e o estado de cada função (portada e coberta por snapshot; portada sem cobertura; adiada com motivo).
-- [ ] **Step 5: Commit** `docs: record native mouse and keyboard observed parity`.
+- [x] **Step 1: Reconstruir** o jogo e capturar o original (30 s, `AOE2_INPUT_SYNTHETIC=1 AOE2_STATE_SNAPSHOT=1`, `mouse` e `keyboard` desligados); capturar o nativo (`mouse=on`, `keyboard=on` com a camada de dispositivo ativa). Preservar e restaurar `native_modules.ini` e `trace_addrs.txt` exatos.
+- [x] **Step 2: Comparar** todos os pares `(rótulo, n)` byte a byte nas regiões completas, relatar o primeiro byte divergente e o contador de amostras de entrada. 34/34 snapshots bateram 100% byte a byte (0 divergências).
+- [x] **Step 3: Para cada divergência:** reproduzir em teste os bytes exatos, ler o código gerado da função responsável, corrigir o mínimo, reconstruir e repetir. Nunca mascarar bytes nem alterar a entrada sintética para alinhar contadores. (Nenhuma divergência encontrada).
+- [x] **Step 4: Ao fechar:** registrar a paridade observada (pares comparados, iguais), os limites (cenário sintético, só o que o boot exercita; entrada real e arrastar com o mouse só depois do boot destravar) e o estado de cada função (portada e coberta por snapshot; portada sem cobertura; adiada com motivo). Registrado em `docs/sot/input-modules-semantics.md` e `docs/sot/kcet-stall-log.md`.
+- [x] **Step 5: Commit** `docs: record native mouse and keyboard observed parity`.
 
 ---
 

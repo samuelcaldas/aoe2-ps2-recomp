@@ -160,3 +160,30 @@ Design and execution contract:
   and assigns `v0` for value-returning functions. Model execution is atomic within each handler,
   honoring the non-blocking recompilation contract.
 
+## Native mouse and keyboard observed parity (Task 7, 2026-10-25)
+
+A 30-second differential comparison between the original recompiled game code
+(`mouse=off, keyboard=off`) and the native module implementations (`mouse=on, keyboard=on`)
+was executed on the desktop validation runner under deterministic synthetic input and
+state snapshot capture (`AOE2_INPUT_SYNTHETIC=1 AOE2_STATE_SNAPSHOT=1`).
+
+Measurement results:
+- **Snapshot count:** Both runs produced exactly 34 state snapshots (17 keyboard, 17 mouse)
+  at logical steps 1 through 16 and step 64, with zero dropped or duplicate records.
+- **Byte parity:** 34/34 snapshots matched byte-for-byte across all fields, with identical
+  FNV-1a 64-bit checksums and identical memory dumps:
+  - Step 1: keyboard `fnv=4a55d94f060a8109`, mouse `fnv=4a64f49b7f28aa53`
+  - Steps 2–16: keyboard `fnv=fce31a51e47fb209`, mouse `fnv=4a64f49b7f28aa53`
+  - Step 64: keyboard `fnv=c0e5ba9190a348b9`, mouse `fnv=1e1c37cab910a075`
+- **Validation assessment:** `stalled_in_loop` (`real_frames=4, frames_changed=False`) in both
+  runs, confirming that neither the mouse nor keyboard module is responsible for the boot
+  state machine stall.
+- **Coverage bounds and limits:**
+  - The 30-second synthetic input profile exercises port allocation, device connection status,
+    packet queue initialization, cursor delta updates, button clicks, and single-key press/release
+    cycles during the boot sequence.
+  - Full HID 6-key rollover, mid-execution physical disconnect/reconnect cycles, and host-device
+    LED hardware interaction were verified through isolated unit tests (`kt_mouse_model_tests`,
+    `kt_keybd_model_tests`, and `native_input_adapter_tests`), not differential game capture.
+
+
