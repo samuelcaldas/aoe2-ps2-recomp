@@ -3,6 +3,7 @@
 #include <aoe2/input/guest_keyboard.hpp>
 #include <aoe2/input/usb_keyboard_rpc.hpp>
 #include "input_synthetic.hpp"
+#include "native_input_internal.hpp"
 #include <bitset>
 #include <utility>
 #include "raylib.h"
@@ -11,14 +12,19 @@
 #include <cstring>
 #include <mutex>
 
+namespace aoe2::game_hooks::detail {
+std::mutex g_keyboard_mutex;
+aoe2::input::UsbKeyboardRpcModel g_keyboard_model;
+}  // namespace aoe2::game_hooks::detail
+
 namespace {
 constexpr int kRegA0 = 4;
 constexpr int kRegA1 = 5;
 constexpr int kRegRa = 31;
 using aoe2::input::GuestKeyboardAdapter;
 using aoe2::input::UsbKeyboardRpcModel;
-std::mutex g_keyboard_mutex;
-UsbKeyboardRpcModel g_keyboard_model;
+using aoe2::game_hooks::detail::g_keyboard_mutex;
+using aoe2::game_hooks::detail::g_keyboard_model;
 GuestKeyboardAdapter g_keyboard_adapter;
 std::bitset<256> g_previous_host_keys;
 
@@ -49,6 +55,7 @@ void ReturnToCaller(R5900Context* ctx, uint32_t value) {
     ctx->pc = getRegU32(ctx, kRegRa);
 }
 
+namespace aoe2::game_hooks::detail {
 void SampleHostKeyboard() {
     g_keyboard_model.SetConnected(true);
     std::bitset<256> current;
@@ -67,6 +74,10 @@ void SampleHostKeyboard() {
     }
     g_previous_host_keys = current;
 }
+}  // namespace aoe2::game_hooks::detail
+
+namespace {
+using aoe2::game_hooks::detail::SampleHostKeyboard;
 
 void WriteKeyboardReply(uint8_t* rdram, uint32_t guest_address,
                         const UsbKeyboardRpcModel::Reply& reply) {

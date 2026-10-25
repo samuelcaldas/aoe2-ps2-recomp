@@ -139,11 +139,11 @@
 - Produces: `aoe2::mouse::MouseRpc& EnsureMouseRpc()` e `aoe2::keyboard::KeyboardRpc& EnsureKeyboardRpc()` (singletons compartilhados entre o gancho de dispositivo e o módulo, idempotentes, sem depender da ordem de registro estático); os `.inc` no formato do `kt_libpad_entries.inc` (`ENTRY_R`/`ENTRY_V`/`DEFERRED`); instaladores que exigem o interruptor do módulo e a camada de dispositivo presentes, e registram `[native-mouse]`/`[native-keyboard]` nas 3 primeiras chamadas e em potências de 2. Argumentos além do quarto vêm de `t0..t3`; retorno em `v0`; `pc = ra`; nada bloqueia. Funções adiadas continuam geradas.
 - Os 4 + 6 endereços do nível de dispositivo **não** entram nos `.inc` (já substituídos pelos ganchos).
 
-- [ ] **Step 1: Write the failing tests**: `tests/test_native_input_entries.py` (contagens 41 e 42 mais os adiados e a regra de não sobreposição com `kcet_hooks.ini`'s roles) e um teste C++ do mapeamento de argumentos com `FakeGuestMemory`.
-- [ ] **Step 2: Run** os testes — Expected: falham.
-- [ ] **Step 3: Implement** os serviços compartilhados e os instaladores (use `hasFunction`, não `lookupFunction`; mensagem clara se o interruptor do módulo estiver ligado sem a camada de dispositivo).
-- [ ] **Step 4: Run** `ctest`, Python e a checagem de sintaxe de unidade única dos adaptadores novos — Expected: passam.
-- [ ] **Step 5: Commit** `feat: native mouse and keyboard module adapters behind their switches`.
+- [x] **Step 1: Write the failing tests**: `tests/test_native_input_entries.py` (contagens 41 e 42 mais os adiados e a regra de não sobreposição com `kcet_hooks.ini`'s roles) e um teste C++ do mapeamento de argumentos com `FakeGuestMemory`.
+- [x] **Step 2: Run** os testes — falha inicial verificada para ambos.
+- [x] **Step 3: Implement** os serviços compartilhados e os instaladores (use `hasFunction`, não `lookupFunction`; mensagem clara se o interruptor do módulo estiver ligado sem a camada de dispositivo).
+- [x] **Step 4: Run** `ctest`, Python e a checagem de sintaxe de unidade única dos adaptadores novos — 20/20 CTests passaram; Python 310 testes passaram (2 skips); compilação direta via g++ passou.
+- [x] **Step 5: Commit** `feat: native mouse and keyboard module adapters behind their switches`.
 
 ---
 

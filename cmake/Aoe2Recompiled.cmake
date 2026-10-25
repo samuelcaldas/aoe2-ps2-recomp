@@ -123,6 +123,9 @@ if(AOE2_BUILD_GAME)
         game_hooks/src/kcet_pad_backend.cpp
         game_hooks/src/kcet_pad.cpp
         game_hooks/src/kcet_libpad.cpp
+        game_hooks/src/native_input_services.cpp
+        game_hooks/src/kcet_mouse_module.cpp
+        game_hooks/src/kcet_keyboard_module.cpp
     )
     if(NOT AOE2_OVERLAY_TARGETS)
         target_sources(aoe2_game PRIVATE game_hooks/src/overlay_stub.cpp)

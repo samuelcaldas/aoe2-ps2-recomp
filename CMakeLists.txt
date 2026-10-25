@@ -175,3 +175,8 @@ endif()
 add_executable(aoe2_guest_access_tests tests/cpp/guest_access_tests.cpp)
 target_link_libraries(aoe2_guest_access_tests PRIVATE aoe2_interfaces)
 add_test(NAME guest_access COMMAND aoe2_guest_access_tests)
+
+add_executable(aoe2_native_input_adapter_tests tests/cpp/native_input_adapter_tests.cpp)
+target_include_directories(aoe2_native_input_adapter_tests PRIVATE game_hooks/src)
+target_link_libraries(aoe2_native_input_adapter_tests PRIVATE aoe2_interfaces)
+add_test(NAME native_input_adapters COMMAND aoe2_native_input_adapter_tests)
