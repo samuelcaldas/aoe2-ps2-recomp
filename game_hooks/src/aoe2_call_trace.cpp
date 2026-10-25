@@ -8,6 +8,7 @@
 #include "game_overrides.h"
 #include <aoe2/game_hooks/native_input.hpp>
 #include "file_snapshot.hpp"
+#include "hd_snapshot.hpp"
 #include "mc_snapshot.hpp"
 #include "pad_snapshot.hpp"
 #include "state_snapshot_capture.hpp"
@@ -66,6 +67,8 @@ void traced_call(uint8_t* rdram, R5900Context* ctx, PS2Runtime* runtime)
         aoe2::game_hooks::diagnostics::ObserveCdvdState(rdram, call_number);
     if (slot.address == 0x0012DE88 || slot.address == 0x0012E068)
         aoe2::game_hooks::diagnostics::ObserveMcState(rdram, call_number);
+    if (slot.address == 0x00128BA8 || slot.address == 0x00129588)
+        aoe2::game_hooks::diagnostics::ObserveHdState(rdram, call_number);
     if (should_log(call_number)) {
         std::cerr << "[call-trace] ret addr=0x" << std::hex << slot.address << " v0=0x"
                   << getRegU32(ctx, 2) << std::dec << std::endl;

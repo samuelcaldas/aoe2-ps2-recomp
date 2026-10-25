@@ -232,6 +232,12 @@ add_executable(aoe2_mc_differential_tests tests/cpp/mc_differential_tests.cpp)
 target_link_libraries(aoe2_mc_differential_tests PRIVATE aoe2_interfaces)
 add_test(NAME mc_differential COMMAND aoe2_mc_differential_tests)
 
+add_executable(aoe2_hd_snapshot_tests tests/cpp/hd_snapshot_tests.cpp)
+target_include_directories(aoe2_hd_snapshot_tests PRIVATE game_hooks/src)
+target_link_libraries(aoe2_hd_snapshot_tests PRIVATE aoe2_interfaces)
+add_test(NAME hd_snapshot COMMAND aoe2_hd_snapshot_tests)
+
+
 
 
 
