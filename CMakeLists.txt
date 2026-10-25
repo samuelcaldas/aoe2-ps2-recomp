@@ -33,6 +33,7 @@ add_library(aoe2_interfaces STATIC
     mc/src/kt_mc_model.cpp
     mc/src/mc_storage_model.cpp
     hd/src/kt_hd_model.cpp
+    hd/src/hd_storage_model.cpp
     pad/src/pad_report.cpp
     pad/src/kt_libpad_math.cpp
     pad/src/kt_libpad_model.cpp
@@ -242,6 +243,11 @@ add_test(NAME hd_snapshot COMMAND aoe2_hd_snapshot_tests)
 add_executable(aoe2_kt_hd_model_tests tests/cpp/kt_hd_model_tests.cpp)
 target_link_libraries(aoe2_kt_hd_model_tests PRIVATE aoe2_interfaces)
 add_test(NAME kt_hd_model COMMAND aoe2_kt_hd_model_tests)
+
+add_executable(aoe2_hd_storage_model_tests tests/cpp/hd_storage_model_tests.cpp)
+target_link_libraries(aoe2_hd_storage_model_tests PRIVATE aoe2_interfaces)
+add_test(NAME hd_storage_model COMMAND aoe2_hd_storage_model_tests)
+
 
 
 
