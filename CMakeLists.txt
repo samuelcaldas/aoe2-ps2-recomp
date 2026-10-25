@@ -223,6 +223,12 @@ add_executable(aoe2_mc_storage_model_tests tests/cpp/mc_storage_model_tests.cpp)
 target_link_libraries(aoe2_mc_storage_model_tests PRIVATE aoe2_interfaces)
 add_test(NAME mc_storage_model COMMAND aoe2_mc_storage_model_tests)
 
+add_executable(aoe2_native_mc_adapter_tests tests/cpp/native_mc_adapter_tests.cpp)
+target_include_directories(aoe2_native_mc_adapter_tests PRIVATE game_hooks/src)
+target_link_libraries(aoe2_native_mc_adapter_tests PRIVATE aoe2_interfaces)
+add_test(NAME native_mc_adapters COMMAND aoe2_native_mc_adapter_tests)
+
+
 
 
 
