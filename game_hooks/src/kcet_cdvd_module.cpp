@@ -127,6 +127,18 @@ void Handler_FlushPendingNcmdSignals(uint8_t* rdram, R5900Context* context, PS2R
     context->pc = getRegU32(context, 31);
 }
 
+constexpr uint32_t kFunc0012BC20 = 0x0012BC20u;
+
+void Handler_FlushScmdSema(uint8_t* rdram, R5900Context* context, PS2Runtime* runtime) {
+    int32_t sema_id = 0;
+    std::memcpy(&sema_id, rdram + 0x4ED34Cu, sizeof(sema_id));
+    // Native CDVD commands complete synchronously before the caller waits on SCmd.
+    if (sema_id > 0 && runtime)
+        (void)runtime->eeScheduler().signalSemaphore(sema_id, true);
+    setReturnU32(context, static_cast<uint32_t>(sema_id));
+    context->pc = getRegU32(context, 31);
+}
+
 void InstallNativeCdvd(PS2Runtime& runtime) {
     const auto switches = aoe2::game_hooks::native_input::ReadSwitches();
     const bool enabled = switches.Enabled("cdvd") || switches.Enabled("file_cd");
@@ -149,6 +161,10 @@ void InstallNativeCdvd(PS2Runtime& runtime) {
     if (runtime.hasFunction(kFunc0012BC10) &&
         runtime.replaceFunction(kFunc0012BC10, Handler_FlushPendingNcmdSignals)) {
         std::cout << "[aoe2] native kt_libcdvd_server: hooked func_0012BC10 (NCmd sema flush)\n";
+    }
+    if (runtime.hasFunction(kFunc0012BC20) &&
+        runtime.replaceFunction(kFunc0012BC20, Handler_FlushScmdSema)) {
+        std::cout << "[aoe2] native kt_libcdvd_server: hooked func_0012BC20 (SCmd sema flush)\n";
     }
     std::cout << "[aoe2] native kt_libcdvd_server: installed " << installed << "/" << kEntries.size() << " functions\n";
 }
