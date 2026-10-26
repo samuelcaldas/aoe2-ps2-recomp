@@ -55,11 +55,14 @@ void SoundQueryStatus(uint8_t*, R5900Context* ctx, PS2Runtime*) {
 }
 }  // namespace
 
+// func_0012D840 (query_volume: SDD cmd & 0xFF) is not separately exported in
+// the Ghidra function map and cannot be hooked via replaceFunction.  It is not
+// called in the boot stall path, so omitting it does not block progress.
+
 namespace aoe2::game_hooks {
 void RegisterSoundHandlers(KcetHandlers& handlers) {
     handlers.emplace("kcet.sound.init", SoundInit);
     handlers.emplace("kcet.sound.open_stream", SoundOpenStream);
-    handlers.emplace("kcet.sound.query_volume", SoundQueryVolume);
     handlers.emplace("kcet.sound.query_status", SoundQueryStatus);
 }
 }  // namespace aoe2::game_hooks
