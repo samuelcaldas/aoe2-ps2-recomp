@@ -7,6 +7,10 @@
 #include <iostream>
 #include <stdexcept>
 
+#if AOE2_HAS_DECOMPILED_OVERLAYS
+int RegisterGeneratedOverlays(PS2Runtime& runtime);
+#endif
+
 namespace {
 constexpr uint32_t kBase = 0x1D98000;
 constexpr uint32_t kSize = 0x100000;
@@ -71,6 +75,42 @@ void rejects_invalid_registrations() {
     require(runtime.registerOverlayFunction(4, kFunction, overlay_four), "valid registration rejected");
     require(!runtime.registerOverlayFunction(4, kFunction, overlay_six), "duplicate registration accepted");
 }
+
+#if AOE2_HAS_DECOMPILED_OVERLAYS
+void tests_decompiled_overlay_registration_and_dispatch() {
+    PS2Runtime runtime;
+    require(runtime.memory().initialize(), "memory initialization failed");
+    int registered = RegisterGeneratedOverlays(runtime);
+    require(registered == 8, "expected 8 overlays registered");
+
+    struct Entry {
+        uint32_t overlay_id;
+        uint32_t id_addr;
+        uint32_t call_addr;
+    };
+
+    const Entry entries[] = {
+        {2, 0x01ED7004, 0x01ED7080}, // MO_OV
+        {3, 0x01D98004, 0x01D98080}, // RMMMEM
+        {4, 0x01D98004, 0x01D98080}, // LOBBY
+        {5, 0x01D98004, 0x01D98080}, // DCOMP
+        {6, 0x01D98004, 0x01D98080}, // SMENU
+        {7, 0x01D98004, 0x01D98080}, // MULTIM
+        {8, 0x01F68004, 0x01F68080}, // THELP
+        {9, 0x01D98004, 0x01D98080}, // HIST
+    };
+
+    for (const auto& entry : entries) {
+        std::memcpy(runtime.memory().getRDRAM() + (entry.id_addr & 0x01FFFFFFu), &entry.overlay_id, sizeof(entry.overlay_id));
+        require(runtime.hasFunction(entry.call_addr), "entry point function not found for overlay");
+        R5900Context ctx{};
+        auto fn = runtime.lookupFunction(entry.call_addr);
+        require(fn != nullptr, "lookupFunction returned null for overlay");
+        fn(runtime.memory().getRDRAM(), &ctx, &runtime);
+        require(ctx.pc == getRegU32(&ctx, 31), "pc was not updated to return address");
+    }
+}
+#endif
 }
 
 int main() {
@@ -78,6 +118,9 @@ int main() {
         selects_the_loaded_overlays_function();
         unknown_overlay_or_address_is_missing_not_guessed();
         rejects_invalid_registrations();
+#if AOE2_HAS_DECOMPILED_OVERLAYS
+        tests_decompiled_overlay_registration_and_dispatch();
+#endif
         std::cout << "overlay dispatch tests passed\n";
     } catch (const std::exception& error) {
         std::cerr << "FAILED: " << error.what() << '\n';
