@@ -130,6 +130,7 @@ if(AOE2_BUILD_GAME)
         game_hooks/src/kcet_cdvd_module.cpp
         game_hooks/src/kcet_mc_module.cpp
         game_hooks/src/kcet_hd_module.cpp
+        game_hooks/src/kcet_gpu_module.cpp
     )
     if(NOT AOE2_OVERLAY_TARGETS)
         target_sources(aoe2_game PRIVATE game_hooks/src/overlay_stub.cpp)

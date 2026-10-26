@@ -466,7 +466,8 @@ pass cleanly (20/20 CTests green). Evidence and boundaries: `docs/sot/input-modu
 A 30-second differential capture on desktop Linux (`AOE2_INPUT_SYNTHETIC=1 AOE2_STATE_SNAPSHOT=1`)
 evaluated the native file table and CDVD server replacements (`file=on, cdvd=on`) against the recompiled baseline.
 
-Both runs recorded 34 state snapshots across steps 1..16 and 64, with 34/34 matching byte-for-byte (0 mismatches).
+Both runs recorded 34 matching mouse/keyboard snapshots across steps 1..16 and 64.
+These are input observations, not evidence of file/CDVD storage or module parity.
 Native overrides installed and active in the log (`native kt_file: installed 4/5 functions`,
 `native kt_libcdvd_server: installed 5/6 functions`).
 Validator status remained `stalled_in_loop` (`real_frames=2, frames_changed=False`).
@@ -478,7 +479,8 @@ Host unit and differential tests (`kt_file_model`, `cdvd_model`, `file_snapshot`
 A 30-second differential game capture on desktop Linux (`AOE2_INPUT_SYNTHETIC=1 AOE2_STATE_SNAPSHOT=1`)
 evaluated the native memory card module replacement (`memory_card=on`) against the recompiled baseline.
 
-Both runs recorded 34 state snapshots across steps 1..16 and 64 with 34/34 matching byte-for-byte (0 mismatches).
+Both runs recorded 34 matching mouse/keyboard snapshots across steps 1..16 and 64.
+These do not establish memory-card storage or module parity.
 Native override active in log (`native kt_mc_2: installed 4/11 functions`).
 Validator status remained `stalled_in_loop` (`real_frames=4, frames_changed=False`).
 Host unit and differential test suites (`kt_mc_model`, `mc_storage_model`, `mc_snapshot`, `native_mc_adapters`,
@@ -490,7 +492,8 @@ A 30-second differential capture on desktop Linux (`AOE2_INPUT_SYNTHETIC=1 AOE2_
 evaluated the native hard drive / virtual disc subsystem replacement (`hd=on`) against the recompiled baseline.
 
 Both runs recorded 38 state snapshots across steps 1..16 and 64, including 4 HD snapshots at steps 1..4 (`fnv=8421ae126c7ced25`),
-with 38/38 matching byte-for-byte (0 mismatches).
+with 38/38 matching byte-for-byte (0 mismatches). The sampled HD hash is unchanged;
+this does not establish exercised HD state transitions, storage parity or full module equivalence.
 Native override active in log (`native kt_hd: installed 5/7 functions`).
 Validator status remained `stalled_in_loop` (`real_frames=4, frames_changed=False`).
 Host unit and differential tests (`kt_hd_model`, `hd_storage_model`, `hd_snapshot`, `native_hd_adapters`,

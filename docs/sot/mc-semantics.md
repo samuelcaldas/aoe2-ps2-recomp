@@ -25,8 +25,8 @@ This document records the baseline determinism, function coverage, binary contra
 
 A 30-second differential capture under `AOE2_INPUT_SYNTHETIC=1 AOE2_STATE_SNAPSHOT=1` compared the original recompiled baseline (`memory_card=off`) against the native C++ module implementation (`memory_card=on`).
 
-Results:
-- Both runs produced 34 state snapshots across steps 1..16 and step 64.
-- 34/34 snapshots matched byte-for-byte with identical FNV-1a checksums and state buffers (0 mismatches).
-- Validation assessment remained `stalled_in_loop` (`real_frames=4, frames_changed=False`), confirming that the memory card module does not cause the boot stall.
-- All 30 host CTests passed cleanly.
+The recorded 34 matching snapshots are mouse/keyboard observations. They establish
+only input-state agreement during those runs; they do not establish storage or
+module parity. No nonempty subsystem-specific packet/state comparison is recorded
+here. The unchanged `stalled_in_loop` result does not identify or exclude the cause
+of the boot stall. Historical host test counts describe unit coverage only.

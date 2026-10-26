@@ -27,5 +27,6 @@ A 30-second differential capture under `AOE2_INPUT_SYNTHETIC=1 AOE2_STATE_SNAPSH
 Results:
 - Both runs produced 38 state snapshots (including 4 HD snapshots at steps 1, 2, 3, 4 with `fnv=8421ae126c7ced25`).
 - 38/38 snapshots matched byte-for-byte with identical FNV-1a checksums and state buffers (0 mismatches).
-- Validation assessment remained `stalled_in_loop` (`real_frames=4, frames_changed=False`), confirming that the HD module does not cause the boot stall.
+- The four HD observations have an unchanged hash; this establishes neither exercised HD state transitions/storage parity nor full module equivalence. The other 34 observations concern mouse/keyboard state.
+- Validation remained `stalled_in_loop`; these observations do not identify or exclude the cause of the stall.
 - All 35 host CTests passed cleanly.

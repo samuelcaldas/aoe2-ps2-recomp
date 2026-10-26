@@ -13,27 +13,25 @@ void Check(bool condition, const char* message) {
     }
 }
 
-void gpu_region_is_valid() {
+void snapshots_capture_packet() {
     using namespace aoe2::game_hooks::diagnostics;
-    Check(kGpuRegion.address == 0x0038C730, "gpu region starts at D_38C730");
-    Check(kGpuRegion.size >= 0x40, "gpu region covers command table");
+    std::vector<uint8_t> ram(32 * 1024 * 1024);
+    const uint32_t words[]{0x4030, 0, 0x4000, 0x4010};
+    std::memcpy(ram.data() + 0x2000, words, 16);
+    auto first = FormatGpuSnapshot(ram.data(), 0x2000, 0x125808, 1);
+    ram[0x402f] = 0xff;
+    auto second = FormatGpuSnapshot(ram.data(), 0x2000, 0x125808, 1);
+    Check(first != second, "packet mutation changes snapshot");
+    ram[0x38c740] = 42;
+    Check(second == FormatGpuSnapshot(ram.data(), 0x2000, 0x125808, 1), "constant table is excluded");
+    ram[0x2004] = 3;
+    Check(second != FormatGpuSnapshot(ram.data(), 0x2000, 0x125808, 1), "context mutation changes snapshot");
+    Check(first.find("label=gpu") != std::string::npos, "GPU label");
+    Check(FormatGpuSnapshot(nullptr, 0x2000, 0, 1).find("invalid-context") != std::string::npos,
+          "bad context skips");
 }
-
-void formatting_snapshots_produces_expected_output() {
-    using namespace aoe2::game_hooks::diagnostics;
-    std::vector<uint8_t> rdram(32 * 1024 * 1024, 0);
-    rdram[0x0038C730] = 0x55;
-    rdram[0x0038C730 + 1] = 0x66;
-
-    const std::string gpu_snap = FormatGpuSnapshot(rdram.data(), 1, 1);
-    Check(gpu_snap.find("label=gpu") != std::string::npos, "gpu label present");
-    Check(gpu_snap.find("n=1") != std::string::npos, "step n=1 present");
 }
-}  // namespace
-
 int main() {
-    gpu_region_is_valid();
-    formatting_snapshots_produces_expected_output();
+    snapshots_capture_packet();
     std::cout << "gpu snapshot tests passed\n";
-    return 0;
 }

@@ -32,6 +32,7 @@ add_library(aoe2_interfaces STATIC
     cdvd/src/cdvd_model.cpp
     mc/src/kt_mc_model.cpp
     mc/src/mc_storage_model.cpp
+    gpu/src/kt_gpu_model.cpp
     hd/src/kt_hd_model.cpp
     hd/src/hd_storage_model.cpp
     pad/src/pad_report.cpp
@@ -65,6 +66,7 @@ target_include_directories(aoe2_interfaces PUBLIC
     cdvd/include
     mc/include
     hd/include
+    gpu/include
     tests/cpp
 )
 
@@ -277,3 +279,14 @@ add_test(NAME gpu_snapshot COMMAND aoe2_gpu_snapshot_tests)
 
 
 
+
+
+
+add_executable(aoe2_kt_gpu_model_tests tests/cpp/kt_gpu_model_tests.cpp)
+target_link_libraries(aoe2_kt_gpu_model_tests PRIVATE aoe2_interfaces)
+add_test(NAME kt_gpu_model COMMAND aoe2_kt_gpu_model_tests)
+
+option(AOE2_BUILD_GPU_DIFFERENTIAL_TESTS "Compare native GPU with owned generated originals" OFF)
+if(AOE2_BUILD_GPU_DIFFERENTIAL_TESTS)
+    include(cmake/Aoe2GpuTests.cmake)
+endif()
