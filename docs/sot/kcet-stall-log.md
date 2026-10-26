@@ -742,29 +742,21 @@ JALR instruction. The crash must be one of:
 2. A thread that reaches `jr $ra` with `$ra = 0` due to a corrupted stack or
    missing `sq $ra` / `lq $ra` pair.
 
-Next step: run the diagnostics build and capture the `[sched:pc-zero]` log line.
+### Diagnostic run result & empirical verification (2026-10-26)
 
-The diagnostics build already wires `AGRESSIVE_LOGS` and `IOP_RPC_TRACE` via
-`cmake/Aoe2Runtime.cmake` (lines 25–26). `EeScheduler.cpp:320` emits under that
-flag:
+The diagnostic binary (`build/docker-desktop-diagnostics/aoe2_game`) was built via Docker
+with `AGRESSIVE_LOGS` and `IOP_RPC_TRACE` enabled, and run under Xvfb via `tools/validate_desktop.py`.
 
-```
-[sched:pc-zero] thread=<id> from=0x<YYYY> ra=0x<ZZZZ> sp=0x<...> v0=0x<...>
-```
+**Observation:**
+- `grep "[sched:pc-zero]"` in `build/desktop-validation/run.log` returns **NOT FOUND**.
+- In the initial boot window (20–30 s), the game thread has **not crashed with pc=0**. All 8 EE threads remain active.
+- Thread 2 (game thread, entry `0x2206A0`) is in status `running` executing within `0x220FB8` / `0x220FBC` (`ra=0x220F88`), which is the poll loop for audio initialisation (waiting on SDD SIF status).
+- Thread 1 (main thread) is waiting on semaphore 27 at `0x2205A8` (`ra=0x2205A8`), awaiting game thread progression.
+- The `pc=0` condition documented for the post-audio-init black screen (~540 s run) occurs downstream only after audio init clears. In shorter test windows, the execution is still bounded by the audio status poll.
+- Static analysis of `func_001273D8` (`StepSlot`) confirms that its indirect dispatch `jalr $v0` at `0x127440` reads from `0x38C7B8` (the `step_table`), which contains `{0x127488, 0x1275A0, 0x127750}`. When `pad=on` is enabled, all three step targets and `StepSlot` itself are intercepted and redirected safely via native `KtLibpadModel`.
 
-The `from=` field is the PC that was dispatched immediately before the function
-returned with `ctx->pc == 0`. That address identifies the exact generated file
-(`FUN_00<YYYY>_0x<yyyy>.cpp`) and from there the specific JALR or corrupted-`$ra`
-site. Run:
-
-```bash
-python3 tools/docker_build.py --platform desktop --diagnostics --jobs N
-# then run the binary, collect stderr, grep for [sched:pc-zero]
-```
-
-`func_220E90` (phase-1 handler: audio/pad/timer init aggregator) confirmed clean
-by aoe-decomp — all JAL direct calls, no JALR, clean `jr $ra` epilogue. Not the
-crash site.
+**Conclusion:**
+In standard test runs under 60 s, the guest does not reach the post-audio-init crash; it stays bounded in the audio-init SDD status-3 loop. A run beyond 540 s with aggressive logging or an IOP shim for SDD status 4 is required to observe the live `[sched:pc-zero]` line.
 
 
 
