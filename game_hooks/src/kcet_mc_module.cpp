@@ -4,8 +4,8 @@
 // These entry points are routed to the runtime's host-backed card (root mc0), which
 // follows the SDK calling convention. Other sceMc* entries stay on the guest code.
 #include "game_overrides.h"
-#include "native_input_module_support.hpp"
 #include "ps2_runtime.h"
+#include "native_input_module_support.hpp"
 #include "Stubs/MemoryCard.h"
 
 #include <array>
