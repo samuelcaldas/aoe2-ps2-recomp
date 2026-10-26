@@ -178,26 +178,6 @@ void Hook_AppVtableTick(uint8_t* rdram, R5900Context* ctx, PS2Runtime* runtime) 
     (void)runtime->dispatchGuestBranch(rdram, ctx, tick_fn, 0x0021BFBCu, 0x0u, PS2Runtime::GuestBranchKind::IndirectJump, "JR");
 }
 
-// Hook for func_00226630: WndProc dispatch guard
-// 0x226638: lw $v0, -0x746C($gp)
-void Hook_WndProcDispatch(uint8_t* rdram, R5900Context* ctx, PS2Runtime* runtime) {
-    const uint32_t gp = getRegU32(ctx, 28);
-    const uint32_t wndproc_slot = (gp - 0x746Cu) & 0x01FFFFFFu;
-    uint32_t wndproc = 0;
-    std::memcpy(&wndproc, rdram + wndproc_slot, sizeof(wndproc));
-
-    if (wndproc == 0 || wndproc >= 0x02000000u || !runtime->hasFunction(wndproc)) {
-        setReturnU32(ctx, 0u);
-        ctx->pc = getRegU32(ctx, 31);
-        return;
-    }
-
-    ctx->r[2] = _mm_set_epi64x(0, static_cast<int64_t>(static_cast<int32_t>(wndproc)));
-    ctx->pc = wndproc;
-    (void)runtime->dispatchGuestBranch(rdram, ctx, wndproc, 0x00226650u, 0x00226658u, PS2Runtime::GuestBranchKind::IndirectCall, "JALR");
-    ctx->pc = getRegU32(ctx, 31);
-}
-
 int RegisterGeneratedOverlays(PS2Runtime& runtime) {
     if (!runtime.addOverlayRegion(0x01D98000u, 0x100000u, 0x01D98004u))
         throw std::runtime_error("cannot add overlay region 0x01d98000");
@@ -1421,9 +1401,6 @@ int RegisterGeneratedOverlays(PS2Runtime& runtime) {
     }
     if (runtime.hasFunction(0x0021BFB0u)) {
         runtime.replaceFunction(0x0021BFB0u, Hook_AppVtableTick);
-    }
-    if (runtime.hasFunction(0x00226630u)) {
-        runtime.replaceFunction(0x00226630u, Hook_WndProcDispatch);
     }
 
     return 8;

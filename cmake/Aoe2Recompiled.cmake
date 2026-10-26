@@ -68,6 +68,22 @@ if(AOE2_ENABLE_OVERLAYS AND EXISTS "${AOE2_OVERLAYS_DIR}/src/overlay_registry.cp
     message(STATUS "Decompiled resident overlays enabled: 8 overlays in aoe2_decompiled_overlays.")
 endif()
 
+if(AOE2_BUILD_DESKTOP_PROBE)
+    # DispatchMessage contract against its owned generated original, with the overlay registration applied.
+    add_executable(aoe2_message_dispatch_tests tests/cpp/message_dispatch_tests.cpp
+        "${GENERATED_SRC_DIR}/FUN_00226630_0x226630.cpp" "${PS2X_DIR}/ps2xTest/src/test_function_table.cpp")
+    foreach(overlay_target IN LISTS AOE2_OVERLAY_TARGETS)
+        target_sources(aoe2_message_dispatch_tests PRIVATE $<TARGET_OBJECTS:${overlay_target}>)
+    endforeach()
+    if(NOT AOE2_OVERLAY_TARGETS)
+        target_sources(aoe2_message_dispatch_tests PRIVATE game_hooks/src/overlay_stub.cpp)
+    endif()
+    target_include_directories(aoe2_message_dispatch_tests PRIVATE "${GENERATED_SRC_DIR}")
+    target_link_libraries(aoe2_message_dispatch_tests PRIVATE aoe2_ps2_runtime)
+    add_test(NAME message_dispatch COMMAND aoe2_message_dispatch_tests)
+    set_tests_properties(message_dispatch PROPERTIES TIMEOUT 30)
+endif()
+
 function(aoe2_link_recompiled target)
     target_sources(${target} PRIVATE $<TARGET_OBJECTS:aoe2_generated_game_code>)
     foreach(overlay_target IN LISTS AOE2_OVERLAY_TARGETS)
