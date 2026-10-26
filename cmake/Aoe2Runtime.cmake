@@ -30,6 +30,8 @@ add_subdirectory("${PS2X_DIR}" "${CMAKE_BINARY_DIR}/ps2recomp" EXCLUDE_FROM_ALL)
 include("${CMAKE_CURRENT_LIST_DIR}/Aoe2Deci2.cmake")
 aoe2_install_deci2(ps2_runtime "${PS2X_RUNTIME_DIR}/src/lib/Kernel/Syscalls/Deci2.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}")
+include("${CMAKE_CURRENT_LIST_DIR}/Aoe2Sif.cmake")
+aoe2_install_sif(ps2_runtime "${PS2X_RUNTIME_DIR}/src/lib/Kernel/Stubs/SIF.cpp")
 
 add_library(aoe2_ps2_runtime INTERFACE)
 target_link_libraries(aoe2_ps2_runtime INTERFACE ps2_runtime)

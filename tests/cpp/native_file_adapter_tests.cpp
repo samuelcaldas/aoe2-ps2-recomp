@@ -1,5 +1,7 @@
 #include <aoe2/cdvd/cdvd_model.hpp>
 #include <aoe2/file/kt_file_model.hpp>
+#include "synthetic_cdvd_disc.hpp"
+#include <algorithm>
 #include "../../game_hooks/src/native_input_arguments.hpp"
 
 #include <array>
@@ -70,7 +72,9 @@ void test_cdvd_adapter_binding() {
     aoe2::cdvd::CdvdModel cdvd_model(mem);
 
     std::array<uint32_t, 32> registers{};
-    registers[4] = 100;        // a0: lba
+    SyntheticCdvdDisc disc;
+    cdvd_model.Initialize(disc.root.string());
+    registers[4] = 0;          // a0: lba
     registers[5] = 4;          // a1: sector count
     registers[6] = 0x00200000; // a2: dest
     const auto arguments = aoe2::game_hooks::native_input::Arguments::FromRegisters(registers);
@@ -79,6 +83,8 @@ void test_cdvd_adapter_binding() {
     Check(res == 0, "queue read succeeds");
     Check(cdvd_model.RemainingSectors() == 4, "4 sectors remaining");
     Check(cdvd_model.RemainingBytes() == 4 * 2048, "8192 bytes remaining");
+    cdvd_model.ProcessPendingRequests();
+    Check(std::equal(disc.bytes.begin(), disc.bytes.end(), mem.ram.begin() + registers[6]), "adapter read bytes");
 }
 }  // namespace
 

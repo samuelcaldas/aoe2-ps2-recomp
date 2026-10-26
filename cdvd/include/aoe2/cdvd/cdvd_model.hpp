@@ -21,12 +21,16 @@ class CdvdModel {
 public:
     explicit CdvdModel(aoe2::runtime::GuestAccess& memory);
 
-    // Initializer and reset
+    /// Set the directory containing aoe2.iso and reset; returns true without opening it.
     bool Initialize(std::string_view disc_root);
+    /// Discard any pending request and clear stream status; returns zero.
     int32_t Reset();
 
-    // Sector read queuing and dispatch
+    /// Queue sectors at lba into physical EE RAM; zero sectors is a no-op. Returns zero.
+    /// Throws logic_error if busy, length_error for signed byte overflow, out_of_range for invalid RAM.
     int32_t QueueRead(uint32_t lba, uint32_t sector_count, uint32_t dest_guest_addr);
+    /// Copy a complete image read, then publish completion. Throws ios_base::failure on I/O errors;
+    /// destination, pending request and completion status stay unchanged on those failures. Retry or Reset explicitly.
     void ProcessPendingRequests();
 
     // Stream status queries

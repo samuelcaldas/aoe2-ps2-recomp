@@ -1,4 +1,7 @@
 #include <aoe2/cdvd/cdvd_model.hpp>
+#include "synthetic_cdvd_disc.hpp"
+
+void run_cdvd_read_tests();
 
 #include <cstdlib>
 #include <cstring>
@@ -72,8 +75,9 @@ void test_cdvd_read_sectors_and_streaming() {
     aoe2::cdvd::CdvdModel model(mem);
 
     const uint32_t dest = 0x00200000;
-    // Queue read of 2 sectors (4096 bytes)
-    const int32_t res = model.QueueRead(100, 2, dest);
+    SyntheticCdvdDisc disc;
+    model.Initialize(disc.root.string());
+    const int32_t res = model.QueueRead(1, 2, dest);
     Check(res == 0, "queue read succeeds");
     Check(model.IsActive(), "stream active after queue read");
     Check(model.RemainingBytes() == 4096, "4096 bytes remaining");
@@ -107,7 +111,6 @@ void install_cdvd(PS2Runtime& runtime, const char* switches) {
 
 void exercise_scmd_hook(uint8_t*, R5900Context* guest, PS2Runtime* host) {
     auto& runtime = *host;
-    const bool enabled = getRegU32(guest, 4) != 0;
     auto& scheduler = runtime.eeScheduler();
     const int id = scheduler.createSemaphore(0, 1, 0, 0);
     Check(id > 0, "SCmd semaphore creation");
@@ -119,8 +122,8 @@ void exercise_scmd_hook(uint8_t*, R5900Context* guest, PS2Runtime* host) {
         runtime.lookupFunction(0x0012BC20)(ram, &context, &runtime);
         Check(getRegU32(&context, 2) == static_cast<uint32_t>(id), "SCmd hook preserves semaphore ID");
         Check(context.pc == 0x123456, "SCmd hook returns to caller");
-        Check(scheduler.semaphore(id)->count == (enabled ? 1 : 0), "SCmd completion signal count");
-        if (!enabled) continue;
+        Check(scheduler.semaphore(id)->count == 0, "SCmd getter must not complete pending work");
+        scheduler.signalSemaphore(id, false);
         scheduler.waitSemaphore(id);
         Check(scheduler.semaphore(id)->count == 0, "WaitSema consumes SCmd completion");
         Check(scheduler.semaphore(id)->waiters.empty(), "WaitSema must not block after completion");
@@ -128,7 +131,7 @@ void exercise_scmd_hook(uint8_t*, R5900Context* guest, PS2Runtime* host) {
     scheduler.requestStop();
 }
 
-void test_scmd_semaphore_completion(const char* switches, bool enabled) {
+void test_scmd_semaphore_completion(const char* switches) {
     PS2Runtime runtime;
     Check(runtime.memory().initialize(), "runtime memory initialization");
     Check(runtime.syncCoreSubsystems(), "runtime scheduler initialization");
@@ -137,7 +140,6 @@ void test_scmd_semaphore_completion(const char* switches, bool enabled) {
     runtime.registerFunction(0x1000, exercise_scmd_hook);
     R5900Context main_context{};
     main_context.pc = 0x1000;
-    SET_GPR_U32(&main_context, 4, enabled ? 1 : 0);
     runtime.eeScheduler().reset(runtime.memory().getRDRAM(), main_context);
     runtime.eeScheduler().run();
 }
@@ -147,10 +149,11 @@ void test_scmd_semaphore_completion(const char* switches, bool enabled) {
 int main() {
     test_cdvd_initialization_and_status();
     test_cdvd_read_sectors_and_streaming();
+    run_cdvd_read_tests();
 #if AOE2_TEST_NATIVE_CDVD
-    test_scmd_semaphore_completion("cdvd=off\nfile_cd=off\n", false);
-    test_scmd_semaphore_completion("cdvd=on\n", true);
-    test_scmd_semaphore_completion("file_cd=on\n", true);
+    test_scmd_semaphore_completion("cdvd=off\nfile_cd=off\n");
+    test_scmd_semaphore_completion("cdvd=on\n");
+    test_scmd_semaphore_completion("file_cd=on\n");
 #endif
     std::cout << "cdvd_model tests passed\n";
     return 0;
