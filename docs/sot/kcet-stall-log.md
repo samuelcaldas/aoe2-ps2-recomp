@@ -742,10 +742,29 @@ JALR instruction. The crash must be one of:
 2. A thread that reaches `jr $ra` with `$ra = 0` due to a corrupted stack or
    missing `sq $ra` / `lq $ra` pair.
 
-Next step: enable `AGRESSIVE_LOGS` / `IOP_RPC_TRACE` in the diagnostic build to
-capture the `[sched:pc-zero]` log line (thread id, `from=` PC, `ra=`, `sp=`,
-`v0=`), which `EeScheduler.cpp:320` emits. That `from=` PC identifies the exact
-generated function that returned with pc=0.
+Next step: run the diagnostics build and capture the `[sched:pc-zero]` log line.
+
+The diagnostics build already wires `AGRESSIVE_LOGS` and `IOP_RPC_TRACE` via
+`cmake/Aoe2Runtime.cmake` (lines 25–26). `EeScheduler.cpp:320` emits under that
+flag:
+
+```
+[sched:pc-zero] thread=<id> from=0x<YYYY> ra=0x<ZZZZ> sp=0x<...> v0=0x<...>
+```
+
+The `from=` field is the PC that was dispatched immediately before the function
+returned with `ctx->pc == 0`. That address identifies the exact generated file
+(`FUN_00<YYYY>_0x<yyyy>.cpp`) and from there the specific JALR or corrupted-`$ra`
+site. Run:
+
+```bash
+python3 tools/docker_build.py --platform desktop --diagnostics --jobs N
+# then run the binary, collect stderr, grep for [sched:pc-zero]
+```
+
+`func_220E90` (phase-1 handler: audio/pad/timer init aggregator) confirmed clean
+by aoe-decomp — all JAL direct calls, no JALR, clean `jr $ra` epilogue. Not the
+crash site.
 
 
 
