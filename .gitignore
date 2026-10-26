@@ -34,6 +34,7 @@ game/
 
 # Third-party repositories (cloned, tracked via lock file)
 third_party/
+!third_party/age-of-empires-2-decomp/
 
 # Analysis outputs and Ghidra work
 analysis/generated/

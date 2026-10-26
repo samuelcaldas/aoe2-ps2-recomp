@@ -25,6 +25,14 @@
       "intended_phase": "Later Switch/homebrew integration only",
       "notes": "Low-level graphics API for Nintendo Switch Maxwell GPU.",
       "local_path": "third_party/deko3d"
+    },
+    "age-of-empires-2-decomp": {
+      "url": "https://github.com/samuelcaldas/age-of-empires-2-decomp.git",
+      "commit_sha": "285d859d27e3a6f3cef325fe20ca36dfc33b7119",
+      "license": "MIT",
+      "intended_phase": "Decompilation reference and overlay extraction",
+      "notes": "Matching decompilation of Age of Empires II (PC and PS2).",
+      "local_path": "third_party/age-of-empires-2-decomp"
     }
   }
 }
