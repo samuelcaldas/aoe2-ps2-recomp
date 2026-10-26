@@ -1,6 +1,7 @@
 #include <aoe2/hd/kt_hd_model.hpp>
 
 #include "game_overrides.h"
+#include "hd_runtime_adapter.hpp"
 #include "guest_rdram_access.hpp"
 #include "native_input_arguments.hpp"
 #include "native_input_module_support.hpp"
@@ -99,13 +100,14 @@ void InstallNativeHd(PS2Runtime& runtime) {
         std::cout << "[aoe2] native kt_hd: off\n";
         return;
     }
+    aoe2::game_hooks::hd::Install(runtime);
     g_hd = std::make_unique<NativeHd>();
     std::size_t installed = 0;
     for (const auto& entry : kEntries) {
         if (!runtime.hasFunction(entry.address)) continue;
         if (runtime.replaceFunction(entry.address, entry.handler)) ++installed;
     }
-    std::cout << "[aoe2] native kt_hd: installed " << installed << "/" << kEntries.size() << " functions\n";
+    std::cout << "[aoe2] native kt_hd: installed " << installed << "/" << kEntries.size() << " model functions plus 3 runtime handlers\n";
 }
 
 }  // namespace

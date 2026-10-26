@@ -37,9 +37,4 @@ void KtHdModel::SetHostname(std::string_view name) {
     hostname_ = std::string(name);
 }
 
-int32_t KtHdModel::ExecuteCallback(uint32_t func_ptr, uint32_t /*arg_ptr*/) {
-    if (func_ptr == 0) return 0;
-    return 0;
-}
-
 }  // namespace aoe2::hd

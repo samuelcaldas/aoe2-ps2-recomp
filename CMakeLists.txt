@@ -290,3 +290,8 @@ option(AOE2_BUILD_GPU_DIFFERENTIAL_TESTS "Compare native GPU with owned generate
 if(AOE2_BUILD_GPU_DIFFERENTIAL_TESTS)
     include(cmake/Aoe2GpuTests.cmake)
 endif()
+
+option(AOE2_BUILD_HD_RUNTIME_TESTS "Compare HD runtime handlers with owned generated originals" OFF)
+if(AOE2_BUILD_HD_RUNTIME_TESTS)
+    include(cmake/Aoe2HdTests.cmake)
+endif()

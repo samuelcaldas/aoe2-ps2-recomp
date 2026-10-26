@@ -12,6 +12,7 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <stdexcept>
 #include <string>
 
 namespace {
@@ -98,6 +99,11 @@ void InstallNativeMc(PS2Runtime& runtime) {
     if (!switches.Enabled("memory_card")) {
         std::cout << "[aoe2] native kt_mc_2: off\n";
         return;
+    }
+    if (kEntries.empty()) {
+        throw std::runtime_error(
+            "Native kt_mc_2 is unsupported: hook entry points are unverified; "
+            "set memory_card=off in native_modules.ini until verified hooks are available.");
     }
     g_mc = std::make_unique<NativeMc>();
     std::size_t installed = 0;

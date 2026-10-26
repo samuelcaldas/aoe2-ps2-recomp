@@ -16,7 +16,6 @@ public:
     int32_t GetFlag() const;
     int32_t ReadAndClearRegister();
     void SetHostname(std::string_view name);
-    int32_t ExecuteCallback(uint32_t func_ptr, uint32_t arg_ptr);
 
 private:
     aoe2::runtime::GuestAccess& memory_;
