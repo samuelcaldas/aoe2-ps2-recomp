@@ -1,9 +1,12 @@
 // Generated overlay registry for decompiled overlays
 #include "ps2_runtime.h"
+#include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
+#include <string>
 #include <unordered_map>
 
 extern "C" {
@@ -98,14 +101,19 @@ void Hook_OverlayLoad(uint8_t* rdram, R5900Context* ctx, PS2Runtime*) {
     const uint32_t name_ptr = getRegU32(ctx, 4);
     const uint32_t load_addr = getRegU32(ctx, 5);
 
-    const char* filename = (name_ptr != 0 && name_ptr < 0x02000000u)
-                               ? reinterpret_cast<const char*>(rdram + (name_ptr & 0x01FFFFFFu))
-                               : nullptr;
-
+    constexpr uint32_t rdram_size = 0x02000000u;
+    const uint32_t name_offset = name_ptr & 0x01FFFFFFu;
     std::string name_lower;
-    if (filename) {
-        for (const char* p = filename; *p; ++p) {
-            name_lower += static_cast<char>(std::tolower(*p));
+    bool terminated = false;
+    if (name_ptr != 0 && name_ptr < rdram_size && name_offset < rdram_size) {
+        const uint32_t max_length = std::min(rdram_size - name_offset, 256u);
+        for (uint32_t index = 0; index < max_length; ++index) {
+            const unsigned char value = rdram[name_offset + index];
+            if (value == '\0') {
+                terminated = true;
+                break;
+            }
+            name_lower += static_cast<char>(std::tolower(value));
         }
     }
 
@@ -119,21 +127,21 @@ void Hook_OverlayLoad(uint8_t* rdram, R5900Context* ctx, PS2Runtime*) {
     else if (name_lower.find("thelp") != std::string::npos) overlay_id = 8;
     else if (name_lower.find("hist") != std::string::npos) overlay_id = 9;
 
-    std::cout << "[aoe2] Hook_OverlayLoad: file='" << (filename ? filename : "null")
-              << "' -> overlay_id=" << overlay_id << " at 0x" << std::hex << load_addr << std::dec << '\n';
-
-    if (overlay_id != 0 && load_addr != 0 && (load_addr & 0x01FFFFFFu) < 0x02000000u) {
-        // Write MWo3 header into guest memory so that runtime overlay region detection works:
-        // offset 0: "MWo3" (0x336F574D)
-        // offset 4: overlay_id
-        // offset 8: load_addr
-        const uint32_t magic = 0x336F574Du; // 'M' 'W' 'o' '3' in little-endian
-        std::memcpy(rdram + (load_addr & 0x01FFFFFFu), &magic, sizeof(magic));
-        std::memcpy(rdram + ((load_addr + 4u) & 0x01FFFFFFu), &overlay_id, sizeof(overlay_id));
-        std::memcpy(rdram + ((load_addr + 8u) & 0x01FFFFFFu), &load_addr, sizeof(load_addr));
+    const uint32_t load_offset = load_addr & 0x01FFFFFFu;
+    const bool valid_load_address = load_addr != 0 && load_offset <= rdram_size - 12u;
+    const bool loaded = terminated && overlay_id != 0 && valid_load_address;
+    if (loaded) {
+        // The registry uses this header to select the active guest overlay.
+        const uint32_t magic = 0x336F574Du;
+        std::memcpy(rdram + load_offset, &magic, sizeof(magic));
+        std::memcpy(rdram + load_offset + 4u, &overlay_id, sizeof(overlay_id));
+        std::memcpy(rdram + load_offset + 8u, &load_addr, sizeof(load_addr));
     }
 
-    setReturnU32(ctx, 1u); // return 1 (success)
+    std::cout << "[aoe2] Hook_OverlayLoad: overlay_id=" << overlay_id
+              << " at 0x" << std::hex << load_addr << std::dec
+              << " loaded=" << loaded << '\n';
+    setReturnU32(ctx, loaded ? 1u : 0u);
     ctx->pc = getRegU32(ctx, 31);
 }
 

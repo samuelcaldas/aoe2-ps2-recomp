@@ -205,6 +205,12 @@ add_test(NAME kt_file_model COMMAND aoe2_kt_file_model_tests)
 add_executable(aoe2_cdvd_model_tests tests/cpp/cdvd_model_tests.cpp)
 target_link_libraries(aoe2_cdvd_model_tests PRIVATE aoe2_interfaces)
 add_test(NAME cdvd_model COMMAND aoe2_cdvd_model_tests)
+if(TARGET aoe2_ps2_runtime)
+    target_sources(aoe2_cdvd_model_tests PRIVATE game_hooks/src/kcet_cdvd_module.cpp
+        "${PS2X_DIR}/ps2xTest/src/test_function_table.cpp")
+    target_link_libraries(aoe2_cdvd_model_tests PRIVATE aoe2_ps2_runtime)
+    target_compile_definitions(aoe2_cdvd_model_tests PRIVATE AOE2_TEST_NATIVE_CDVD=1)
+endif()
 
 add_executable(aoe2_native_file_adapter_tests tests/cpp/native_file_adapter_tests.cpp)
 target_include_directories(aoe2_native_file_adapter_tests PRIVATE game_hooks/src)
