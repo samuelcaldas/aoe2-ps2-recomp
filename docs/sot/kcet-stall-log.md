@@ -701,14 +701,51 @@ until those stages are reached.
   that is within the frame-setup path and is a secondary candidate if the table
   at 0x492EF0 is fully populated.
 
-### Next investigation step
+### Resolution — jump table is fully populated, crash is a different JALR (2026-10-26)
 
-Read `func_226260` around 0x226304 to identify what object it dispatches through
-(vtable? callback array?). Separately, verify whether address `0x492EF0` is within
-the range of static data the ELF loads, and whether any init function before the
-loop populates it. If the table entries are zero at runtime, the fix is to trace
-which init function should populate `0x492EF0[0..9]` and ensure it runs before the
-state machine first executes.
+**ELF hex-dump at the jump table address** confirmed all ten entries are non-zero
+static data baked into the binary. The phase-dispatch table is correct. The
+"uninitialised entry" hypothesis is closed.
+
+All ten handlers are labels *within* the same generated function. The runtime
+handles `GuestBranchKind::IndirectJump` for an intra-function target by setting
+`ctx->pc = targetPc` and returning `false` from `dispatchGuestBranch`. The C++
+function wrapper then returns, and `EeScheduler::run()` at the top of its loop
+re-dispatches to `context.pc` — effectively a free jump to the target label on
+the next iteration. This is normal operation, not a crash path.
+
+**`func_226260` JALR at frame-setup** — verified guarded: `beqz $v1, skip_to_226318`.
+If the struct pointer is null, the JALR is bypassed entirely. Not the crash site.
+
+**`func_226630` (DispatchMessage) JALR** — verified guarded: `beqz $v0, skip`.
+`$v0 = READ32(gp - 0x746C)`. If the window-proc callback is unregistered (zero),
+execution falls through to the zero-return epilogue. Not the crash site for the
+zero-pointer case.
+
+**`func_185230` (render manager loop)** — identified by aoe-decomp as a virtual
+method registered in two Genie Engine vtables. Not called via direct JAL; invoked
+through vtable slot 0x20. If the vtable is uninitialised, the call reaches an
+invalid address.
+
+**`EeScheduler::run()` pc-zero path** (`EeScheduler.cpp:246`, `EeScheduler.cpp:318`):
+When a generated function returns with `context.pc == 0`, and the running thread
+has no pending invocations, the scheduler calls `makeDormant()` and clears
+`m_currentThreadId`. The game thread (which calls `EeScheduler::run()`) then has
+no runnable thread and eventually exits. The main thread never receives the
+join-semaphore signal.
+
+**Current status:** The actual crash site has not yet been pinpointed to a specific
+JALR instruction. The crash must be one of:
+1. An unguarded or incorrectly guarded indirect call inside one of the per-frame
+   loop callees that sets `$ra = 0` before dispatch, causing the callee to return
+   to pc=0.
+2. A thread that reaches `jr $ra` with `$ra = 0` due to a corrupted stack or
+   missing `sq $ra` / `lq $ra` pair.
+
+Next step: enable `AGRESSIVE_LOGS` / `IOP_RPC_TRACE` in the diagnostic build to
+capture the `[sched:pc-zero]` log line (thread id, `from=` PC, `ra=`, `sp=`,
+`v0=`), which `EeScheduler.cpp:320` emits. That `from=` PC identifies the exact
+generated function that returned with pc=0.
 
 
 
