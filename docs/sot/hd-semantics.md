@@ -92,3 +92,29 @@ that cached runtime. It does not prove arbitrary interior-PC entry, all schedule
 interleavings, production semaphore initialization, storage/IOP behavior, or game
 progress. The earlier unchanged snapshot capture remains a separate, weaker
 observation.
+
+## Bounded game observation after repair (2026-10-26)
+
+The repaired desktop diagnostic game built successfully through
+`tools/docker_build.py --platform desktop --diagnostics --jobs 4` on `docker-dev`.
+The combined host/runtime test configuration passed 39/39 CTests, including the
+real HD and GPU differential targets. The Python suite ran 318 tests with two
+skips and no failures. An independent review found no confirmed functional defect;
+installation failure-injection/rollback paths remain untested.
+
+Two 30-second desktop captures used the same configuration except for `hd`:
+
+| HD switch | Installation | Validator result | Real frames | Changed | Missing branch targets |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| off | Disabled | `stalled_in_loop` (exit 1) | 1 | No | 0 |
+| on | 2/2 model entries plus 3 runtime handlers | `stalled_in_loop` (exit 1) | 2 | No | 0 |
+
+The native capture logged four table lookups. Neither capture produced HD state
+snapshots, so there is no observed game-path state parity claim. These runs do not
+prove that the repaired callbacks/semaphore operations were exercised in the real
+game; their evidence remains the focused generated/native differential test.
+Both game-progress validators failed. No completed boot or stall cause is claimed.
+
+Evidence is retained under ignored `build/hd-validation/`; screenshots are under
+`.playwright-mcp/hd-runtime-repair/`. The native-module configuration was restored
+byte-for-byte, with `hd=off` and `memory_card=off`.
