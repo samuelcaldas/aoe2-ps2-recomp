@@ -624,6 +624,15 @@ owner's 2026-10-24 authorization, its content may be copied into tracked files o
 this repository when needed for a native KCET audio module. No such module is
 implemented yet; the fix belongs in the upstream IOP emulator.
 
+**Upstream shim scope confirmed minimal (2026-10-26).** Analysis of the KCET
+sound dispatcher at `0x25D060`–`0x25D600` by the `aoe-decomp` session confirms
+that commands 0x1010–0x101F (issued before the stall poll) configure EE-side
+channel/voice parameter buffers only. They index a table at `0x4805E0` and write
+local state; they do not issue blocking IOP or SPU2 calls. The sole IOP dependency
+that blocks the stall loop is SDD service 0x30, command 3. The upstream shim
+therefore needs to handle only that one command; no additional SPU2-dependent
+commands precede it. Investigation of the audio-init stall is complete.
+
 
 
 
