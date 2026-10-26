@@ -76,12 +76,22 @@ Findings (counts only):
   not meaningful; do not use decomp addresses for overlays without recomputing them from the file.
 - **IOP.** No decompiled IRX/IOP sources were found in the decompilation repository (no files, no commits).
 
-## Resident Decompiled Overlays (2026-10-26)
+## Recompiled overlays restored (2026-10-26)
 
-The static recompilation pipeline for overlays (which generated >12,000 translation units) has been completely replaced by direct compilation of the pure-C decompiled overlays from `@aoe-decomp` (`overlays/src/*.c` and `overlays/include/*_overlay.h`):
-- All 8 overlays (`DCOMP=5`, `HIST=9`, `LOBBY=4`, `MO_OV=2`, `MULTIM=7`, `RMMMEM=3`, `SMENU=6`, `THELP=8`) reside simultaneously in host memory (`aoe2_decompiled_overlays` library).
-- Three regions (`0x01D98000`, `0x01ED7000`, `0x01F68000`) are registered with `runtime.addOverlayRegion()`.
-- Dispatch uses the active overlay ID in guest memory (`0x01D98004`, `0x01ED7004`, `0x01F68004`), dynamically routing guest calls to the correct C implementation via `RegisterGeneratedOverlays()`.
-- External guest calls from overlays (`func_00XXXXXX` and `func_01XXXXXX`) are bridged via `overlay_dispatch_guest()`.
-- Build times dropped from hours to seconds; all tests and runtime boot pass cleanly.
+For a few hours on 2026-10-26 the build linked "decompiled" C overlays (`overlays/src`) instead of the recompiled
+units. They are not usable and are no longer built:
 
+- The C was translated from a wrong-ISA disassembly: EE MMI stores/moves (`sq`/`lq`/`paddub`) were decoded as
+  MIPS DSP instructions and left as `/* unhandled */`, so register saves and moves are lost.
+- It dereferences guest addresses as host pointers, keeps `gp` at 0 (all gp-relative globals are skipped), and
+  uses a host stack buffer.
+- The overlay loader was replaced by a host hook that never read the file: it wrote a fake 12-byte header with an
+  id guessed from the file name. Two more hooks (app tick, `DispatchMessage`) came with it; the `DispatchMessage`
+  one skipped the message loads and stalled boot on the memory card screen.
+
+Current state: the recompiled per-overlay object libraries (`generated/overlays/*`, from
+`tools/run_overlay_pipeline.py`) are linked again, with `overlay_all.cpp` registering the three regions and their
+tables. The game's own disc loader runs unmodified and the id in the loaded header selects the table.
+`overlay_dispatch` checks the registration (loader not replaced, entries resolve only for a loaded id);
+`message_dispatch` checks `DispatchMessage` against its generated original. The `overlays/src` files stay in
+the tree, unbuilt, as reference material.

@@ -763,3 +763,39 @@ In standard test runs under 60 s, the guest does not reach the post-audio-init c
 
 
 
+
+## Main menu never requested — boot sits on the memory card screen (2026-10-26)
+
+### Causal chain (write watch + call trace evidence)
+
+- Tribe setup ends by building the **"Memorycard Screen"** (`scr_sl`) and setting app state 2. In state 2
+  `MethodAC` does nothing; the screen's idle drives the boot. The main menu (`smenu_cd.bin`) is only requested
+  after this screen finishes.
+- The screen's per-frame logic exits while its request field is -1. Only its message handler sets it, on the
+  posted start message `WM_USER+0x120`.
+- **Fixed:** the overlay registry replaced the game's `DispatchMessage` with a host hook that jumped straight to the
+  indirect call and skipped the loads of message/wParam/lParam (and hwnd in the delay slot). The window procedure
+  received stale registers, so the start message never arrived. The hook is removed; `message_dispatch` tests
+  the generated original with and without the overlay registration.
+- With messages delivered, the screen runs its card check: `mcserv` GetInfo returns -11 (no card). The RPC is
+  served by the **physical `MCSERV.IRX`** from the disc running in the IOP emulator, which has no memory card
+  device; the runtime's host-backed HLE mcserv is only used when the emulator declines the call.
+- With synthetic pad/mouse input, the button handler requests the next dialog step (3), but the
+  `MemorycardScreenDialog` never acknowledges it. The dialog is not visible (the screen stays black), so the
+  no-card path is navigated blind.
+
+### Tooling notes
+
+- `[call-trace] ret ... v0=` is not reliable for functions that yield to the scheduler mid-body (it reported 0
+  for the idle function that really returned 1). Confirm return values with `PS2X_WRITE_WATCH` on a field
+  the caller writes.
+- `PS2X_WRITE_WATCH=0xLOW-0xHIGH` (runtime env, passes through `validate_desktop.py`) reports guest stores with pc/ra.
+
+### Open decisions
+
+- How to present a memory card: a device for the emulated IOP, routing `mcserv` to the HLE host-backed service,
+  or a native KCET `kt_mc` module.
+- The resident "decompiled" overlays are not usable: the C was translated from a wrong-ISA disassembly (EE MMI
+  stores decoded as MIPS DSP and marked unhandled), dereferences guest addresses as host pointers, and never
+  sets `gp`. The overlay loader hook does not read the file; it writes a fake 12-byte header. The recompiled
+  overlay units are still generated locally and can be relinked.

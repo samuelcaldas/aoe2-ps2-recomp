@@ -42,30 +42,62 @@ if(AOE2_GENERATED_UNITY_BATCH GREATER 0)
     )
 endif()
 
-# Decompiled disc overlays (from @aoe-decomp with resident memory dispatch):
-set(AOE2_OVERLAYS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/overlays")
+# Disc overlays (tools/run_overlay_pipeline.py): one OBJECT library per overlay. Overlays share load
+# addresses and generated names embed addresses, so each one force-includes its rename header; their
+# register_functions.cpp is skipped because overlay_registration.cpp registers through the overlay API.
+# The game's own loader reads each overlay from disc; the id in the loaded header selects the live table.
+set(AOE2_OVERLAY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/generated/overlays")
 set(AOE2_OVERLAY_TARGETS "")
-option(AOE2_ENABLE_OVERLAYS "Link the decompiled disc overlays" ON)
-if(AOE2_ENABLE_OVERLAYS AND EXISTS "${AOE2_OVERLAYS_DIR}/src/overlay_registry.cpp")
-    file(GLOB DECOMPILED_OVERLAY_C_SOURCES CONFIGURE_DEPENDS "${AOE2_OVERLAYS_DIR}/src/*.c")
-    add_library(aoe2_decompiled_overlays OBJECT
-        ${DECOMPILED_OVERLAY_C_SOURCES}
-        "${AOE2_OVERLAYS_DIR}/src/overlay_registry.cpp"
-    )
-    target_include_directories(aoe2_decompiled_overlays PRIVATE
-        "${AOE2_OVERLAYS_DIR}/include"
-        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/PS2Recomp/ps2xIOP/include"
-    )
-    target_link_libraries(aoe2_decompiled_overlays PRIVATE aoe2_ps2_runtime)
-    if(NOT MSVC)
-        target_compile_options(aoe2_decompiled_overlays PRIVATE -w -O2)
-    endif()
-    list(APPEND AOE2_OVERLAY_TARGETS aoe2_decompiled_overlays)
+option(AOE2_ENABLE_OVERLAYS "Link the recompiled disc overlays when generated/overlays exists" ON)
+if(AOE2_ENABLE_OVERLAYS AND EXISTS "${AOE2_OVERLAY_DIR}/overlay_all.cpp")
+    file(GLOB overlay_entries LIST_DIRECTORIES true CONFIGURE_DEPENDS "${AOE2_OVERLAY_DIR}/*")
+    foreach(overlay_dir IN LISTS overlay_entries)
+        if(NOT IS_DIRECTORY "${overlay_dir}")
+            continue()
+        endif()
+        get_filename_component(overlay_name "${overlay_dir}" NAME)
+        file(GLOB overlay_sources CONFIGURE_DEPENDS "${overlay_dir}/*.cpp")
+        list(FILTER overlay_sources EXCLUDE REGEX "register_functions\\.cpp$")
+        add_library(aoe2_overlay_${overlay_name} OBJECT ${overlay_sources})
+        target_include_directories(aoe2_overlay_${overlay_name} PRIVATE "${overlay_dir}")
+        target_link_libraries(aoe2_overlay_${overlay_name} PRIVATE aoe2_ps2_runtime)
+        target_compile_options(aoe2_overlay_${overlay_name} PRIVATE -include "${overlay_dir}/overlay_rename.h")
+        if(NOT MSVC AND AOE2_GENERATED_OPTIMIZATION)
+            target_compile_options(aoe2_overlay_${overlay_name} PRIVATE "${AOE2_GENERATED_OPTIMIZATION}")
+        endif()
+        if(AOE2_GENERATED_UNITY_BATCH GREATER 0)
+            set_target_properties(aoe2_overlay_${overlay_name} PROPERTIES
+                UNITY_BUILD ON UNITY_BUILD_BATCH_SIZE "${AOE2_GENERATED_UNITY_BATCH}")
+        endif()
+        list(APPEND AOE2_OVERLAY_TARGETS aoe2_overlay_${overlay_name})
+    endforeach()
+    add_library(aoe2_overlay_all OBJECT "${AOE2_OVERLAY_DIR}/overlay_all.cpp")
+    target_link_libraries(aoe2_overlay_all PRIVATE aoe2_ps2_runtime)
+    list(APPEND AOE2_OVERLAY_TARGETS aoe2_overlay_all)
     if(TARGET aoe2_overlay_dispatch_tests)
-        target_sources(aoe2_overlay_dispatch_tests PRIVATE $<TARGET_OBJECTS:aoe2_decompiled_overlays>)
-        target_compile_definitions(aoe2_overlay_dispatch_tests PRIVATE AOE2_HAS_DECOMPILED_OVERLAYS=1)
+        foreach(overlay_target IN LISTS AOE2_OVERLAY_TARGETS)
+            target_sources(aoe2_overlay_dispatch_tests PRIVATE $<TARGET_OBJECTS:${overlay_target}>)
+        endforeach()
+        target_compile_definitions(aoe2_overlay_dispatch_tests PRIVATE AOE2_HAS_RECOMPILED_OVERLAYS=1)
     endif()
-    message(STATUS "Decompiled resident overlays enabled: 8 overlays in aoe2_decompiled_overlays.")
+    list(LENGTH AOE2_OVERLAY_TARGETS overlay_target_count)
+    message(STATUS "Recompiled overlays enabled: ${overlay_target_count} object libraries.")
+endif()
+
+if(AOE2_BUILD_DESKTOP_PROBE)
+    # DispatchMessage contract against its owned generated original, with the overlay registration applied.
+    add_executable(aoe2_message_dispatch_tests tests/cpp/message_dispatch_tests.cpp
+        "${GENERATED_SRC_DIR}/FUN_00226630_0x226630.cpp" "${PS2X_DIR}/ps2xTest/src/test_function_table.cpp")
+    foreach(overlay_target IN LISTS AOE2_OVERLAY_TARGETS)
+        target_sources(aoe2_message_dispatch_tests PRIVATE $<TARGET_OBJECTS:${overlay_target}>)
+    endforeach()
+    if(NOT AOE2_OVERLAY_TARGETS)
+        target_sources(aoe2_message_dispatch_tests PRIVATE game_hooks/src/overlay_stub.cpp)
+    endif()
+    target_include_directories(aoe2_message_dispatch_tests PRIVATE "${GENERATED_SRC_DIR}")
+    target_link_libraries(aoe2_message_dispatch_tests PRIVATE aoe2_ps2_runtime)
+    add_test(NAME message_dispatch COMMAND aoe2_message_dispatch_tests)
+    set_tests_properties(message_dispatch PROPERTIES TIMEOUT 30)
 endif()
 
 function(aoe2_link_recompiled target)
