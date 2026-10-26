@@ -610,6 +610,20 @@ SDD command 3 (engine-ready query — the stall poll): `sceSifCallRpc(&client_0x
 
 Upstream shim behaviour: when the IOP-side handler for SDD service `0x30`, command `3` is called and no real SPU2 hardware is present, the handler should write `4` into the first byte of the EE receive buffer after a brief simulated delay (matching the IOP reply-latency pattern used by the earlier SIF boot-handshake fix). This is analogous to the upstream INTC_STAT and boot-handshake fixes: it does not fabricate a game result, it provides the hardware-absent completion that the daemon would emit after a real SPU2 DMA cycle.
 
+**Decomp source available (2026-10-26).** The `aoe-decomp` session completed and
+merged a faithful decompilation of the full SDD/SDCD audio init region into the
+owner's decomp repository (`../aoe`, commits `a6ada32e`/`cb2bb2ec`):
+- `include/kt_sound.h` — SIF service IDs (`SDCD=0x20`, `SDD=0x30`), status codes,
+  and `SifRpcClientData_t` struct layout.
+- `src/kcet/kt_sound.c` — implementations of the four audio functions: bind init,
+  stream-file open, volume/extended-status query, and command-3 status poll.
+- `tests/native/kt_sound_test.c` — TDD tests passing under `gcc -m32 -O2`.
+
+This source is the authoritative reference for the upstream fork shim. Per the
+owner's 2026-10-24 authorization, its content may be copied into tracked files of
+this repository when needed for a native KCET audio module. No such module is
+implemented yet; the fix belongs in the upstream IOP emulator.
+
 
 
 
