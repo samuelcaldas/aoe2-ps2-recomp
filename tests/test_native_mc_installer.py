@@ -29,7 +29,7 @@ public:
 };
 #define PS2_REGISTER_GAME_OVERRIDE(...)
 namespace ps2_stubs {
-inline void sceMcInit(uint8_t*, R5900Context*, PS2Runtime*) {}
+inline void sceMcGetDir(uint8_t*, R5900Context*, PS2Runtime*) {}
 inline void sceMcGetInfo(uint8_t*, R5900Context*, PS2Runtime*) {}
 inline void sceMcSync(uint8_t*, R5900Context*, PS2Runtime*) {}
 }
@@ -56,8 +56,8 @@ int main(int argc, char**) {
         InstallNativeMc(runtime);
         std::cout.rdbuf(previous);
         if (mc_enabled) {
-            const std::set<uint32_t> expected{0x10FF40, 0x110A78, 0x110940};
-            Check(runtime.replaced == expected, "enabled MC must replace exactly the three libmc entries");
+            const std::set<uint32_t> expected{0x110A78, 0x110940, 0x110C00};
+            Check(runtime.replaced == expected, "enabled MC must replace exactly the routed libmc entries");
             Check(output.str().find("installed 3/3") != std::string::npos, "enabled MC must report 3/3");
         } else {
             Check(output.str().find(": off") != std::string::npos, "disabled MC must report off");

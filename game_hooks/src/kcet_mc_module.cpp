@@ -2,7 +2,9 @@
 // The guest library talks to the IOP mcserv over SIF RPC; the emulated IOP has no
 // card device (GetInfo returns -11), so the boot stays on the memory card screen.
 // These entry points are routed to the runtime's host-backed card (root mc0), which
-// follows the SDK calling convention. Other sceMc* entries stay on the guest code.
+// follows the SDK calling convention. sceMcInit stays on the guest code on purpose: it
+// creates the library semaphore and binds the RPC, and every guest sceMc* entry that is
+// not routed here polls that semaphore first (without it they return -200).
 #include "game_overrides.h"
 #include "ps2_runtime.h"
 #include "native_input_module_support.hpp"
@@ -20,9 +22,9 @@ struct LibmcEntry {
 };
 
 const std::array<LibmcEntry, 3> kEntries = {{
-    {0x0010FF40, &ps2_stubs::sceMcInit, "sceMcInit"},
     {0x00110A78, &ps2_stubs::sceMcGetInfo, "sceMcGetInfo"},
     {0x00110940, &ps2_stubs::sceMcSync, "sceMcSync"},
+    {0x00110C00, &ps2_stubs::sceMcGetDir, "sceMcGetDir"},
 }};
 
 void InstallNativeMc(PS2Runtime& runtime) {
