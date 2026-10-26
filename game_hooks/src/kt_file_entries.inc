@@ -1,5 +1,5 @@
 // X-macro map for kt_file module functions.
-ENTRY_R(SetRecordTable, 0x0012CCE8, m.SetRecordTable(U(0)))
+// Entries are limited to starts exported as functions by the authoritative Ghidra map.
 ENTRY_R(SetEntryTable, 0x0012CDE0, m.SetEntryTable(U(0)))
 ENTRY_R(ClassifyKind, 0x0012CEA0, m.ClassifyKind(U(0)))
 ENTRY_R(GetHandlerByKind, 0x0012CF00, m.GetHandlerByKind(I(0)))

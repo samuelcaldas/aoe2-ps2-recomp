@@ -1,12 +1,2 @@
 // X-macro map for kt_mc_2 module functions.
-ENTRY_V(InitWork, 0x0012DE88, m.InitWork())
-ENTRY_V(TermWork, 0x0012DE98, m.TermWork())
-ENTRY_R(TableLookup, 0x0012DEB8, m.TableLookup(I(0), U(1), I(2)))
-ENTRY_R(Init2, 0x0012E068, m.Init2(U(0), I(1)))
-ENTRY_V(SetActiveCard, 0x0012E260, m.SetActiveCard(I(0)))
-ENTRY_R(GetCardPort, 0x0012E330, m.GetCardPort(U(0)))
-ENTRY_R(GetCardSlot, 0x0012E348, m.GetCardSlot(U(0)))
-ENTRY_R(GetCardType, 0x0012E360, m.GetCardType(U(0)))
-ENTRY_V(SetFileAttr, 0x0012EB40, m.SetFileAttr(U(0), I(1)))
-ENTRY_V(SetFileCluster, 0x0012EB80, m.SetFileCluster(U(0), I(1)))
-ENTRY_V(ClearEntryFields, 0x0012F0D0, m.ClearEntryFields(U(0)))
+// No entries qualify: remaining exported labels are not verified true function starts.
