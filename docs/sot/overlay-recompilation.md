@@ -8,6 +8,12 @@ Roles only; no guest addresses (provenance rules). Local mapping: `tools/map_ove
   polls a loader until it reports done. The loader prefixes the language directory, reads the
   **whole file, header included,** to the load address through the disc stack, and invalidates caches.
   Nothing is relocated or decompressed by the loader.
+- **IOP/SIF Channel (Thread 7 / FUN_0012B648):** The eight overlays (`MWo3` / `PT_LOAD` segments with
+  `filesz = 0`: `SMENU_CD.BIN`, `DCOMP_CD.BIN`, etc.) pass through the exact same disc channel driven by
+  Thread 7 (`func_0012B648`): they are stored on the CD-ROM and read by `kt_libcdvd_server` via
+  SIF CDVDFSV commands (`sid=0x80000593`, `fn=0x22`). Consequently, the `cdvdman:22` (`sceCdRead0`)
+  IOP fix resolves both general asset reading and loading the executable code overlays into memory
+  (`0x01D98000` onward).
 - The main code enters an overlay with plain `jal` to fixed addresses inside its load region
   (an init entry, then a per-frame entry for the lobby). The generated main-code C++ has no
   function there, so such a call is a missing function.
@@ -69,3 +75,13 @@ Findings (counts only):
   decomp's addresses drift (best offsets differ per overlay, 0x74 to 0x8c), so a straight address comparison is
   not meaningful; do not use decomp addresses for overlays without recomputing them from the file.
 - **IOP.** No decompiled IRX/IOP sources were found in the decompilation repository (no files, no commits).
+
+## Resident Decompiled Overlays (2026-10-26)
+
+The static recompilation pipeline for overlays (which generated >12,000 translation units) has been completely replaced by direct compilation of the pure-C decompiled overlays from `@aoe-decomp` (`overlays/src/*.c` and `overlays/include/*_overlay.h`):
+- All 8 overlays (`DCOMP=5`, `HIST=9`, `LOBBY=4`, `MO_OV=2`, `MULTIM=7`, `RMMMEM=3`, `SMENU=6`, `THELP=8`) reside simultaneously in host memory (`aoe2_decompiled_overlays` library).
+- Three regions (`0x01D98000`, `0x01ED7000`, `0x01F68000`) are registered with `runtime.addOverlayRegion()`.
+- Dispatch uses the active overlay ID in guest memory (`0x01D98004`, `0x01ED7004`, `0x01F68004`), dynamically routing guest calls to the correct C implementation via `RegisterGeneratedOverlays()`.
+- External guest calls from overlays (`func_00XXXXXX` and `func_01XXXXXX`) are bridged via `overlay_dispatch_guest()`.
+- Build times dropped from hours to seconds; all tests and runtime boot pass cleanly.
+

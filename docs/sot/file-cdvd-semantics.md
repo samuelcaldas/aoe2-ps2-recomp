@@ -15,6 +15,7 @@ This document records the baseline determinism, function coverage, binary contra
   - `CdvdModel` (`cdvd/include/aoe2/cdvd/cdvd_model.hpp`) provides sector reading and streaming simulation over host disc files (`game/SLES-50282/aoe2.iso` or extracted data).
   - CD-ROM sector size is 2048 bytes; `bytes_remaining >> 11` represents remaining sectors.
   - Queued reads update `CdStreamStatus` at `0x004F16C0` atomically.
+  - **Overlay Code Loading:** The eight code overlays (`MWo3` / `PT_LOAD` segments with `filesz = 0`: `SMENU_CD.BIN`, `DCOMP_CD.BIN`, etc.) pass through this same disc reading channel handled by Thread 7 (`func_0012B648`) in `kt_libcdvd_server` via SIF CDVDFSV commands (`sid = 0x80000593`, `fn = 0x22`). Fixing `cdvdman:22` (`sceCdRead0`) in the IOP layer resolves both general asset reading and loading the executable code overlays into memory (`0x01D98000` onward).
 
 - **Switches and Game Overrides:**
   - Gated behind switches `file=on` and `cdvd=on` (or `file_cd=on`) in `game/SLES-50282/native_modules.ini`. Default is `off`.

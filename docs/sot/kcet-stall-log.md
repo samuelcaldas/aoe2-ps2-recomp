@@ -474,6 +474,8 @@ Validator status remained `stalled_in_loop` (`real_frames=2, frames_changed=Fals
 Host unit and differential tests (`kt_file_model`, `cdvd_model`, `file_snapshot`, `native_file_adapters`,
 `file_differential`) all pass (25/25 CTests green). Evidence: `docs/sot/file-cdvd-semantics.md`.
 
+**Overlay loading channel confirmation (2026-10-26):** Decompilation and runtime tracing confirm that the eight code overlays (`MWo3` / `PT_LOAD` segments with `filesz = 0`: `SMENU_CD.BIN`, `DCOMP_CD.BIN`, etc.) pass through this exact same Thread 7 (`func_0012B648`) disc reading channel via `kt_libcdvd_server` (SIF CDVDFSV `sid=0x80000593, fn=0x22`). Fixing `cdvdman:22` (`sceCdRead0`) in the IOP layer resolves both general asset reading and loading overlay code into RAM (`0x01D98000` onward).
+
 ### Native kt_mc_2, bounded observer comparison (2026-10-25)
 
 A 30-second differential game capture on desktop Linux (`AOE2_INPUT_SYNTHETIC=1 AOE2_STATE_SNAPSHOT=1`)
