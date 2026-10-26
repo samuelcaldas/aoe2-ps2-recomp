@@ -1,0 +1,3 @@
+[submodule "third_party/age-of-empires-2-decomp"]
+	path = third_party/age-of-empires-2-decomp
+	url = https://github.com/samuelcaldas/age-of-empires-2-decomp.git
