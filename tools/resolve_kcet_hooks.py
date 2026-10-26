@@ -43,6 +43,7 @@ from tools.kcet_resolver.network import resolve_network_hooks  # noqa: E402
 from tools.kcet_resolver.mouse import (
     resolve_mouse_hooks as resolve_mouse_hooks_from_elf,
 )  # noqa: E402
+from tools.kcet_resolver.sound import resolve_sound_hooks  # noqa: E402
 
 DEFAULT_DECOMP_ROOT = REPO_ROOT.parent / "aoe"
 DEFAULT_ELF = REPO_ROOT / "game" / "SLES-50282" / "AOK.ELF"
@@ -156,6 +157,7 @@ def main(argv: list | None = None) -> int:
         hooks = resolve_mouse_hooks_from_elf(image, functions)
         hooks.update(resolve_keyboard_hooks_from_elf(image, functions))
         hooks.update(resolve_network_hooks(image, functions))
+        hooks.update(resolve_sound_hooks(image, functions))
         if args.decomp_root is not None:
             if resolve_from_decomp(args.decomp_root) != hooks:
                 raise HookResolutionError(

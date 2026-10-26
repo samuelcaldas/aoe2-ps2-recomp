@@ -119,6 +119,7 @@ if(AOE2_BUILD_GAME)
         game_hooks/src/kcet_mouse_overrides.cpp
         game_hooks/src/kcet_keyboard.cpp
         game_hooks/src/kcet_net.cpp
+        game_hooks/src/kcet_sound.cpp
         game_hooks/src/kcet_kernel.cpp
         game_hooks/src/kcet_pad_backend.cpp
         game_hooks/src/kcet_pad.cpp

@@ -54,3 +54,7 @@ class FunctionMap:
         function = self.containing(address)
         if function is None or function[0] != address:
             raise HookResolutionError(f"0x{address:08x} is not the start of a function in the export")
+
+    def all(self) -> list:
+        """All (start, end, name) function rows in start-address order."""
+        return list(self._rows)

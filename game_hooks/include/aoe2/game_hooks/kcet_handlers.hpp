@@ -14,4 +14,6 @@ void RegisterMouseHandlers(KcetHandlers& handlers);
 void RegisterKeyboardHandlers(KcetHandlers& handlers);
 // Adds the i.LINK socket replacements (host socket model); addresses come from local configuration.
 void RegisterNetworkHandlers(KcetHandlers& handlers);
+// Adds host sound boundary replacements (SDD/SDCD RPC stubs); addresses come from local configuration.
+void RegisterSoundHandlers(KcetHandlers& handlers);
 }
