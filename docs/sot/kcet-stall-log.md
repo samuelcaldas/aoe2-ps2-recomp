@@ -590,6 +590,26 @@ delivered. No fabricated return has been inserted; this requires an upstream fix
 the earlier SIF boot-handshake fix in the upstream fork. Neither option is a
 game-side hook; both require changes outside this repository.
 
+**Full RPC protocol spec for the upstream fork shim (2026-10-26).** Decompilation
+of `0x12D648`–`0x12D8D8` by the `aoe-decomp` session produced the complete IOP
+client protocol. Recorded here as the specification the upstream IOP-side shim
+must satisfy; no EE-side code in this repository is changed.
+
+SIF clients bound during audio init:
+
+| Address | Service ID | Bind error message |
+| :--- | :--- | :--- |
+| `SifRpcClientData_t` at `0x4F1640` | `0x20` (SDCD — Sound CD/Stream) | `"SDCD_CDREAD_CALL DaMe!!\n"` |
+| `SifRpcClientData_t` at `0x4F1680` | `0x30` (SDD — Sound Driver Daemon) | `"SDD_GETVOL DaMe!!\n"` / `"sd_getvol.serve : 0x%x\n"` |
+
+SDCD command 0x10 (open stream file): `sceSifCallRpc(&client_0x4F1640, 0x10, 0, 0x4F1540, 256, NULL, 0, NULL, NULL)`. The 256-byte send buffer at `0x4F1540` holds the filename (copied via `strcpy`). The IOP opens the named CD stream file. No receive buffer.
+
+SDD command `val` (volume/status query): `sceSifCallRpc(&client_0x4F1680, val, 0, NULL, 0, 0x38C880, 48, NULL, NULL)`. Send buffer absent; receive buffer is 48 bytes at `0x38C880`. Used for extended status and volume table queries; `val = a0 & 0xFF`.
+
+SDD command 3 (engine-ready query — the stall poll): `sceSifCallRpc(&client_0x4F1680, 3, 0, NULL, 0, 0x38C880, 1, NULL, NULL)`. No send buffer; receive buffer is 1 byte at `0x38C880`. Return values: `1` = SPU2 DMA still in progress (loop again); `4` = DMA complete, sound engine ready (exit loop); other = error or uninitialised idle.
+
+Upstream shim behaviour: when the IOP-side handler for SDD service `0x30`, command `3` is called and no real SPU2 hardware is present, the handler should write `4` into the first byte of the EE receive buffer after a brief simulated delay (matching the IOP reply-latency pattern used by the earlier SIF boot-handshake fix). This is analogous to the upstream INTC_STAT and boot-handshake fixes: it does not fabricate a game result, it provides the hardware-absent completion that the daemon would emit after a real SPU2 DMA cycle.
+
 
 
 
