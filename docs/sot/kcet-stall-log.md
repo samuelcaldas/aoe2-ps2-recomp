@@ -518,6 +518,78 @@ or playable graphics. Packet fixtures, not unrelated input snapshots, are the bo
 correctness evidence. External handlers and pure-memory packet helpers remain generated;
 this is not a full renderer replacement. Details: `docs/sot/gpu-semantics.md`.
 
+### Stall loop source trace (2026-10-26)
+
+The sampled PC inside the 30-second captures (the `stalled_in_loop` verdict) was
+traced through the generated code to its exact origin.
+
+**Structure of the wait.** A five-stage audio initialisation function calls a
+stall-loop function at each stage. The stall-loop function polls an audio-service
+RPC handle by calling a single-byte status reader on each outer iteration; between
+polls it executes a 16M-iteration CPU busy-delay and a vsync-check helper. The
+status reader: (1) issues an async SIF RPC call to an audio IOP service, passing a
+transfer-control struct; (2) reads a one-byte status field from that struct and
+returns it. The caller exits only when the status byte equals 4 (done); bytes 1 and
+other values loop again.
+
+**The status byte.** The struct holding the status byte lives at a fixed guest
+address derived from two compile-time constants in the status reader's prologue.
+The byte is set by the IOP-side RPC reply handler when the transfer completes; the
+EE-side code only reads it.
+
+**Why the 30-second captures always stall here.** The stall log's 300-second run
+(with function-log tracing enabled) observed the status sequence `1, 1, 0, 1` —
+so the upstream SIF runtime does eventually reply; the service exists. The 30-second
+captures stall because the 16M-iteration busy-delay plus function-log file I/O
+makes each poll cycle take many seconds of wall-clock time. This is not a missing
+service — it is a measurement-window issue caused by the log overhead.
+
+**Why even the 540-second non-function-log run stalls.** In that run all five
+initialisation stages cleared. The later stall (black screen with cursor) is
+therefore a separate problem downstream of audio init and is not caused by the
+status poll seen in the 30-second captures.
+
+**Consequence for the current work.** The native KCET modules (mouse, keyboard,
+pad, file, CDVD, MC, HD, GPU) are not the cause of the audio-init poll stall.
+The poll completes in longer runs; no fabricated reply is needed and none has
+been inserted. The outstanding question is what causes the post-audio-init black
+screen, which is the next stall to investigate.
+
+**Service identity confirmed by decompilation (2026-10-26).** The `aoe-decomp`
+session identified the service from the init function that precedes the stall:
+
+- The struct at the fixed guest address derived from the status reader's constants
+  is a `SifRpcClientData_t` for SIF service **0x30 (SDD — Sound Driver Daemon)**.
+  It is bound in an init function that also binds service **0x20 (SDCD — Sound CD/Stream)**.
+- `func_12D888` is `sceSifCallRpc(&client_SDD, 3, 0, NULL, 0, reply_buf, 1, NULL, NULL)`,
+  issuing RPC command 3 to SDD and reading the first reply byte.
+- Status byte 1 = SDD busy / starting; status byte 4 = SDD sound engine ready.
+- The stall loop is inside the audio-engine startup sequence; it is driven by
+  a thread that also dispatches commands 0x1010–0x1013 and 0x101F to the KCET
+  audio framework before entering the poll.
+
+**Root cause confirmed.** The IOP-side sound daemon (SIF service 0x30, command 3)
+does not transition from status 1 to 4. The `sdstr.irx` and `soundcd.irx` modules
+load from the disc and register the SDD service in the upstream IOP emulator. Whether
+the status-4 transition requires SPU2 DMA completion (no SPU2 emulation is present)
+or an explicit IOP-side signal is under investigation. No fabricated reply is inserted.
+
+**Next step.** Determine whether `sdstr.irx` command 3 replies unconditionally or
+only after a SPU2/DMA transfer completes. If the latter, the status 4 will never
+arrive without a SPU2 stub, and this is an upstream emulation gap analogous to the
+earlier INTC_STAT and SIF boot-handshake gaps.
+
+**SPU2 dependency confirmed by decompilation (2026-10-26).** In the KCET sound
+architecture, SDD command 3 reports the state of an IOP-side DMA/SPU2 buffer fill.
+Status 1 = DMA transfer in progress; status 4 = transfer and buffer-ready complete.
+Without a SPU2 DMA interrupt or completion callback on the IOP, the daemon never
+exits status 1. This is an upstream emulation gap: the upstream IOP emulator loads
+and runs `sdstr.irx` but does not emulate SPU2 DMA, so no completion event is ever
+delivered. No fabricated return has been inserted; this requires an upstream fix
+(SPU2 DMA stub in the IOP emulator) or a targeted IOP-side RPC shim analogous to
+the earlier SIF boot-handshake fix in the upstream fork. Neither option is a
+game-side hook; both require changes outside this repository.
+
 
 
 
