@@ -44,6 +44,7 @@ add_library(aoe2_interfaces STATIC
     net/src/ilink_address.cpp
     net/src/ilink_socket_model.cpp
     net/src/in_memory_hub.cpp
+    net/src/lan_discovery.cpp
     net/src/null_transport.cpp
     renderer/src/null_renderer.cpp
     runtime/src/guest_memory.cpp
@@ -178,6 +179,11 @@ add_test(NAME host_button_map COMMAND aoe2_host_button_map_tests)
 add_executable(aoe2_net_tests tests/cpp/net_tests.cpp)
 target_link_libraries(aoe2_net_tests PRIVATE aoe2_interfaces)
 add_test(NAME net_tests COMMAND aoe2_net_tests)
+
+# LAN session discovery codec and directory over the shared network transport
+add_executable(aoe2_lan_discovery_tests tests/cpp/lan_discovery_tests.cpp)
+target_link_libraries(aoe2_lan_discovery_tests PRIVATE aoe2_interfaces)
+add_test(NAME lan_discovery COMMAND aoe2_lan_discovery_tests)
 
 # POSIX UDP backend for the i.LINK socket model (not available on Switch)
 if(UNIX AND NOT NINTENDO_SWITCH)
