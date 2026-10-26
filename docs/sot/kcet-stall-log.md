@@ -799,3 +799,21 @@ In standard test runs under 60 s, the guest does not reach the post-audio-init c
   stores decoded as MIPS DSP and marked unhandled), dereferences guest addresses as host pointers, and never
   sets `gp`. The overlay loader hook does not read the file; it writes a fake 12-byte header. The recompiled
   overlay units are still generated locally and can be relinked.
+
+### Memory card screen with a present card (2026-10-26, branch m1-libmc)
+
+Evidence, in order, with the `memory_card` switch routing libmc `GetInfo`, `Sync` and `GetDir` to the host card:
+
+- The card is seen (`GetInfo` type 2, formatted, 8192 clusters free) and the status record of the KCET card
+  device reaches "ready" after the `Sync`.
+- Routing `sceMcInit` to the host breaks every unrouted `sceMc*` entry: the guest `sceMcInit` creates the library
+  semaphore and binds the RPC; without it each entry fails its first `PollSema` and returns -200. Keep the guest
+  `sceMcInit`; route operations only.
+- The memory card prompt (mode 1 of the per-frame pump) waits for a card-device job result. With `GetDir`
+  routed the job completes, the dialog receives message 0x520 (wParam 0x12), its button handler and the
+  dismiss path run, and the card screen becomes the active screen again.
+- Still open: the card screen then sits at target state -1 with its per-frame update returning early, its exit
+  function is never called and the main menu is never requested. Question sent to the decomp (see
+  `docs/decomp-requests.md`).
+- A forced dispatch of message 0x520 to the dialog was proposed and rejected: it forces state instead of fixing
+  the producer.
