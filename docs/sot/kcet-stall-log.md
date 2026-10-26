@@ -499,6 +499,25 @@ Validator status remained `stalled_in_loop` (`real_frames=4, frames_changed=Fals
 Host unit and differential tests (`kt_hd_model`, `hd_storage_model`, `hd_snapshot`, `native_hd_adapters`,
 `hd_differential`) all pass (35/35 CTests green). Evidence: `docs/sot/hd-semantics.md`.
 
+### Native GPU packet boundary, corrected verification (2026-10-25)
+
+The seven-function source boundary now installs completely or fails explicitly.
+The focused harness executes the actual selected generated originals, not duplicated
+reference implementations: 135 packet comparisons, 60 packet-helper comparisons,
+14 scheduler timing/deadline cases and three matching dynamic GPU entry records per
+mode pass. Independent review exposed omitted guest-dispatch cycle charges; a
+regression reproduced the mismatch before the fix and passes with retained helper
+calls and guest-stack continuations. All 37 host CTests and Python's 317 tests
+(two external-asset skips) pass on main, as does the separate runtime differential test.
+
+After the Docker diagnostic build, two 30-second game captures (`gpu=off`/`gpu=on`)
+both remain `stalled_in_loop`, with unchanged frames and no missing branch targets.
+The native log confirms `installed 7/7`, but neither capture reaches a GPU entry:
+zero GPU records and zero GPU skips. This does not demonstrate game-path GPU parity
+or playable graphics. Packet fixtures, not unrelated input snapshots, are the bounded
+correctness evidence. External handlers and pure-memory packet helpers remain generated;
+this is not a full renderer replacement. Details: `docs/sot/gpu-semantics.md`.
+
 
 
 

@@ -64,7 +64,17 @@ of all 29 production handlers. The observer fixture requires exactly three match
 GPU records per mode, including nonempty dynamic packet data, without skips or
 duplicates. Mouse/keyboard records do not count as GPU parity.
 
-No full-game original/native capture or rendering/gameplay equivalence is claimed.
+Two full-game desktop captures of 30 seconds each were performed after a successful
+Docker diagnostic build, with `gpu=off` and `gpu=on`. The native run installed all
+seven entries (`installed 7/7`). Neither run reached a GPU entry: both produced zero
+GPU records and zero GPU skips. The visual validators failed in both cases
+(`stalled_in_loop`, unchanged frames; three/four real frames respectively, no missing
+branch targets). These captures establish installation and bounded runtime behavior,
+NOT game-path GPU parity, boot success or rendering/gameplay equivalence. Logs are
+preserved locally under `build/gpu-validation/`; configuration was restored byte-exactly.
+
+Fresh main-branch validation: 37/37 host CTests, Python 317 tests with two external
+HD-asset skips, and the separate generated-code differential CTest all passed.
 The bounded focused comparisons establish packet semantics on their tested vectors:
 135 original/native packet comparisons, 60 packet-helper comparisons, three matching
 GPU entry records per mode, and 14 scheduler timing/deadline comparisons (all seven

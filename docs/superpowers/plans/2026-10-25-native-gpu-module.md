@@ -16,9 +16,17 @@ GS register-map model.
 - [x] Exercise independent contexts, nested calls, yields and scheduler resumption.
 - [x] Verify nonempty GPU-only snapshot equality and exactly-once entry capture.
 - [x] Narrow earlier file/CDVD, memory-card and HD parity claims.
-- [ ] Full-game original/native GPU capture (not performed in this task).
-- [ ] All 29 external production handler semantics (outside this seven-entry boundary).
+- [x] Build diagnostic game in Docker and capture original/native for 30 seconds each;
+  all seven overrides install, but zero GPU calls are reached before the boot stall.
+  This is not a game-path parity claim; genuine differential fixtures supply the GPU proof.
+- [x] Independent review and RED/GREEN regression for scheduler dispatch charges and
+  deadline-visible packet state, with original guest helper calls/continuations retained.
 
-GPU remains off by default. No shared game config/save changes, generated/dependency
-source edits, renderer implementation, merge, or push are part of this task.
+Outside this delivery: all 29 external production handler semantics and full renderer
+replacement. The seven-function source boundary is implemented; those external dependencies
+remain generated and are explicitly not claimed replaced.
+
+GPU remains off by default. Temporary GPU switches were restored byte-exactly;
+no saves, generated/dependency sources or renderer implementation were changed.
+The verified boundary was integrated locally into main; no push was performed.
 Validation commands and coverage limits: `docs/sot/gpu-semantics.md`.
