@@ -634,5 +634,82 @@ therefore needs to handle only that one command; no additional SPU2-dependent
 commands precede it. Investigation of the audio-init stall is complete.
 
 
+## Post-audio-init black screen — pc-zero crash in boot state machine (2026-10-26)
+
+**Symptom.** After audio init completes (~540 s), the game thread enters the
+per-frame loop and crashes with `pc=0` shortly after. The main thread then waits
+forever on its join semaphore → black screen with cursor.
+
+### Game thread structure (confirmed by static analysis)
+
+The game thread entry point (address range approximately 0x2206A0–0x2207B0) runs
+a one-time init sequence, then enters an infinite per-frame loop that never
+reaches its own return instruction. The loop per iteration:
+
+1. `func_2204D0` — reinitialise frame object
+2. `func_104D40` — signal main-thread semaphore (main thread proceeds to render)
+3. `func_104D60` — wait main-thread semaphore (wait for render done)
+4. Write zero to GS register at 0x10000000; increment two 64-bit frame counters
+5. `func_226260(a0=counter)` — frame setup (contains one JALR / indirect call)
+6. **Inner message-queue wait:** `func_2204E0` (calls `waitSemaphore` `0x104D70` in
+   a loop until counter changes) — this is the message-available poll, not a
+   one-shot call
+7. `func_2207B0` — display-buffer / viewport update (all direct calls, no
+   indirect dispatch)
+8. `func_104D40` — signal
+9. `func_221790` — peripheral/input state update (all direct)
+10. `func_3379F0(a0=0)` — (twice, frames 9–11)
+11. `func_221F40` — **boot/menu state machine** — contains `jr $v1` indirect jump
+12. `func_36F800(a0=0)`, `func_221C00`, `func_224A10`
+13. Unconditional branch back to step 1
+
+### Root cause: uninitialised jump-table entry in boot state machine
+
+`func_221F40` (address range 0x221F40–0x22217C) is the main boot/menu state machine.
+It reads a 16-bit phase index from a global at `gp-0x74B4` and bounds-checks it:
+`sltiu $at, phase, 10` — if phase ≥ 10, it skips to the function epilogue. If
+phase is 0–9, it dispatches through a four-byte function-pointer table at address
+`0x492EF0`:
+
+```
+// 0x222048: sltiu   $at, $a1, 10        // guard: skip if phase >= 10
+// 0x222054: lui     $v1, 0x49
+// 0x222058: addiu   $a0, $v1, 0x2EF0    // $a0 = 0x492EF0 (table base)
+// 0x22205c: sll     $v1, $a1, 2          // $v1 = phase * 4
+// 0x222060: addu    $v1, $v1, $a0        // $v1 = &table[phase]
+// 0x222064: lw      $v1, 0($v1)          // $v1 = table[phase]  (function pointer)
+// 0x222068: jr      $v1                  // jump to handler
+```
+
+If the pointer loaded from `table[phase]` is zero — because the table is
+uninitialised at that entry, or because the phase index is set before the table is
+populated — the runtime dispatches to `pc=0`, which has no compiled function, and
+`dispatchGuestBranch` returns false. The C++ wrapper returns, unwinding the guest
+call stack, and the game thread terminates at pc=0. aoe-decomp confirmed: cases
+0–9 route to handlers including `func_220FF0` (audio stage init, case 6) and
+`func_22212C` (state-advance, case 9); the remaining entries may be zero-filled
+until those stages are reached.
+
+### Confirmed by aoe-decomp (2026-10-26)
+
+- `func_221790`, `func_221C00`, `func_221F40` callees: no indirect dispatch in
+  the first two; `func_221F40` has the `jr $v1` jump table at 0x222068.
+- The indirect jump at 0x222068 dispatches to `GuestBranchKind::IndirectJump`
+  with return PC 0x0 — the runtime treats a zero destination as a missing-function
+  crash.
+- `func_226260` also has one JALR (`GuestBranchKind::IndirectCall`) at 0x226304;
+  that is within the frame-setup path and is a secondary candidate if the table
+  at 0x492EF0 is fully populated.
+
+### Next investigation step
+
+Read `func_226260` around 0x226304 to identify what object it dispatches through
+(vtable? callback array?). Separately, verify whether address `0x492EF0` is within
+the range of static data the ELF loads, and whether any init function before the
+loop populates it. If the table entries are zero at runtime, the fix is to trace
+which init function should populate `0x492EF0[0..9]` and ensure it runs before the
+state machine first executes.
+
+
 
 
