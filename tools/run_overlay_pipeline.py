@@ -26,7 +26,7 @@ from core.target import SINGLE_TARGET  # noqa: E402
 from tools import install_ghidra_ee_extension as ee_extension  # noqa: E402
 from tools import verify_function_map as guardrail  # noqa: E402
 from tools.kcet_resolver.elf_image import load_elf  # noqa: E402
-from tools.overlay_entries import entry_targets, seeds_for, switch_targets  # noqa: E402
+from tools.overlay_entries import drop_delay_slot_seeds, entry_targets, seeds_for, switch_targets  # noqa: E402
 from tools.map_overlays import HEADER_BYTES, parse_overlay_header  # noqa: E402
 from tools.overlay_registration import build_aggregate, build_registration, build_rename_header, parse_register_file  # noqa: E402
 from tools.overlay_to_elf import overlay_to_elf  # noqa: E402
@@ -109,7 +109,8 @@ def process(entry: dict, raw: bytes, ghidra_home: Path, targets: list) -> dict:
     code_bin.write_bytes(raw[:HEADER_BYTES + header.text])
     toml, csv_path = work / "overlay.toml", work / "overlay.csv"
     seeds = work / "seeds.txt"
-    entries = set(seeds_for(targets, header.load_address, HEADER_BYTES, header.text))
+    called = drop_delay_slot_seeds(seeds_for(targets, header.load_address, HEADER_BYTES, header.text), raw, header.load_address)
+    entries = set(called)
     entries.update(switch_targets(raw, header.load_address, HEADER_BYTES, header.text))
     seeds.write_text("".join(f"0x{address:x}\n" for address in sorted(entries)))
     export_functions(ghidra_home, name, code_bin, header.load_address, toml, csv_path, seeds)
