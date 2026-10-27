@@ -10,6 +10,12 @@
 #include <aoe2/renderer/hud_layout.hpp>
 #include <iostream>
 #include <memory>
+#include <unordered_map>
+
+#if __has_include("raylib.h")
+#include "raylib.h"
+#define AOE2_HAS_RAYLIB 1
+#endif
 
 namespace aoe2::game_hooks::detail {
 void SetActiveHudMapper(const aoe2::input::HudInverseMapper* mapper);
@@ -22,6 +28,60 @@ std::unique_ptr<aoe2::assets::AssetResolver> s_hd_resolver;
 std::unique_ptr<aoe2::renderer::GlesRenderer> s_gles_renderer;
 std::unique_ptr<aoe2::renderer::HudLayout> s_hud_layout;
 std::unique_ptr<aoe2::input::HudInverseMapper> s_hud_mapper;
+
+#if defined(AOE2_HAS_RAYLIB)
+struct HostTextureRecord {
+    Texture2D tex{};
+    bool valid{false};
+};
+std::unordered_map<uint32_t, HostTextureRecord> s_host_textures;
+
+Texture2D GetOrCreateHostTexture(uint32_t texId, const aoe2::assets::ResolvedSprite& sprite) {
+    auto it = s_host_textures.find(texId);
+    if (it != s_host_textures.end() && it->second.valid) {
+        return it->second.tex;
+    }
+    Image img{
+        .data = const_cast<uint32_t*>(sprite.rgba_data),
+        .width = sprite.width,
+        .height = sprite.height,
+        .mipmaps = 1,
+        .format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8,
+    };
+    Texture2D tex = LoadTextureFromImage(img);
+    SetTextureFilter(tex, TEXTURE_FILTER_BILINEAR);
+    s_host_textures[texId] = {tex, true};
+    return tex;
+}
+
+void NativePresentationCallback(PS2Runtime&, void*) {
+    if (!s_hd_resolver) return;
+    const float screenW = static_cast<float>(GetScreenWidth());
+    const float screenH = static_cast<float>(GetScreenHeight());
+    if (screenW < 800.0f) return;
+
+    // 1. Render Top Resource Bar with HD Asset 50792
+    auto topSprite = s_hd_resolver->ResolveSprite(aoe2::assets::AssetCategory::Interface, 50792, 0);
+    if (topSprite.has_value() && topSprite->width > 0 && topSprite->height > 0) {
+        Texture2D tex = GetOrCreateHostTexture(topSprite->texture_id, *topSprite);
+        const float topH = (screenH >= 1080.0f) ? 36.0f : 24.0f;
+        Rectangle src{0.0f, 0.0f, static_cast<float>(tex.width), static_cast<float>(tex.height)};
+        Rectangle dst{0.0f, 0.0f, screenW, topH};
+        DrawTexturePro(tex, src, dst, Vector2{0.0f, 0.0f}, 0.0f, WHITE);
+    }
+
+    // 2. Render Bottom Command Bar with HD Asset 50150
+    auto bottomSprite = s_hd_resolver->ResolveSprite(aoe2::assets::AssetCategory::Interface, 50150, 0);
+    if (bottomSprite.has_value() && bottomSprite->width > 0 && bottomSprite->height > 0) {
+        Texture2D tex = GetOrCreateHostTexture(bottomSprite->texture_id, *bottomSprite);
+        const float botH = (screenH >= 1080.0f) ? 144.0f : 96.0f;
+        const float botY = screenH - botH;
+        Rectangle src{0.0f, 0.0f, static_cast<float>(tex.width), static_cast<float>(tex.height)};
+        Rectangle dst{0.0f, botY, screenW, botH};
+        DrawTexturePro(tex, src, dst, Vector2{0.0f, 0.0f}, 0.0f, WHITE);
+    }
+}
+#endif
 
 bool NativeDrawHook(uint8_t kind, uint32_t cmd_addr, uint32_t work_state) {
     if (kind == 0 && s_hd_resolver && s_gles_renderer) {
@@ -65,6 +125,9 @@ void InstallNativeGpu(PS2Runtime& runtime) {
                 aoe2::renderer::HudLayout::ForExtent({640, 448}, {1920, 1080}, hud_specs));
             s_hud_mapper = std::make_unique<aoe2::input::HudInverseMapper>(s_hud_layout->regions());
             aoe2::game_hooks::detail::SetActiveHudMapper(s_hud_mapper.get());
+#if defined(AOE2_HAS_RAYLIB)
+            runtime.setPresentationCallback(NativePresentationCallback, nullptr);
+#endif
             gpu::SetNativeDrawInterceptor(NativeDrawHook);
             std::cout << "[aoe2] native GLES renderer and HD asset resolver active (1920x1080)\n";
         } catch (const std::exception& e) {
