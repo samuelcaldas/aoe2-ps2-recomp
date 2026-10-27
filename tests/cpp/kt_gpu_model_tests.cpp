@@ -112,9 +112,21 @@ void test_alias_and_dispatch() {
     model.Finalize(0x2000);
     Check(mem.Load32(0x200c) == 0 && mem.Load32(0x2000) == 0x5040, "finalize cursor and tag clear");
 }
+void test_command_inspection() {
+    MockMemory mem;
+    aoe2::gpu::KtGpuModel model(mem);
+    mem.Store8(0x3000, 5);
+    mem.Store32(0x38c740 + 5 * 4, 0x123456);
+
+    const auto record = model.InspectCommand(0x3000);
+    Check(record.kind == 5, "InspectCommand kind matches");
+    Check(record.command_addr == 0x3000, "InspectCommand address matches");
+    Check(record.handler_addr == 0x123456, "InspectCommand handler matches");
+}
 }  // namespace
 int main() {
     test_packets();
     test_alias_and_dispatch();
+    test_command_inspection();
     std::cout << "kt_gpu_model tests passed\n";
 }

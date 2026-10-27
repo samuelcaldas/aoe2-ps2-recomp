@@ -52,6 +52,11 @@ uint32_t KtGpuModel::Handler(uint8_t kind) {
     if (kind >= 29) throw std::runtime_error("native GPU: invalid handler index");
     return m.Load32(0x38c740 + uint32_t(kind) * 4);
 }
+GpuCommandRecord KtGpuModel::InspectCommand(uint32_t command) {
+    const auto kind = ValidateCommand(command);
+    const auto handler = Handler(kind);
+    return GpuCommandRecord{kind, command, handler};
+}
 void KtGpuModel::Begin(uint32_t p) {
     auto cursor = m.Load32(p);
     const auto previous = m.Load32(p + 8);

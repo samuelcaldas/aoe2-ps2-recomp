@@ -98,3 +98,47 @@ Without `AOE2_GPU_CACHED_BUILD`, the optional target builds the upstream runtime
 through the normal runtime CMake integration. Both modes need the owned generated
 units and pinned dependency sources. The cached mode requires ABI-compatible host
 libraries and runtime headers; it does not rebuild or modify that cache.
+
+## 29-Handler Dispatch Table (D_38C740) and Draw Seam
+
+The 29 production command handlers at `0x38C740` are dispatched via `ktGpuDispatchCommand` (`0x1259C8`):
+
+### Draw Primitives (Kinds 0–12)
+
+| Kind | Guest Address | Primitive Type (GS PRIM) | Description / Target Registers |
+| :--- | :--- | :--- | :--- |
+| **0** | `0x00123AC8` | **SPRITE (6)** | 2D Quad/Sprite draw (RGBAQ `0x01`, UV `0x03`, XYZ2 `0x05`). **Primary 2D sprite/HUD draw seam**. |
+| **1** | `0x00123BF8` | TRISTRIP (4) | Flat untextured quads/strips (RGBAQ `0x01`, XYZ2 `0x04`). |
+| **2** | `0x00123D20` | TRISTRIP (4) | Flat untextured quads/strips (RGBAQ `0x01`, XYZ2 `0x04`). |
+| **3** | `0x00123E80` | TRISTRIP (4) | Per-vertex colored triangles/quads (RGBAQ `0x01`). |
+| **4** | `0x00123FC8` | TRISTRIP (4) | Per-vertex colored triangles/quads (RGBAQ `0x01`). |
+| **5** | `0x00124158` | TRISTRIP (4) | Textured triangles with UV coordinates (RGBAQ `0x01`, UV `0x03`, XYZ2 `0x04`). |
+| **6** | `0x001242D8` | TRISTRIP (4) | Textured triangles with UV coordinates (RGBAQ `0x01`, UV `0x03`, XYZ2 `0x04`). |
+| **7** | `0x001244A8` | TRISTRIP (4) | Textured triangles with RGBA + UV + XYZ (RGBAQ `0x01`, UV `0x03`, XYZ2 `0x04`). |
+| **8** | `0x00124648` | TRISTRIP (4) | Textured triangles with RGBA + UV + XYZ (RGBAQ `0x01`, UV `0x03`, XYZ2 `0x04`). |
+| **9** | `0x00124848` | TRISTRIP (4) | Perspective-textured triangles with RGBA + STQ `0x02` + XYZ2 `0x04`. |
+| **10** | `0x00124B68` | TRISTRIP (4) | Perspective-textured triangles with RGBA + STQ `0x02` + XYZ2 `0x04`. |
+| **11** | `0x00124F50` | TRISTRIP (4) | Terrain / isometric mesh tile renderer (RGBAQ, STQ, XYZ2). |
+| **12** | `0x001251E0` | TRISTRIP (4) | Terrain / isometric mesh tile renderer (RGBAQ, STQ, XYZ2). |
+
+### GS Register Setters (Kinds 13–28)
+
+| Kind | Guest Address | GS Register | Name / Purpose |
+| :--- | :--- | :--- | :--- |
+| **13** | `0x00125508` | `0x42` | CLAMP_1 / CLAMP_2 (texture wrap/clamp) |
+| **14** | `0x00125558` | `0x08` | TEX0_1 / TEX0_2 (texture buffer base, width, format, CLUT) |
+| **15** | `0x001255A8` | `0x46` | TEXA (texture alpha expansion) |
+| **16** | `0x001255F0` | `0x4A` | DTHE (dither enable) |
+| **17** | `0x00125640` | `0x0A` | MIPTBP1_1 (mipmap table base pointer) |
+| **18** | `0x00125688` | `0x3D` | DIMX (dither matrix) |
+| **19** | `0x001256D0` | `0x34` | ALPHA_1 / ALPHA_2 (alpha blending formula) |
+| **20** | `0x00125720` | `0x36` | TEST_1 / TEST_2 (alpha and depth tests) |
+| **21** | `0x00125770` | `0x49` | PABE (per-pixel alpha blend enable) |
+| **22** | `0x001257B8` | `0x47` | TEST_1 |
+| **23** | `0x00125808` | `0x06` + sel | `ktGpuSetFrame1` (FRAME_1 / FRAME_2) |
+| **24** | `0x00125858` | `0x14` + sel | `ktGpuSetFrame2` (FRAME_1 / FRAME_2) |
+| **25** | `0x001258A8` | `0x16` + sel | `ktGpuSetZbuf1` (ZBUF_1 / ZBUF_2) |
+| **26** | `0x001258F8` | `0x3B` | `ktGpuSetZbuf2` |
+| **27** | `0x00125940` | `0x1C` | `ktGpuSetDrawRegisters` (PRMODECONT) |
+| **28** | `0x00125988` | `0x3F` | `ktGpuResetTestRegister` (COLCLAMP) |
+
