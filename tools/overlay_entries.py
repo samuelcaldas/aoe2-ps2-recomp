@@ -17,13 +17,20 @@ REGION_MASK = 0xF0000000
 
 
 def entry_targets(image: ElfImage, ranges: list) -> list:
-    """Sorted distinct jal/j targets inside any (start, end) range, from all executable segments."""
+    """Sorted distinct jal/j targets and stored pointers inside any (start, end) range.
+
+    Jumps are read from executable segments only; a word anywhere in the file-backed
+    image that equals an address in a range is a function pointer (vtable, callback table).
+    """
     found = set()
-    for base, data in image.code_segments():
+    for _, data in image.file_segments():
         for index in range(0, len(data) - 3, 4):
             word = struct.unpack_from("<I", data, index)[0]
             if word % 4 == 0 and any(start <= word < end for start, end in ranges):
-                found.add(word)  # a function pointer in the main data (vtable, callback table)
+                found.add(word)
+    for base, data in image.code_segments():
+        for index in range(0, len(data) - 3, 4):
+            word = struct.unpack_from("<I", data, index)[0]
             if word >> 26 not in (OPCODE_J, OPCODE_JAL):
                 continue
             target = ((base + index + 4) & REGION_MASK) | ((word & 0x3FFFFFF) << 2)

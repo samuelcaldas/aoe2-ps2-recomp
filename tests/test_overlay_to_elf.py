@@ -39,6 +39,16 @@ class TestOverlayToElf(unittest.TestCase):
         elf = overlay_to_elf(raw, code_only=True, text_bytes=0x140, entry=LOAD + 0x120)
         self.assertEqual(int.from_bytes(elf[52 + 16:52 + 20], "little"), 0x40 + 0x140)
 
+    def test_text_override_must_fit_the_file_and_be_aligned(self):
+        raw = overlay(4, 0x100, 0x40, 0x80)
+        with self.assertRaises(OverlayElfError):
+            overlay_to_elf(raw, code_only=True, text_bytes=-4)
+        with self.assertRaises(OverlayElfError):
+            overlay_to_elf(raw, code_only=True, text_bytes=len(raw) - 0x40 + 4)
+        with self.assertRaises(OverlayElfError):
+            overlay_to_elf(raw, code_only=True, text_bytes=0x142)
+        self.assertEqual(len(overlay_to_elf(raw, code_only=True, text_bytes=len(raw) - 0x40)), 0x1000 + len(raw))
+
     def test_entry_can_be_overridden_to_a_function_start(self):
         elf = overlay_to_elf(overlay(4, 0x100, 0, 0), entry=LOAD + 0x80)
         self.assertEqual(int.from_bytes(elf[24:28], "little"), LOAD + 0x80)

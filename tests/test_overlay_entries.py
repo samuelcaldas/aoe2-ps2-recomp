@@ -1,6 +1,6 @@
 import unittest
 
-from tests.test_kcet_resolver_elf import PF_RX, build_elf, code
+from tests.test_kcet_resolver_elf import PF_RW, PF_RX, build_elf, code
 from tools.kcet_resolver.elf_image import ElfImage
 from tools.kcet_resolver.mips import jal
 from tools.overlay_entries import entry_targets, drop_delay_slot_seeds, seeds_for, switch_targets
@@ -27,6 +27,11 @@ class TestEntryTargets(unittest.TestCase):
     def test_collects_function_pointers_stored_as_data(self):
         found = entry_targets(image(0x1D98890, 0x1D98894, 0x1D98891, 0x200000), [(0x1D98000, 0x2000000)])
         self.assertEqual(found, [0x1D98890, 0x1D98894])
+
+    def test_collects_function_pointers_stored_in_a_non_executable_segment(self):
+        pointer = (0x1D98890).to_bytes(4, "little")
+        data_image = ElfImage(build_elf([(BASE, code(0), 4, PF_RX), (0x200000, pointer, 4, PF_RW)]))
+        self.assertEqual(entry_targets(data_image, [(0x1D98000, 0x2000000)]), [0x1D98890])
 
     def test_ignores_targets_outside_all_ranges(self):
         self.assertEqual(entry_targets(image(jal(0x100000)), [(0x1D98000, 0x2000000)]), [])

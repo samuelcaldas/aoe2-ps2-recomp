@@ -42,6 +42,8 @@ def overlay_to_elf(raw: bytes, code_only: bool = False, entry: int | None = None
     except OverlayMapError as error:
         raise OverlayElfError(str(error)) from error
     text = header.text if text_bytes is None else text_bytes
+    if text % 4 != 0 or not 0 <= text <= len(raw) - HEADER_BYTES:
+        raise OverlayElfError("text size must be 4-aligned and within the overlay file")
     loaded = raw[:HEADER_BYTES + text] if code_only else raw
     entry = header.load_address if entry is None else entry
     if entry % 4 != 0 or not header.load_address <= entry < header.load_address + HEADER_BYTES + text:

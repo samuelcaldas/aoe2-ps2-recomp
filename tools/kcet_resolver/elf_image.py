@@ -93,6 +93,11 @@ class ElfImage:
         return [(segment.vaddr, self._data[segment.offset:segment.offset + segment.filesz])
                 for segment in self._segments if segment.executable and segment.filesz > 0]
 
+    def file_segments(self) -> list:
+        """(guest address, bytes) of every file-backed segment, executable or not."""
+        return [(segment.vaddr, self._data[segment.offset:segment.offset + segment.filesz])
+                for segment in self._segments if segment.filesz > 0]
+
 
 def load_elf(path: Path) -> ElfImage:
     return ElfImage(Path(path).read_bytes())

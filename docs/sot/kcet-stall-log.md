@@ -857,4 +857,18 @@ Evidence (desktop run, `tools/drive_desktop_scenario.py campaign`, `--stacks`, c
 - Thread 8 busy-polling `sceILsockRecvFrom` (`0x388F90`) is expected game behaviour, not the blocker.
 - `aoe-decomp` addresses for the submenu constructor `0x2F97B0` and button dispatcher `0x2FA4A0` are never called at run time even though the submenu is drawn; the real menu message handler is `0x2FEEC0`.
 
-Open: why the main loop returns to `ra=0` (scheduler resume of a thread whose host stack was unwound, or a real loop exit). Next: trace `0x21BFB0`/`0x33B680` and the scheduler's resume path for thread 2.
+Open at that run: why the main loop returns to `ra=0` (scheduler resume of a thread whose host stack was unwound, or a real loop exit). Next: trace `0x21BFB0`/`0x33B680` and the scheduler's resume path for thread 2.
+
+## Campaign loading: missing main-program target (2026-10-27, branch m2-campaign)
+
+- All eight overlays were regenerated through the guarded pipeline. MO_OV's registered code extent now includes the code in its header-declared data section. Main-program pointer discovery includes non-executable file-backed segments; switch and call seeds share delay-slot filtering; text-size overrides reject unaligned and out-of-file sizes.
+- Regression suite: 343 tests run, four skipped, OK. Desktop diagnostics build completed with exit 0.
+- Campaign run preserved the existing memory-card root (`--keep-card`). The screenshot `campaign-brief-3.png` shows **Loading game data…**, not gameplay.
+- The game then reported an indirect-call missing target: source `0x17fa00`, target `0x1536a0`, return address `0x17fa08`. The game loop exited and the scenario driver returned 1 at step `brief-4`.
+- Local evidence: `build/desktop-validation/campaign-20261027-102908/scenario-campaign.log` and `.playwright-mcp/campaign-20261027-102908/`.
+- Root cause confirmed in the read-only Ghidra project: the target already has instructions and data references from pointer tables, but no containing function. `DiscoverReferencedFunctions.java` now recovers data-referenced orphan instruction entries after data-region marking, excluding delay slots and existing function bodies. It does not disassemble data or hardcode the failing target.
+- A Ghidra integration assertion (`tests/ghidra/AssertFunctionEntries.java`) failed before discovery and passed afterward.
+- First version rejected: letting Ghidra's `createFunction` compute bodies moved shared tail chunks out of 10 existing functions. Because the exporter emits contiguous ranges and the registration exposes every address in a range, this would have unregistered real code. One example: 170 instructions of switch cases at `0x11f5a0`, reached through `jr` on a jump table. New bodies are now the flow body minus code other functions already own. `tests/ghidra/TestReferencedFunctionDiscovery.java` snapshots every body, runs discovery twice and asserts nothing changes. It failed on the first version and passes now.
+- Comparing old and new maps also showed adjustor thunks (`j X; addiu a0,a0,-N`) at `0x2cb510..0x2cb770`. Only a pointer table at `0x4dd8bc` names them, and Ghidra never disassembled them, so no reference exists. They had been registered only because an older label range happened to cover them. A second pass now takes stored words that point at undisassembled code. It accepts a word only where control cannot fall into the target (padding before it, or the delay slot of `j`/`jr`). That pass adds 31 entries.
+- Result: 58,552 entries (none removed, 316 added), zero guardrail violations. The only real code no longer covered is five words at `0x219f00`; no pointer, jump or `lui`+`addiu` pair references them. Ghidra commands must use a project path without dot-prefixed elements (here a `/tmp` symlink to `analysis/ghidra`).
+- Still unverified: first-mission gameplay after regeneration and rebuild.
