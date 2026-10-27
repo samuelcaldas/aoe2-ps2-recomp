@@ -334,6 +334,10 @@ add_executable(aoe2_asset_resolver_tests tests/cpp/asset_resolver_tests.cpp)
 target_link_libraries(aoe2_asset_resolver_tests PRIVATE aoe2_interfaces)
 add_test(NAME asset_resolver COMMAND aoe2_asset_resolver_tests)
 
+add_executable(aoe2_gpu_native_draw_tests tests/cpp/gpu_native_draw_tests.cpp)
+target_link_libraries(aoe2_gpu_native_draw_tests PRIVATE aoe2_interfaces)
+add_test(NAME gpu_native_draw COMMAND aoe2_gpu_native_draw_tests)
+
 option(AOE2_BUILD_GPU_DIFFERENTIAL_TESTS "Compare native GPU with owned generated originals" OFF)
 if(AOE2_BUILD_GPU_DIFFERENTIAL_TESTS)
     include(cmake/Aoe2GpuTests.cmake)

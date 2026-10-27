@@ -11,6 +11,14 @@
 namespace aoe2::game_hooks::gpu {
 inline constexpr std::array<uint32_t, 7> entries{
     0x125808, 0x125858, 0x1258a8, 0x1258f8, 0x125940, 0x125988, 0x1259c8};
+
+using NativeDrawInterceptor = bool (*)(uint8_t kind, uint32_t cmd_addr, uint32_t work_state_addr);
+inline NativeDrawInterceptor g_native_draw_interceptor = nullptr;
+
+inline void SetNativeDrawInterceptor(NativeDrawInterceptor interceptor) {
+    g_native_draw_interceptor = interceptor;
+}
+
 inline uint64_t Load64(RdramGuestAccess& m, uint32_t p) {
     const auto low = m.Load32(p);
     return low | (uint64_t(m.Load32(p + 4)) << 32);
@@ -31,7 +39,16 @@ inline void Resume(uint8_t* ram, R5900Context* ctx, PS2Runtime*) {
 }
 inline void DispatchHandler(uint8_t* ram, R5900Context* ctx, PS2Runtime* runtime) {
     RdramGuestAccess memory; memory.Bind(ram);
-    const auto target = aoe2::gpu::KtGpuModel(memory).Handler(uint8_t(getRegU32(ctx, 18)));
+    const uint8_t kind = uint8_t(getRegU32(ctx, 18));
+    const uint32_t cmd_addr = getRegU32(ctx, 19);
+    const uint32_t work_state = getRegU32(ctx, 16);
+
+    if (g_native_draw_interceptor && g_native_draw_interceptor(kind, cmd_addr, work_state)) {
+        Resume(ram, ctx, runtime);
+        return;
+    }
+
+    const auto target = aoe2::gpu::KtGpuModel(memory).Handler(kind);
     if (!runtime->hasFunction(target)) throw std::runtime_error("native GPU: missing guest handler");
     SET_GPR_U64(ctx, 4, GPR_U64(ctx, 16));
     SET_GPR_U64(ctx, 5, GPR_U64(ctx, 19));
