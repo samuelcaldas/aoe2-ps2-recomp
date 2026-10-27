@@ -26,7 +26,7 @@ from core.target import SINGLE_TARGET  # noqa: E402
 from tools import install_ghidra_ee_extension as ee_extension  # noqa: E402
 from tools import verify_function_map as guardrail  # noqa: E402
 from tools.kcet_resolver.elf_image import load_elf  # noqa: E402
-from tools.overlay_entries import entry_targets, seeds_for, switch_targets  # noqa: E402
+from tools.overlay_entries import drop_delay_slot_seeds, entry_targets, seeds_for, switch_targets  # noqa: E402
 from tools.map_overlays import HEADER_BYTES, parse_overlay_header  # noqa: E402
 from tools.overlay_registration import build_aggregate, build_registration, build_rename_header, parse_register_file  # noqa: E402
 from tools.overlay_to_elf import overlay_to_elf  # noqa: E402
@@ -96,6 +96,33 @@ def enforce_guardrail(csv_path: Path, elf_path: Path) -> None:
         raise PipelineError(f"function map guardrail found {len(violations)} violation(s) in {csv_path.name}")
 
 
+# Overlays whose code continues into the section the header calls data (found at run time: the
+# loader calls a function at the start of that section). The data start is then a seed too.
+CODE_THROUGH_DATA = frozenset({"MO_OV_CD.BIN"})
+
+
+def code_bytes_for(file_name: str, header) -> int:
+    """Bytes of the overlay analysed as code: its text, plus the data section where code runs on."""
+    return header.text + (header.data if file_name in CODE_THROUGH_DATA else 0)
+
+
+def overlay_seeds(raw: bytes, header, targets: list, text_bytes: int) -> list:
+    """Function starts to hand to Ghidra: called and switch-case addresses, minus delay slots."""
+    candidates = set(seeds_for(targets, header.load_address, HEADER_BYTES, text_bytes))
+    candidates.update(switch_targets(raw, header.load_address, HEADER_BYTES, text_bytes))
+    entries = set(drop_delay_slot_seeds(sorted(candidates), raw, header.load_address))
+    if text_bytes != header.text:
+        # The loader calls this exact address, so it is a function start even after a branch.
+        entries.add(header.load_address + HEADER_BYTES + header.text)
+    return sorted(entries)
+
+
+def entry_range(entry: dict, header) -> tuple:
+    """Guest address range of the overlay code that main-program jumps may target."""
+    start = header.load_address + HEADER_BYTES
+    return start, start + code_bytes_for(entry["file"], header)
+
+
 def process(entry: dict, raw: bytes, ghidra_home: Path, targets: list) -> dict:
     name = overlay_name(entry["file"])
     work = ANALYSIS / name
@@ -106,16 +133,15 @@ def process(entry: dict, raw: bytes, ghidra_home: Path, targets: list) -> dict:
     out.mkdir(parents=True)
     header = parse_overlay_header(raw)
     code_bin = work / "code.bin"
-    code_bin.write_bytes(raw[:HEADER_BYTES + header.text])
+    text_bytes = code_bytes_for(entry["file"], header)
+    code_bin.write_bytes(raw[:HEADER_BYTES + text_bytes])
     toml, csv_path = work / "overlay.toml", work / "overlay.csv"
     seeds = work / "seeds.txt"
-    entries = set(seeds_for(targets, header.load_address, HEADER_BYTES, header.text))
-    entries.update(switch_targets(raw, header.load_address, HEADER_BYTES, header.text))
-    seeds.write_text("".join(f"0x{address:x}\n" for address in sorted(entries)))
+    seeds.write_text("".join(f"0x{address:x}\n" for address in overlay_seeds(raw, header, targets, text_bytes)))
     export_functions(ghidra_home, name, code_bin, header.load_address, toml, csv_path, seeds)
     first = first_function_start(csv_path.read_text())
     elf_path = work / "overlay.elf"
-    elf_path.write_bytes(overlay_to_elf(raw, code_only=True, entry=first))
+    elf_path.write_bytes(overlay_to_elf(raw, code_only=True, entry=first, text_bytes=text_bytes))
     enforce_guardrail(csv_path, elf_path)
     toml.write_text(rewrite_toml(toml.read_text(), str(elf_path), str(out)))
     run([str(RECOMP), str(toml)], work / "recomp.log")
@@ -124,7 +150,7 @@ def process(entry: dict, raw: bytes, ghidra_home: Path, targets: list) -> dict:
     pairs = parse_register_file((out / "register_functions.cpp").read_text())
     (out / "overlay_registration.cpp").write_text(build_registration(pairs, header.overlay_id, prefix, name))
     return {"name": name, "id": header.overlay_id, "load_address": header.load_address,
-            "code_bytes": HEADER_BYTES + header.text, "sources": len(list(out.glob("*_0x*.cpp"))), "entries": len(pairs)}
+            "code_bytes": HEADER_BYTES + text_bytes, "sources": len(list(out.glob("*_0x*.cpp"))), "entries": len(pairs)}
 
 
 def main(argv: list | None = None) -> int:
@@ -142,7 +168,7 @@ def main(argv: list | None = None) -> int:
             raise PipelineError("run tools/map_overlays.py first")
         root = REPO_ROOT / "game" / SINGLE_TARGET.serial / Path(SINGLE_TARGET.disc_elf_path).parent
         overlays = json.loads(report_path.read_text())["overlays"]
-        ranges = [(item["load_address"], item["load_address"] + HEADER_BYTES + item["text"]) for item in overlays]
+        ranges = [entry_range(item, parse_overlay_header((root / item["file"]).read_bytes())) for item in overlays]
         targets = entry_targets(load_elf(REPO_ROOT / SINGLE_TARGET.relative_dest_path), ranges)
         results = []
         for entry in overlays:

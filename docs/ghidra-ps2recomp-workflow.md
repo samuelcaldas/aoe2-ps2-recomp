@@ -75,6 +75,8 @@ Using Ghidra's `analyzeHeadless` processor, we import `game/SLES-50282/AOK.ELF` 
 
 **Why the data-region step exists.** The ELF is stripped and loads code and data in a single RWX segment, so the exporter (which only checks block permissions) treats about 1.3 MB of data as code. Synthetic entries created from data words that look like pointers then span that data, and PS2Recomp emits multi-megabyte functions full of trap and undecodable instructions; these also pulled in spurious SSE4.1 intrinsics. Real code reaches a `jr $ra` return at most ~15 KiB apart in this binary, so `MarkDataRegions.java` splits every region with no return for more than 64 KiB into its own non-executable block (clearing its listing and functions) before export. The threshold is the script's single argument and is shared with the guardrail below.
 
+**Why the discovery step exists.** Auto-analysis leaves some code with no function: either it disassembled the code but only data references it (callback and vtable tables), or it never disassembled the code because only an unreferenced pointer table names it (adjustor thunks). The registration exposes only addresses inside exported ranges, so an indirect call there stops with a missing target. `DiscoverReferencedFunctions.java` creates functions at both kinds of entry. A raw pointer counts only where control cannot fall into its target. A new body never takes code another function already owns: moving a shared tail would shrink the owner's exported range and unregister code only that range covered. `tests/ghidra/TestReferencedFunctionDiscovery.java` (run headless, `-readOnly -noanalysis`, after the trim and data-region scripts) asserts that existing bodies are untouched and that a second run creates nothing.
+
 ```bash
 mkdir -p analysis/ghidra analysis/generated
 
@@ -85,6 +87,7 @@ $GHIDRA_HOME/support/analyzeHeadless \
     -processor "MIPS:LE:64:64-32addr" \
     -scriptPath "tools/ghidra;third_party/PS2Recomp/ps2xRecomp/tools/ghidra" \
     -postScript MarkDataRegions.java 65536 \
+    -postScript DiscoverReferencedFunctions.java \
     -postScript ExportPS2Functions.java \
     analysis/generated/SLES-50282.toml \
     analysis/generated/function_map.csv

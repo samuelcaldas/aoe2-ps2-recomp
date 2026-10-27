@@ -33,15 +33,20 @@ class OverlayElfError(ValueError):
     pass
 
 
-def overlay_to_elf(raw: bytes, code_only: bool = False, entry: int | None = None) -> bytes:
-    """code_only keeps just header+text in the file image, so analysis never sees data as code."""
+def overlay_to_elf(raw: bytes, code_only: bool = False, entry: int | None = None, text_bytes: int | None = None) -> bytes:
+    """code_only keeps just header+text in the file image, so analysis never sees data as code.
+
+    text_bytes overrides the header text size for an overlay whose code runs into its data section."""
     try:
         header = parse_overlay_header(raw)
     except OverlayMapError as error:
         raise OverlayElfError(str(error)) from error
-    loaded = raw[:HEADER_BYTES + header.text] if code_only else raw
+    text = header.text if text_bytes is None else text_bytes
+    if text % 4 != 0 or not 0 <= text <= len(raw) - HEADER_BYTES:
+        raise OverlayElfError("text size must be 4-aligned and within the overlay file")
+    loaded = raw[:HEADER_BYTES + text] if code_only else raw
     entry = header.load_address if entry is None else entry
-    if entry % 4 != 0 or not header.load_address <= entry < header.load_address + HEADER_BYTES + header.text:
+    if entry % 4 != 0 or not header.load_address <= entry < header.load_address + HEADER_BYTES + text:
         raise OverlayElfError("entry must be a 4-aligned address inside the overlay text")
     memory = max(len(raw), HEADER_BYTES + header.text + header.data + header.bss)
     elf_header = ELF_HEADER.pack(E_IDENT, ET_EXEC, EM_MIPS, 1, entry, ELF_HEADER_BYTES, 0, 0,

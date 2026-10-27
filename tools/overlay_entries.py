@@ -1,4 +1,4 @@
-"""Find function entries of overlay code from calls made by the main program.
+"""Find function entries of overlay code from calls and pointers in the main program.
 
 An overlay's internal functions are found by Ghidra, but functions nothing inside the
 overlay references (entry points called from the main code) are invisible to a raw
@@ -17,8 +17,17 @@ REGION_MASK = 0xF0000000
 
 
 def entry_targets(image: ElfImage, ranges: list) -> list:
-    """Sorted distinct jal/j targets inside any (start, end) range, from all executable segments."""
+    """Sorted distinct jal/j targets and stored pointers inside any (start, end) range.
+
+    Jumps are read from executable segments only; a word anywhere in the file-backed
+    image that equals an address in a range is a function pointer (vtable, callback table).
+    """
     found = set()
+    for _, data in image.file_segments():
+        for index in range(0, len(data) - 3, 4):
+            word = struct.unpack_from("<I", data, index)[0]
+            if word % 4 == 0 and any(start <= word < end for start, end in ranges):
+                found.add(word)
     for base, data in image.code_segments():
         for index in range(0, len(data) - 3, 4):
             word = struct.unpack_from("<I", data, index)[0]
@@ -84,3 +93,33 @@ def switch_targets(raw: bytes, load_address: int, header_bytes: int, text_bytes:
         if len(run) >= MIN_TABLE_ENTRIES:
             targets.update(run)
     return sorted(targets)
+
+
+_BRANCH_OPCODES = {1, 2, 3, 4, 5, 6, 7, 0x14, 0x15, 0x16, 0x17}
+_COPROCESSOR_OPCODES = {0x10, 0x11, 0x12}
+_SPECIAL, _JR, _JALR, _BC_SELECTOR = 0, 8, 9, 8
+
+
+def _has_delay_slot(word: int) -> bool:
+    opcode = word >> 26
+    if opcode in _BRANCH_OPCODES:
+        return True
+    if opcode == _SPECIAL:
+        return word & 0x3F in (_JR, _JALR)
+    return opcode in _COPROCESSOR_OPCODES and (word >> 21) & 31 == _BC_SELECTOR
+
+
+def drop_delay_slot_seeds(seeds: list, raw: bytes, load_address: int) -> list:
+    """Seeds that are not the delay slot of the instruction before them.
+
+    Entry points called from the main code belong to whichever overlay occupied the shared
+    load address; one of them can land inside another overlay's branch delay slot, and a
+    function starting there would cut the branch from its slot.
+    """
+    kept = []
+    for address in seeds:
+        previous = address - 4 - load_address
+        word = int.from_bytes(raw[previous:previous + 4], "little") if 0 <= previous <= len(raw) - 4 else 0
+        if not _has_delay_slot(word):
+            kept.append(address)
+    return kept

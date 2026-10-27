@@ -7,8 +7,9 @@ Workflow:
 3. Validate Ghidra installation (GHIDRA_HOME and support/analyzeHeadless).
    STOPS FAST IF GHIDRA IS MISSING. Does not substitute fallback analyzer.
 4. Execute headless Ghidra analysis, mark return-free data regions as
-   non-executable (tools/ghidra/MarkDataRegions.java), then export using
-   ExportPS2Functions.java.
+   non-executable (tools/ghidra/MarkDataRegions.java), recover entries that only
+   data or pointer tables reach (tools/ghidra/DiscoverReferencedFunctions.java),
+   then export using ExportPS2Functions.java.
 5. Reject the export if tools/verify_function_map.py finds entries spanning data.
 6. Create minimal clean PS2Recomp TOML configuration without stubs/skips/patches.
 7. Regenerate generated/SLES-50282/ from scratch with PS2Recomp.
@@ -33,6 +34,7 @@ from tools import verify_function_map as function_map_guardrail
 
 DATA_REGION_SCRIPT = REPO_ROOT / "tools" / "ghidra" / "MarkDataRegions.java"
 BODY_TRIM_SCRIPT = REPO_ROOT / "tools" / "ghidra" / "TrimDisjointFunctionBodies.java"
+DISCOVERY_SCRIPT = REPO_ROOT / "tools" / "ghidra" / "DiscoverReferencedFunctions.java"
 
 def compute_sha1(filepath: Path) -> str:
     h = hashlib.sha1()
@@ -81,6 +83,7 @@ def build_ghidra_command(analyze_headless: Path, project_dir: Path, elf_path: Pa
         "-scriptPath", script_path,
         "-postScript", BODY_TRIM_SCRIPT.name,
         "-postScript", DATA_REGION_SCRIPT.name, max_return_gap,
+        "-postScript", DISCOVERY_SCRIPT.name,
         "-postScript", exporter_script.name, str(toml_config), str(csv_map),
     ]
 
@@ -193,6 +196,10 @@ def main():
         sys.stderr.write(f"Error: Body trim script missing: {BODY_TRIM_SCRIPT}\n")
         sys.exit(1)
 
+    if not DISCOVERY_SCRIPT.exists():
+        sys.stderr.write(f"Error: Function discovery script missing: {DISCOVERY_SCRIPT}\n")
+        sys.exit(1)
+
     if not DATA_REGION_SCRIPT.exists():
         sys.stderr.write(f"Error: Data region script missing: {DATA_REGION_SCRIPT}\n")
         sys.exit(1)
@@ -262,6 +269,7 @@ def main():
         "data_region_script": str(DATA_REGION_SCRIPT.relative_to(REPO_ROOT)),
         "data_region_script_sha256": compute_sha256(DATA_REGION_SCRIPT),
         "body_trim_script_sha256": compute_sha256(BODY_TRIM_SCRIPT),
+        "function_discovery_script_sha256": compute_sha256(DISCOVERY_SCRIPT),
         "function_map_guardrail": guardrail_record,
         "ghidra_language": ee_extension.LANGUAGE_ID,
         "ghidra_extension_sha256": ee_extension.installed_digest(extensions_dir),

@@ -45,7 +45,13 @@ SCENARIOS = {
         ("campaigns", "click", (418, 86), 12),
         ("wallace-marker", "click", (221, 77), 12),
         ("scenario-1", "click", (183, 57), 40),
-        ("scenario-1-later", "key", "shift", 40),
+        ("briefing", "key", "shift", 30),
+        ("briefing-next", "key", "z", 30),
+        ("mission-loading", "key", "z", 45),
+        ("brief-3", "key", "z", 25),
+        ("brief-4", "key", "z", 25),
+        ("brief-5", "key", "z", 40),
+        ("mission", "key", "shift", 40),
     ],
 }
 
@@ -120,7 +126,7 @@ def main(argv: list | None = None) -> int:
     if not args.keep_card:
         reset_card()
     EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
-    SCREENSHOT_DIR.mkdir(exist_ok=True)
+    SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
     display = subprocess.Popen(["Xvfb", DISPLAY, "-screen", "0", "1024x768x24", "-nolisten", "tcp"],
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     log = (EVIDENCE_DIR / f"scenario-{args.scenario}.log").open("w")

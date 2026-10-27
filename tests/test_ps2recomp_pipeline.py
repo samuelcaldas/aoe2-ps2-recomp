@@ -21,7 +21,8 @@ class TestGhidraCommand(unittest.TestCase):
         return [self.command[index + 1] for index, token in enumerate(self.command) if token == "-postScript"]
 
     def test_data_regions_are_marked_before_export(self):
-        self.assertEqual(self.post_scripts(), ["TrimDisjointFunctionBodies.java", "MarkDataRegions.java", "ExportPS2Functions.java"])
+        self.assertEqual(self.post_scripts(), ["TrimDisjointFunctionBodies.java", "MarkDataRegions.java",
+                                               "DiscoverReferencedFunctions.java", "ExportPS2Functions.java"])
 
     def test_data_region_threshold_matches_guardrail(self):
         mark_index = self.command.index("MarkDataRegions.java")

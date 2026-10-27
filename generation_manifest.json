@@ -7,11 +7,11 @@
   "java_version": "openjdk version \"25.0.4.1\" 2026-08-18",
   "exporter_script": "third_party/PS2Recomp/ps2xRecomp/tools/ghidra/ExportPS2Functions.java",
   "exporter_script_sha256": "9302f951e52e507d400eca02707e45b6da3b9c4ed55cdffbe600eea6e557081e",
-  "function_map_sha256": "1331534cb910884ae34d34951f35ead84d9ec965e3496b18b763ca21b51bc1ba",
-  "toml_sha256": "5d7c2d44552b9d817d0be8afeda2b09ead660a9e7ef5424b9a5ef9979f2c3c00",
-  "timestamp": "2026-10-20T23:01:09.573500+00:00",
-  "exported_function_count": 58236,
-  "generated_cpp_file_count": 58237,
+  "function_map_sha256": "8e244afb9e5e354d760d0f9e09ed9184fb95cff1b5d91fc30a6d0789ef2a11ae",
+  "toml_sha256": "70a5867e132e4813f100de3d98329ae924feef710b66863b75b63f7c5a18fc20",
+  "timestamp": "2026-10-27T14:12:20.512280+00:00",
+  "exported_function_count": 58552,
+  "generated_cpp_file_count": 58553,
   "generated_output_dir": "generated/SLES-50282",
   "data_region_script": "tools/ghidra/MarkDataRegions.java",
   "data_region_script_sha256": "c54bb532e72dd648b66b428e1e2eeb478cbcc256cea17a10fe738d6982fe9151",
@@ -28,5 +28,6 @@
     "analysis/generated/SLES-50282.toml",
     "analysis/ghidra",
     "generated/SLES-50282"
-  ]
+  ],
+  "function_discovery_script_sha256": "bd589dafaa09c84616ba67fead8501c740d1a7084e3cc6a2c7d84ee5e52f4a7f"
 }
