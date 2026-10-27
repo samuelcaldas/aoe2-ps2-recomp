@@ -10,6 +10,7 @@ add_library(aoe2_interfaces STATIC
     assets/src/asset_path_resolver.cpp
     assets/src/loose_hd_asset_provider.cpp
     assets/src/jasc_palette.cpp
+    assets/src/slp_decoder.cpp
     input/src/actions.cpp
     input/src/guest_keyboard.cpp
     input/src/guest_mouse.cpp
@@ -318,6 +319,10 @@ add_test(NAME hud_layout COMMAND aoe2_hud_layout_tests)
 add_executable(aoe2_jasc_palette_tests tests/cpp/jasc_palette_tests.cpp)
 target_link_libraries(aoe2_jasc_palette_tests PRIVATE aoe2_interfaces)
 add_test(NAME jasc_palette COMMAND aoe2_jasc_palette_tests)
+
+add_executable(aoe2_slp_decoder_tests tests/cpp/slp_decoder_tests.cpp)
+target_link_libraries(aoe2_slp_decoder_tests PRIVATE aoe2_interfaces)
+add_test(NAME slp_decoder COMMAND aoe2_slp_decoder_tests)
 
 option(AOE2_BUILD_GPU_DIFFERENTIAL_TESTS "Compare native GPU with owned generated originals" OFF)
 if(AOE2_BUILD_GPU_DIFFERENTIAL_TESTS)
