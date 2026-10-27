@@ -35,10 +35,25 @@ void TestLifecycleAndState() {
     Check(!renderer.IsInitialized(), "renderer is shut down");
 }
 
+void TestTextureOverwritingAndCleanup() {
+    aoe2::renderer::GlesRenderer renderer;
+    renderer.Initialize({1280, 720});
+    std::vector<uint32_t> p1(4 * 4, 0x11111111);
+    std::vector<uint32_t> p2(4 * 4, 0x22222222);
+    renderer.UploadTexture(1, 4, 4, p1.data());
+    // Overwrite texture
+    renderer.UploadTexture(1, 4, 4, p2.data());
+    Check(renderer.HasTexture(1), "still has texture 1");
+    // Explicit DeleteTexture
+    renderer.DeleteTexture(1);
+    Check(!renderer.HasTexture(1), "texture 1 deleted");
+}
+
 } // namespace
 
 int main() {
     TestLifecycleAndState();
+    TestTextureOverwritingAndCleanup();
     std::cout << "gles_renderer_tests passed\n";
     return 0;
 }

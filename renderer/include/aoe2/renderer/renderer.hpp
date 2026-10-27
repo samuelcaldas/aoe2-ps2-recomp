@@ -33,6 +33,7 @@ public:
     }
     virtual void DrawSprite(uint32_t texture_id, const RectF& src_rect, const RectF& dst_rect, uint32_t tint_color = 0xFFFFFFFF) {}
     virtual bool HasTexture(uint32_t texture_id) const { return false; }
+    virtual void DeleteTexture(uint32_t texture_id) {}
 };
 
 class NullRenderer : public IRenderer {

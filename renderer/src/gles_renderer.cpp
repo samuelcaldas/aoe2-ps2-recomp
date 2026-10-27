@@ -79,15 +79,48 @@ void GlesRenderer::EndFrame() {
 
 void GlesRenderer::Shutdown() {
     if (!initialized_) return;
+#if defined(AOE2_HAS_GLES) || defined(__SWITCH__)
+    if (gl_context_active_) {
+        for (auto& [id, tex] : textures_) {
+            if (tex.gl_handle != 0) {
+                glDeleteTextures(1, &tex.gl_handle);
+                tex.gl_handle = 0;
+            }
+        }
+    }
+#endif
     CleanupGlesContext();
     textures_.clear();
     current_frame_commands_.clear();
     initialized_ = false;
 }
 
+void GlesRenderer::DeleteTexture(uint32_t texture_id) {
+    auto it = textures_.find(texture_id);
+    if (it == textures_.end()) return;
+
+#if defined(AOE2_HAS_GLES) || defined(__SWITCH__)
+    if (gl_context_active_ && it->second.gl_handle != 0) {
+        glDeleteTextures(1, &it->second.gl_handle);
+    }
+#endif
+    textures_.erase(it);
+}
+
 bool GlesRenderer::UploadTexture(uint32_t texture_id, uint32_t width, uint32_t height, const uint32_t* rgba_pixels) {
     if (!initialized_ || width == 0 || height == 0 || !rgba_pixels) {
         return false;
+    }
+
+    // Clean up previous GL handle if replacing existing texture
+    auto it = textures_.find(texture_id);
+    if (it != textures_.end()) {
+#if defined(AOE2_HAS_GLES) || defined(__SWITCH__)
+        if (gl_context_active_ && it->second.gl_handle != 0) {
+            glDeleteTextures(1, &it->second.gl_handle);
+            it->second.gl_handle = 0;
+        }
+#endif
     }
 
     GlesTexture tex;

@@ -38,6 +38,7 @@ public:
     bool UploadTexture(uint32_t texture_id, uint32_t width, uint32_t height, const uint32_t* rgba_pixels) override;
     void DrawSprite(uint32_t texture_id, const RectF& src_rect, const RectF& dst_rect, uint32_t tint_color = 0xFFFFFFFF) override;
     bool HasTexture(uint32_t texture_id) const override;
+    void DeleteTexture(uint32_t texture_id) override;
 
     uint32_t GetDrawCallCount() const { return draw_call_count_; }
     bool IsInitialized() const { return initialized_; }
