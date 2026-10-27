@@ -21,6 +21,12 @@ std::filesystem::path AssetPathResolver::ResolveRoot(
 
         case PlatformTarget::Desktop:
         default: {
+            if (std::filesystem::exists("game/SLES-50282/assets")) {
+                return "game/SLES-50282/assets";
+            }
+            if (std::filesystem::exists("game/hd-edition/source/resources/_common/drs")) {
+                return "game/hd-edition/source/resources/_common/drs";
+            }
             const char* xdg_data = std::getenv("XDG_DATA_HOME");
             if (xdg_data != nullptr && *xdg_data != '\0') {
                 auto path = std::filesystem::path(xdg_data) / "aoe2-recomp" / "assets";

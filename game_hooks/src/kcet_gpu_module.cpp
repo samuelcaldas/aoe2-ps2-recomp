@@ -54,30 +54,68 @@ Texture2D GetOrCreateHostTexture(uint32_t texId, const aoe2::assets::ResolvedSpr
     return tex;
 }
 
-void NativePresentationCallback(PS2Runtime&, void*) {
+bool IsGameplayActive(PS2Runtime& runtime) {
+    uint8_t* rdram = runtime.memory().getRDRAM();
+    if (!rdram) return false;
+    uint32_t visibleMapPtr = 0;
+    // D_50A5A0 is the active visible map grid (0 in menus, non-null during gameplay)
+    if (const uint8_t* ptr = getConstMemPtr(rdram, 0x0050A5A0)) {
+        std::memcpy(&visibleMapPtr, ptr, sizeof(visibleMapPtr));
+    }
+    return visibleMapPtr != 0;
+}
+
+void NativePresentationCallback(PS2Runtime& runtime, void*) {
     if (!s_hd_resolver) return;
     const float screenW = static_cast<float>(GetScreenWidth());
     const float screenH = static_cast<float>(GetScreenHeight());
     if (screenW < 800.0f) return;
 
-    // 1. Render Top Resource Bar with HD Asset 50792
+    // Only render in-game HD HUD during active gameplay (not in menus, loadings, or briefings)
+    if (!IsGameplayActive(runtime)) {
+        return;
+    }
+
+    static bool gameplay_logged = false;
+    if (!gameplay_logged) {
+        std::cout << "[aoe2] NativePresentationCallback active in gameplay screen=" << screenW << "x" << screenH << std::endl;
+        gameplay_logged = true;
+    }
+
+    // 1. Render Top Resource Bar with HD Asset 50792 preserving aspect ratio
     auto topSprite = s_hd_resolver->ResolveSprite(aoe2::assets::AssetCategory::Interface, 50792, 0);
     if (topSprite.has_value() && topSprite->width > 0 && topSprite->height > 0) {
         Texture2D tex = GetOrCreateHostTexture(topSprite->texture_id, *topSprite);
-        const float topH = (screenH >= 1080.0f) ? 36.0f : 24.0f;
+        const float topScale = (screenH >= 1080.0f) ? 2.0f : 1.5f;
+        const float topW = static_cast<float>(tex.width) * topScale;
+        const float topH = static_cast<float>(tex.height) * topScale;
+        const float topX = (screenW - topW) * 0.5f;
+
+        // Dark wood background bar filling the full widescreen top
+        DrawRectangle(0, 0, static_cast<int>(screenW), static_cast<int>(topH), Color{35, 18, 9, 255});
+
+        // Centered HD resource bar with 1:1 / 2:1 aspect ratio
         Rectangle src{0.0f, 0.0f, static_cast<float>(tex.width), static_cast<float>(tex.height)};
-        Rectangle dst{0.0f, 0.0f, screenW, topH};
+        Rectangle dst{topX, 0.0f, topW, topH};
         DrawTexturePro(tex, src, dst, Vector2{0.0f, 0.0f}, 0.0f, WHITE);
     }
 
-    // 2. Render Bottom Command Bar with HD Asset 50150
+    // 2. Render Bottom Command Bar with HD Asset 50150 preserving aspect ratio
     auto bottomSprite = s_hd_resolver->ResolveSprite(aoe2::assets::AssetCategory::Interface, 50150, 0);
     if (bottomSprite.has_value() && bottomSprite->width > 0 && bottomSprite->height > 0) {
         Texture2D tex = GetOrCreateHostTexture(bottomSprite->texture_id, *bottomSprite);
-        const float botH = (screenH >= 1080.0f) ? 144.0f : 96.0f;
+        const float botScale = (screenH >= 1080.0f) ? 2.0f : 1.5f;
+        const float botW = static_cast<float>(tex.width) * botScale;
+        const float botH = static_cast<float>(tex.height) * botScale;
+        const float botX = (screenW - botW) * 0.5f;
         const float botY = screenH - botH;
+
+        // Dark wood background bar filling the full widescreen bottom
+        DrawRectangle(0, static_cast<int>(botY), static_cast<int>(screenW), static_cast<int>(botH), Color{35, 18, 9, 255});
+
+        // Centered HD command bar with proper proportions
         Rectangle src{0.0f, 0.0f, static_cast<float>(tex.width), static_cast<float>(tex.height)};
-        Rectangle dst{0.0f, botY, screenW, botH};
+        Rectangle dst{botX, botY, botW, botH};
         DrawTexturePro(tex, src, dst, Vector2{0.0f, 0.0f}, 0.0f, WHITE);
     }
 }
@@ -114,7 +152,8 @@ void InstallNativeGpu(PS2Runtime& runtime) {
             s_hd_provider = std::make_unique<aoe2::assets::LooseHdAssetProvider>();
             s_hd_provider->Initialize(root);
             s_hd_resolver = std::make_unique<aoe2::assets::AssetResolver>(*s_hd_provider);
-            s_hd_resolver->LoadPalette(aoe2::assets::AssetCategory::Interface, 50507);
+            const bool palOk = s_hd_resolver->LoadPalette(aoe2::assets::AssetCategory::Interface, 50500);
+            std::cout << "[aoe2] palette 50500 loaded=" << (palOk ? "yes" : "no") << " root=" << root << '\n';
             s_gles_renderer = std::make_unique<aoe2::renderer::GlesRenderer>();
             s_gles_renderer->Initialize({1920, 1080});
             std::vector<aoe2::renderer::HudRegionSpec> hud_specs{

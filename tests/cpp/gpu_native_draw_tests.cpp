@@ -34,7 +34,7 @@ void TestHdInterfaceResolution() {
     // Test if staged assets exist
     if (provider.Initialize("game/SLES-50282") || provider.Initialize("game/hd-edition")) {
         aoe2::assets::AssetResolver resolver(provider);
-        if (resolver.LoadPalette(aoe2::assets::AssetCategory::Interface, 50507)) {
+        if (resolver.LoadPalette(aoe2::assets::AssetCategory::Interface, 50500)) {
             auto topBar = resolver.ResolveSprite(aoe2::assets::AssetCategory::Interface, 50792, 0);
             if (topBar.has_value()) {
                 Check(topBar->width == 697 && topBar->height == 24, "top bar 50792 dimensions match");
@@ -46,7 +46,7 @@ void TestHdInterfaceResolution() {
                 Check(botBar->width == 592 && botBar->height == 90, "bottom bar 50150 dimensions match");
                 Check(botBar->rgba_data != nullptr, "bottom bar has valid pixels");
             }
-            std::cout << "Verified HD interface assets 50792 and 50150 resolved successfully\n";
+            std::cout << "Verified HD interface assets 50792 and 50150 resolved with palette 50500\n";
         }
     }
 }
