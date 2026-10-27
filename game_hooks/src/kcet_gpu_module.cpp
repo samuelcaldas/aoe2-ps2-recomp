@@ -93,36 +93,27 @@ void NativePresentationCallback(PS2Runtime& runtime, void*) {
     const float playfieldW = 640.0f * playfieldScale;
     const float playfieldX = (screenW - playfieldW) * 0.5f;
 
-    // 1. Render Top Resource Bar with HD Asset 50792 covering the low-res PS2 bar
-    auto topSprite = s_hd_resolver->ResolveSprite(aoe2::assets::AssetCategory::Interface, 50792, 0);
-    if (topSprite.has_value() && topSprite->width > 0 && topSprite->height > 0) {
-        Texture2D tex = GetOrCreateHostTexture(topSprite->texture_id, *topSprite);
-        const float topH = 32.0f * playfieldScale;
-
-        // Dark wood background bar filling the full widescreen top
-        DrawRectangle(0, 0, static_cast<int>(screenW), static_cast<int>(topH), Color{35, 18, 9, 255});
-
-        // HD resource bar aligned with playfield
-        Rectangle src{0.0f, 0.0f, static_cast<float>(tex.width), static_cast<float>(tex.height)};
-        Rectangle dst{playfieldX, 0.0f, playfieldW, topH};
-        DrawTexturePro(tex, src, dst, Vector2{0.0f, 0.0f}, 0.0f, WHITE);
+    // Load HD Base Interface Asset 50102 (1280x1024 authentic wood interface)
+    auto hdInterface = s_hd_resolver->ResolveSprite(aoe2::assets::AssetCategory::Interface, 50102, 0);
+    if (!hdInterface.has_value() || hdInterface->width <= 0 || hdInterface->height <= 0) {
+        return;
     }
+    Texture2D tex = GetOrCreateHostTexture(hdInterface->texture_id, *hdInterface);
 
-    // 2. Render Bottom Command Bar with HD Asset 50150 covering the low-res PS2 bar
-    auto bottomSprite = s_hd_resolver->ResolveSprite(aoe2::assets::AssetCategory::Interface, 50150, 0);
-    if (bottomSprite.has_value() && bottomSprite->width > 0 && bottomSprite->height > 0) {
-        Texture2D tex = GetOrCreateHostTexture(bottomSprite->texture_id, *bottomSprite);
-        const float botY = 300.0f * playfieldScale;
-        const float botH = screenH - botY;
+    // 1. Render Top Resource Bar (top 48px of 50102) covering low-res PS2 bar
+    const float topH = 34.0f * playfieldScale;
+    DrawRectangle(0, 0, static_cast<int>(screenW), static_cast<int>(topH), Color{48, 28, 14, 255});
+    Rectangle srcTop{0.0f, 0.0f, static_cast<float>(tex.width), 48.0f};
+    Rectangle dstTop{playfieldX, 0.0f, playfieldW, topH};
+    DrawTexturePro(tex, srcTop, dstTop, Vector2{0.0f, 0.0f}, 0.0f, WHITE);
 
-        // Dark wood background bar filling the full widescreen bottom
-        DrawRectangle(0, static_cast<int>(botY), static_cast<int>(screenW), static_cast<int>(botH), Color{35, 18, 9, 255});
-
-        // HD command bar aligned with playfield
-        Rectangle src{0.0f, 0.0f, static_cast<float>(tex.width), static_cast<float>(tex.height)};
-        Rectangle dst{playfieldX, botY, playfieldW, botH};
-        DrawTexturePro(tex, src, dst, Vector2{0.0f, 0.0f}, 0.0f, WHITE);
-    }
+    // 2. Render Bottom Command Panel (bottom 150px of 50102) covering low-res PS2 bar
+    const float botY = 300.0f * playfieldScale;
+    const float botH = screenH - botY;
+    DrawRectangle(0, static_cast<int>(botY), static_cast<int>(screenW), static_cast<int>(botH), Color{48, 28, 14, 255});
+    Rectangle srcBot{0.0f, static_cast<float>(tex.height - 150), static_cast<float>(tex.width), 150.0f};
+    Rectangle dstBot{playfieldX, botY, playfieldW, botH};
+    DrawTexturePro(tex, srcBot, dstBot, Vector2{0.0f, 0.0f}, 0.0f, WHITE);
 }
 #endif
 
@@ -157,8 +148,8 @@ void InstallNativeGpu(PS2Runtime& runtime) {
             s_hd_provider = std::make_unique<aoe2::assets::LooseHdAssetProvider>();
             s_hd_provider->Initialize(root);
             s_hd_resolver = std::make_unique<aoe2::assets::AssetResolver>(*s_hd_provider);
-            const bool palOk = s_hd_resolver->LoadPalette(aoe2::assets::AssetCategory::Interface, 50500);
-            std::cout << "[aoe2] palette 50500 loaded=" << (palOk ? "yes" : "no") << " root=" << root << '\n';
+            const bool palOk = s_hd_resolver->LoadPalette(aoe2::assets::AssetCategory::Interface, 50588);
+            std::cout << "[aoe2] palette 50588 loaded=" << (palOk ? "yes" : "no") << " root=" << root << '\n';
             s_gles_renderer = std::make_unique<aoe2::renderer::GlesRenderer>();
             s_gles_renderer->Initialize({1920, 1080});
             std::vector<aoe2::renderer::HudRegionSpec> hud_specs{
