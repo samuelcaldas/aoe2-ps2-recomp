@@ -19,6 +19,10 @@ public:
 
     void SetConnected(bool connected);
     void Submit(const HostMouseReport& report);
+    // Absolute pointing: replaces the queued motion with the distance still to travel to the
+    // target (target minus where the game's cursor is now), so repeated calls converge
+    // instead of accumulating.
+    void SteerTo(float remaining_x, float remaining_y, uint32_t buttons);
 
     // [0] port count, [1] connected count, [2] port 0 connected.
     Reply InfoReply() const;

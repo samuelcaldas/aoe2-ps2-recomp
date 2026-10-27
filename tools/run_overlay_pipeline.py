@@ -17,6 +17,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -25,7 +26,7 @@ from core.target import SINGLE_TARGET  # noqa: E402
 from tools import install_ghidra_ee_extension as ee_extension  # noqa: E402
 from tools import verify_function_map as guardrail  # noqa: E402
 from tools.kcet_resolver.elf_image import load_elf  # noqa: E402
-from tools.overlay_entries import entry_targets, seeds_for  # noqa: E402
+from tools.overlay_entries import entry_targets, seeds_for, switch_targets  # noqa: E402
 from tools.map_overlays import HEADER_BYTES, parse_overlay_header  # noqa: E402
 from tools.overlay_registration import build_aggregate, build_registration, build_rename_header, parse_register_file  # noqa: E402
 from tools.overlay_to_elf import overlay_to_elf  # noqa: E402
@@ -75,6 +76,10 @@ SEED_SCRIPT = REPO_ROOT / "tools" / "ghidra" / "SeedFunctions.java"
 def export_functions(ghidra_home: Path, name: str, code_bin: Path, base: int, toml: Path, csv_path: Path,
                      seeds: Path) -> None:
     project = PROJECTS / name
+    if any(part.startswith(".") for part in project.parts):
+        # Ghidra refuses project paths with a dot-prefixed element (e.g. a .worktrees checkout);
+        # the project is throwaway, so keep it under the temp dir instead.
+        project = Path(tempfile.gettempdir()) / "aoe2-ghidra-overlays" / name
     shutil.rmtree(project, ignore_errors=True)
     project.mkdir(parents=True)
     script_path = f"{REPO_ROOT / 'tools' / 'ghidra'};{EXPORTER.parent}"
@@ -104,7 +109,9 @@ def process(entry: dict, raw: bytes, ghidra_home: Path, targets: list) -> dict:
     code_bin.write_bytes(raw[:HEADER_BYTES + header.text])
     toml, csv_path = work / "overlay.toml", work / "overlay.csv"
     seeds = work / "seeds.txt"
-    seeds.write_text("".join(f"0x{address:x}\n" for address in seeds_for(targets, header.load_address, HEADER_BYTES, header.text)))
+    entries = set(seeds_for(targets, header.load_address, HEADER_BYTES, header.text))
+    entries.update(switch_targets(raw, header.load_address, HEADER_BYTES, header.text))
+    seeds.write_text("".join(f"0x{address:x}\n" for address in sorted(entries)))
     export_functions(ghidra_home, name, code_bin, header.load_address, toml, csv_path, seeds)
     first = first_function_start(csv_path.read_text())
     elf_path = work / "overlay.elf"

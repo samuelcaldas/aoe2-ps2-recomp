@@ -33,10 +33,25 @@ constexpr std::array<int, 16> kRaylibButtons = {
     GAMEPAD_BUTTON_LEFT_FACE_UP,    GAMEPAD_BUTTON_LEFT_FACE_DOWN,   GAMEPAD_BUTTON_LEFT_FACE_LEFT,
     GAMEPAD_BUTTON_LEFT_FACE_RIGHT};
 
+// Keyboard fallback when no gamepad is connected. Index = aoe2::pad::HostButton, so the layout matches
+// kRaylibButtons (Enter/Space stay keyboard-only: a pad Cross posts a virtual click that swallows the key): Cross, Circle, Square, Triangle, L1, R1, L2, R2, Select, Start, L3, R3, Up, Down, Left, Right.
+constexpr std::array<std::array<int, 2>, 16> kKeyboardButtons = {{
+    {KEY_Z, KEY_NULL},    {KEY_X, KEY_NULL},     {KEY_A, KEY_NULL},     {KEY_S, KEY_BACKSPACE},
+    {KEY_Q, KEY_NULL},    {KEY_W, KEY_NULL},     {KEY_E, KEY_NULL},     {KEY_R, KEY_NULL},
+    {KEY_TAB, KEY_NULL},  {KEY_SPACE, KEY_NULL}, {KEY_NULL, KEY_NULL},  {KEY_NULL, KEY_NULL},
+    {KEY_UP, KEY_NULL},   {KEY_DOWN, KEY_NULL},  {KEY_LEFT, KEY_NULL},  {KEY_RIGHT, KEY_NULL}}};
+
+bool KeyboardButtonDown(std::size_t index) {
+    for (const int key : kKeyboardButtons[index])
+        if (key != KEY_NULL && IsKeyDown(key)) return true;
+    return false;
+}
+
 class RaylibPadBackend final : public aoe2::pad::PadBackend {
 public:
     HostPadState Sample(int port) override {
-        if (port != 0 || !IsGamepadAvailable(0)) return {};
+        if (port != 0) return {};
+        if (!IsGamepadAvailable(0)) return SampleKeyboard();
         ReapplyVibration();
         std::array<bool, 16> down{};
         for (std::size_t i = 0; i < down.size(); ++i)
@@ -66,6 +81,16 @@ public:
     }
 
 private:
+    HostPadState SampleKeyboard() {
+        std::array<bool, 16> down{};
+        for (std::size_t i = 0; i < down.size(); ++i) down[i] = KeyboardButtonDown(i);
+        const uint16_t buttons = aoe2::pad::ToPadButtons(down);
+        if (buttons != last_keyboard_buttons_)
+            std::cerr << "[host-pad] keyboard buttons=0x" << std::hex << buttons << std::dec << std::endl;
+        last_keyboard_buttons_ = buttons;
+        return {true, buttons, 0.0f, 0.0f, 0.0f, 0.0f};
+    }
+
     void Apply() {
         SetGamepadVibration(0, large_ / 255.0f, small_ ? 1.0f : 0.0f, kVibrationSeconds);
         last_applied_ = Clock::now();
@@ -74,6 +99,7 @@ private:
         if (active_ && Clock::now() - last_applied_ >= kReapplyInterval) Apply();
     }
 
+    uint16_t last_keyboard_buttons_ = 0;
     bool small_ = false;
     uint8_t large_ = 0;
     bool active_ = false;

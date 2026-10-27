@@ -799,3 +799,62 @@ In standard test runs under 60 s, the guest does not reach the post-audio-init c
   stores decoded as MIPS DSP and marked unhandled), dereferences guest addresses as host pointers, and never
   sets `gp`. The overlay loader hook does not read the file; it writes a fake 12-byte header. The recompiled
   overlay units are still generated locally and can be relinked.
+
+### Memory card screen with a present card (2026-10-26, branch m1-libmc)
+
+Evidence, in order, with the `memory_card` switch routing libmc `GetInfo`, `Sync` and `GetDir` to the host card:
+
+- The card is seen (`GetInfo` type 2, formatted, 8192 clusters free) and the status record of the KCET card
+  device reaches "ready" after the `Sync`.
+- Routing `sceMcInit` to the host breaks every unrouted `sceMc*` entry: the guest `sceMcInit` creates the library
+  semaphore and binds the RPC; without it each entry fails its first `PollSema` and returns -200. Keep the guest
+  `sceMcInit`; route operations only.
+- The memory card prompt (mode 1 of the per-frame pump) waits for a card-device job result. With `GetDir`
+  routed the job completes, the dialog receives message 0x520 (wParam 0x12), its button handler and the
+  dismiss path run, and the card screen becomes the active screen again.
+- Still open: the card screen then sits at target state -1 with its per-frame update returning early, its exit
+  function is never called and the main menu is never requested. Question sent to the decomp (see
+  `docs/decomp-requests.md`).
+- A forced dispatch of message 0x520 to the dialog was proposed and rejected: it forces state instead of fixing
+  the producer.
+
+### Memory card screen: input path verified end to end (2026-10-26, branch m1-libmc)
+
+With the native keyboard on and a real Escape from the host:
+
+- The keyboard status function reports ready after the first frame, the HID usage becomes a WM_KEYDOWN with
+  wParam 0x1B, it reaches the screen's message handler, the container, the screen's key handler and the base key
+  handler, and then the Cancel button.
+- The button ignores it because it is invisible: the end of the card check hides it when the screen runs in
+  mode 0 (the boot mode), leaving a single other button as the active control. Escape therefore cannot leave the
+  screen in this mode; a click or confirm on that other button is the expected input (asked of the decomp).
+- Host side: the call trace now prints a2 and a3 (message id and wParam), Escape no longer closes the host window
+  while the native keyboard owns the keys, and without a gamepad the host keyboard drives the pad.
+
+### Main menu reached (2026-10-26, branch m1-libmc)
+
+- Black screen root cause: the runtime's CPU rasterizer ignored TEST.ZTE and treated ZTE=0 with ZTST=0 as
+  depth NEVER. The game draws its whole UI into an off-screen buffer with the depth test off, so every UI pixel
+  was dropped; only the cursor (drawn straight to the display with depth ALWAYS) showed. Fixed by
+  `tools/patches/ps2recomp/0003-gs-zte-disables-depth-test.patch`.
+- Input: the memory card screen in boot mode waits for the player (New Player, name on the on-screen keyboard,
+  OK). The on-screen keyboard closes on its own ENTER key; a physical Return only toggles its flags, and the
+  native keyboard posts no WM_CHAR, so letters come from a click (mouse or pad Cross at the cursor).
+- Absolute mouse: the native mouse now steers the game's cursor to the host pointer's place in the window
+  (`UsbMouseRpcModel::SteerTo` + `SurfaceMapping`), through the game's own packet path.
+- With the card routed to the host (libmc GetInfo/Sync/GetDir) and the clicks above, the card screen exits and
+  the main menu renders and stays stable (Single Player, Multiplayer, Learn to Play, History, Player, Options).
+- Open: the frame loop runs at a few frames per second; a click lands about one key to the right on the
+  on-screen keyboard (horizontal offset in the pointer mapping).
+
+## Single Player submenu: the main game thread ends (2026-10-27)
+
+Symptom: after the Single Player submenu appears, mouse and keys do nothing, no further disc reads, the picture is frozen except the host-drawn pointer.
+
+Evidence (desktop run, `tools/drive_desktop_scenario.py campaign`, `--stacks`, call trace on `0x1842F0`/`0x2FEEC0`/`0x185230`, `PS2X_GS_PRIM_LOG_LIMIT`):
+- The menu handler `0x2FEEC0` receives `WM_LBUTTONDOWN` (0x201) for the Single Player click (x=458,y=85) and returns. No later click or key produces any message.
+- The last `[frame:upload]` (idx=929) and the last GS primitive come right after `[sched:pc-zero] thread=2 from=0x185230 ra=0x0`: thread 2 (the thread running the main loop, `0x185230` called from `0x222158`) returns to pc 0 and never runs again. Threads 3/4/5 (interrupt servicing) and thread 8 (`th_Receiver`, network polling, normal) keep running.
+- Thread 8 busy-polling `sceILsockRecvFrom` (`0x388F90`) is expected game behaviour, not the blocker.
+- `aoe-decomp` addresses for the submenu constructor `0x2F97B0` and button dispatcher `0x2FA4A0` are never called at run time even though the submenu is drawn; the real menu message handler is `0x2FEEC0`.
+
+Open: why the main loop returns to `ra=0` (scheduler resume of a thread whose host stack was unwound, or a real loop exit). Next: trace `0x21BFB0`/`0x33B680` and the scheduler's resume path for thread 2.

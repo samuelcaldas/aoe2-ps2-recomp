@@ -352,6 +352,19 @@ void TestMouseRpcSplitsLargeMotionAcrossEvents() {
   CHECK(total == 300);
 }
 
+void TestMouseRpcSteerReplacesQueuedMotionInsteadOfAdding() {
+  UsbMouseRpcModel model;
+  model.SetConnected(true);
+  model.Submit(HostMouseReport{50.0f, 50.0f, 0});
+  model.SteerTo(10.0f, -4.0f, kMouseButtonLeft);
+  const UsbMouseRpcModel::Reply event = model.ReadReply();
+  CHECK(event[0] == 4 && event[1] == 0x01);
+  CHECK(static_cast<int8_t>(event[2]) == 10 &&
+        static_cast<int8_t>(event[3]) == -4);
+  model.SteerTo(0.0f, 0.0f, kMouseButtonLeft);
+  CHECK(model.ReadReply()[0] == 0);
+}
+
 void TestMouseRpcButtonChangeWithoutMotionIsAnEvent() {
   UsbMouseRpcModel model;
   model.SetConnected(true);
@@ -422,6 +435,7 @@ void TestKeyboardRpcStoresLedAndValidatesUnits() {
 } // namespace
 
 int main() {
+  TestMouseRpcSteerReplacesQueuedMotionInsteadOfAdding();
   TestMappingPillarboxesFourByThreeOnWidescreen();
   TestMappingRejectsEmptyExtent();
   TestTapIsPrimaryClick();

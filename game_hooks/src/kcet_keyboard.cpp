@@ -1,4 +1,5 @@
 // KCET host input replacements; guest addresses are loaded from local configuration.
+#include <iostream>
 #include <aoe2/game_hooks/kcet_handlers.hpp>
 #include <aoe2/input/guest_keyboard.hpp>
 #include <aoe2/input/usb_keyboard_rpc.hpp>
@@ -65,11 +66,14 @@ void SampleHostKeyboard() {
         using aoe2::game_hooks::synthetic::Module;
         current = aoe2::game_hooks::synthetic::KeyboardState(LogicalSteps(Module::kKeyboard).load());
     } else {
+        // The guest reads Escape (a Back/Cancel hotkey), so it must not also close the host window.
+        SetExitKey(KEY_NULL);
         for (const auto& [host_key, usage] : kHostKeyboardUsages) {
             current.set(usage, IsKeyDown(static_cast<KeyboardKey>(host_key)));
         }
     }
     for (const auto& event : aoe2::input::DiffPressedKeys(g_previous_host_keys, current)) {
+        std::cerr << "[host-keyboard] key change usage=0x" << std::hex << int(event.usage) << std::dec << " pressed=" << event.pressed << std::endl;
         g_keyboard_adapter.Submit(event);
         g_keyboard_model.SubmitReport(g_keyboard_adapter.NextFrame());
     }
