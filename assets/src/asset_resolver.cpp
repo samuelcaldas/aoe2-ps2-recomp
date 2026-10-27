@@ -2,16 +2,22 @@
 
 namespace aoe2::assets {
 
-namespace {
-
-uint64_t MakeCacheKey(AssetCategory category, uint32_t asset_id, uint32_t frame_index, uint8_t player_id) {
-    return (uint64_t(category) << 56) |
-           (uint64_t(player_id) << 48) |
-           (uint64_t(frame_index) << 32) |
-           uint64_t(asset_id);
+uint32_t AssetResolver::MakeTextureId(
+    AssetCategory category,
+    uint32_t asset_id,
+    uint32_t frame_index,
+    uint8_t player_id
+) {
+    uint32_t h = 2166136261u;
+    auto mix = [&h](uint32_t v) {
+        h = (h ^ v) * 16777619u;
+    };
+    mix(static_cast<uint32_t>(category));
+    mix(asset_id);
+    mix(frame_index);
+    mix(static_cast<uint32_t>(player_id));
+    return h == 0 ? 1u : h;
 }
-
-} // namespace
 
 AssetResolver::AssetResolver(IAssetProvider& provider)
     : provider_(provider) {}
@@ -26,14 +32,18 @@ bool AssetResolver::LoadPalette(AssetCategory category, uint32_t palette_id) {
     }
     try {
         active_palette_ = JascPalette::FromBytes(blob->data);
+        active_palette_id_ = palette_id;
+        ++palette_version_;
         return true;
     } catch (const std::exception&) {
         return false;
     }
 }
 
-void AssetResolver::SetActivePalette(const JascPalette& palette) {
+void AssetResolver::SetActivePalette(const JascPalette& palette, uint32_t palette_id) {
     active_palette_ = palette;
+    active_palette_id_ = palette_id;
+    ++palette_version_;
 }
 
 const JascPalette* AssetResolver::GetActivePalette() const {
@@ -55,6 +65,10 @@ std::optional<std::pair<AssetCategory, uint32_t>> AssetResolver::GetMapping(uint
     return std::nullopt;
 }
 
+void AssetResolver::ClearCache() {
+    frame_cache_.clear();
+}
+
 std::optional<ResolvedSprite> AssetResolver::ResolveSprite(
     AssetCategory category,
     uint32_t asset_id,
@@ -68,13 +82,17 @@ std::optional<ResolvedSprite> AssetResolver::ResolveSprite(
             fallback += std::to_string(i) + " " + std::to_string(i) + " " + std::to_string(i) + "\r\n";
         }
         active_palette_ = JascPalette::FromString(fallback);
+        active_palette_id_ = 0;
+        ++palette_version_;
     }
 
-    const uint64_t key = MakeCacheKey(category, asset_id, frame_index, player_id);
+    const FrameCacheKey key{category, asset_id, frame_index, player_id, palette_version_};
+    const uint32_t texId = MakeTextureId(category, asset_id, frame_index, player_id);
+
     auto it = frame_cache_.find(key);
     if (it != frame_cache_.end()) {
         const auto& f = it->second;
-        return ResolvedSprite{asset_id, f.width, f.height, f.hotspot_x, f.hotspot_y, f.rgba_pixels.data()};
+        return ResolvedSprite{asset_id, f.width, f.height, f.hotspot_x, f.hotspot_y, f.rgba_pixels.data(), texId};
     }
 
     if (!provider_.HasAsset(category, asset_id)) {
@@ -89,7 +107,7 @@ std::optional<ResolvedSprite> AssetResolver::ResolveSprite(
     try {
         DecodedFrame frame = SlpDecoder::DecodeFrame(blob->data, frame_index, active_palette_.value(), player_id);
         auto& cached = frame_cache_[key] = std::move(frame);
-        return ResolvedSprite{asset_id, cached.width, cached.height, cached.hotspot_x, cached.hotspot_y, cached.rgba_pixels.data()};
+        return ResolvedSprite{asset_id, cached.width, cached.height, cached.hotspot_x, cached.hotspot_y, cached.rgba_pixels.data(), texId};
     } catch (const std::exception&) {
         return std::nullopt;
     }
