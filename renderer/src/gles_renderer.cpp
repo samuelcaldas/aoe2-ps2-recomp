@@ -50,6 +50,7 @@ bool GlesRenderer::Initialize(const FramebufferInfo& info) {
     draw_call_count_ = 0;
     textures_.clear();
     current_frame_commands_.clear();
+    current_text_commands_.clear();
     return true;
 }
 
@@ -57,6 +58,7 @@ void GlesRenderer::BeginFrame() {
     if (!initialized_) return;
     draw_call_count_ = 0;
     current_frame_commands_.clear();
+    current_text_commands_.clear();
 
 #if defined(AOE2_HAS_GLES) || defined(__SWITCH__)
     if (gl_context_active_) {
@@ -92,6 +94,7 @@ void GlesRenderer::Shutdown() {
     CleanupGlesContext();
     textures_.clear();
     current_frame_commands_.clear();
+    current_text_commands_.clear();
     initialized_ = false;
 }
 
@@ -161,8 +164,21 @@ void GlesRenderer::DrawSprite(uint32_t texture_id, const RectF& src_rect, const 
 #endif
 }
 
+void GlesRenderer::DrawText(std::string_view text, float x, float y, float font_size, uint32_t color) {
+    if (!initialized_) return;
+    current_text_commands_.push_back(DrawTextCommand{std::string(text), x, y, font_size, color});
+}
+
 bool GlesRenderer::HasTexture(uint32_t texture_id) const {
     return textures_.find(texture_id) != textures_.end();
+}
+
+const GlesTexture* GlesRenderer::GetTexture(uint32_t texture_id) const {
+    auto it = textures_.find(texture_id);
+    if (it != textures_.end()) {
+        return &it->second;
+    }
+    return nullptr;
 }
 
 } // namespace aoe2::renderer

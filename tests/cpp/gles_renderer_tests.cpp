@@ -49,11 +49,45 @@ void TestTextureOverwritingAndCleanup() {
     Check(!renderer.HasTexture(1), "texture 1 deleted");
 }
 
+void TestCommandsAndText() {
+    aoe2::renderer::GlesRenderer renderer;
+    renderer.Initialize({1920, 1080});
+    std::vector<uint32_t> pixels(32 * 32, 0xAABBCCDD);
+    renderer.UploadTexture(42, 32, 32, pixels.data());
+
+    renderer.BeginFrame();
+    renderer.DrawSprite(42, {0, 0, 32, 32}, {10, 20, 64, 64}, 0xFFFFFFFF);
+    renderer.DrawText("Wood: 200", 15.0f, 25.0f, 20.0f, 0xFFFFFFFF);
+
+    const auto& spriteCmds = renderer.GetSpriteCommands();
+    Check(spriteCmds.size() == 1, "has 1 sprite command");
+    Check(spriteCmds[0].texture_id == 42, "sprite command texture id is 42");
+    Check(spriteCmds[0].dst_rect.width == 64.0f, "sprite dst width is 64");
+
+    const auto& textCmds = renderer.GetTextCommands();
+    Check(textCmds.size() == 1, "has 1 text command");
+    Check(textCmds[0].text == "Wood: 200", "text matches");
+    Check(textCmds[0].x == 15.0f, "text x matches");
+
+    const auto* tex = renderer.GetTexture(42);
+    Check(tex != nullptr, "texture 42 found");
+    Check(tex->width == 32 && tex->height == 32, "texture 42 dimensions match");
+    Check(tex->pixels[0] == 0xAABBCCDD, "texture 42 pixel matches");
+
+    renderer.EndFrame();
+
+    renderer.BeginFrame();
+    Check(renderer.GetSpriteCommands().empty(), "sprite commands cleared on BeginFrame");
+    Check(renderer.GetTextCommands().empty(), "text commands cleared on BeginFrame");
+    renderer.EndFrame();
+}
+
 } // namespace
 
 int main() {
     TestLifecycleAndState();
     TestTextureOverwritingAndCleanup();
+    TestCommandsAndText();
     std::cout << "gles_renderer_tests passed\n";
     return 0;
 }
