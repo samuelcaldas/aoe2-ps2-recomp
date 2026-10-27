@@ -1,9 +1,10 @@
 // KCET host input replacements; guest addresses are loaded from local configuration.
 #include <aoe2/game_hooks/kcet_handlers.hpp>
+#include <aoe2/input/hud_inverse_mapper.hpp>
+#include <aoe2/input/surface_mapping.hpp>
 #include <aoe2/input/usb_mouse_rpc.hpp>
 #include "input_synthetic.hpp"
 #include "native_input_internal.hpp"
-#include <aoe2/input/surface_mapping.hpp>
 #include "raylib.h"
 #include "runtime/ps2_memory.h"
 
@@ -14,6 +15,10 @@
 namespace aoe2::game_hooks::detail {
 std::mutex g_mouse_mutex;
 aoe2::input::UsbMouseRpcModel g_mouse_model;
+const aoe2::input::HudInverseMapper* g_active_hud_mapper = nullptr;
+void SetActiveHudMapper(const aoe2::input::HudInverseMapper* mapper) {
+    g_active_hud_mapper = mapper;
+}
 }  // namespace aoe2::game_hooks::detail
 
 namespace {
@@ -70,9 +75,20 @@ void LogButtonChange(uint32_t buttons) {
 
 // Absolute pointing: the host pointer's place in the window is where the game's cursor should be.
 void SteerGuestCursor(uint8_t* rdram, Vector2 position, uint32_t buttons) {
-    const aoe2::input::SurfaceMapping mapping({static_cast<float>(GetScreenWidth()), static_cast<float>(GetScreenHeight())},
-                                              {kGuestScreenWidth, kGuestScreenHeight});
-    const aoe2::input::GuestPoint target = mapping.ToGuest(position.x, position.y);
+    aoe2::input::GuestPoint target{0.0f, 0.0f};
+    bool mapped_by_hud = false;
+    if (aoe2::game_hooks::detail::g_active_hud_mapper != nullptr) {
+        auto hud_target = aoe2::game_hooks::detail::g_active_hud_mapper->ToGuest(position.x, position.y);
+        if (hud_target.has_value()) {
+            target = *hud_target;
+            mapped_by_hud = true;
+        }
+    }
+    if (!mapped_by_hud) {
+        const aoe2::input::SurfaceMapping mapping({static_cast<float>(GetScreenWidth()), static_cast<float>(GetScreenHeight())},
+                                                  {kGuestScreenWidth, kGuestScreenHeight});
+        target = mapping.ToGuest(position.x, position.y);
+    }
     g_mouse_model.SteerTo(target.x - static_cast<float>(LoadGuestInt(rdram, kGuestCursorX)),
                           target.y - static_cast<float>(LoadGuestInt(rdram, kGuestCursorY)), buttons);
 }

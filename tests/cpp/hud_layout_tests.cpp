@@ -133,6 +133,43 @@ void TestLayoutRejectsPanelsOutsideGuestOrDestinationExtent() {
     Check(rejected, "invalid source geometry rejected");
 }
 
+void TestFullHd1080pWithInverseMapper() {
+    using namespace aoe2;
+    // Guest screen is 640x448, display is 1920x1080
+    std::vector<renderer::HudRegionSpec> specs{
+        MakeRegion(renderer::HudRegionRole::ResourceBar, renderer::HudAnchor::Top, {0, 0, 640, 32}, 1920, 32),
+        MakeRegion(renderer::HudRegionRole::CommandBar, renderer::HudAnchor::Bottom, {0, 300, 640, 148}, 1920, 148),
+    };
+    // Safe margins 0 for full-bleed anchors
+    specs[0].margin_x = 0; specs[0].margin_y = 0;
+    specs[1].margin_x = 0; specs[1].margin_y = 0;
+
+    const renderer::HudLayout layout = renderer::HudLayout::ForExtent({640, 448}, {1920, 1080}, specs);
+    Check(layout.regions().size() == 2, "1080p layout has 2 regions");
+
+    const input::HudInverseMapper mapper(layout.regions());
+
+    // Top resource bar hit
+    const auto topHit = mapper.ToGuest(960.0f, 16.0f);
+    Check(topHit.has_value(), "center of 1080p top bar is captured");
+    if (topHit.has_value()) {
+        Check(Near(topHit->x, 320.0f), "top bar center x maps to guest 320");
+        Check(Near(topHit->y, 16.0f), "top bar center y maps to guest 16");
+    }
+
+    // Bottom command bar hit
+    const auto bottomHit = mapper.ToGuest(960.0f, 1080.0f - 74.0f);
+    Check(bottomHit.has_value(), "center of 1080p bottom bar is captured");
+    if (bottomHit.has_value()) {
+        Check(Near(bottomHit->x, 320.0f), "bottom bar center x maps to guest 320");
+        Check(Near(bottomHit->y, 374.0f), "bottom bar center y maps to guest 374");
+    }
+
+    // Playfield hit (middle of the screen)
+    const auto playfieldHit = mapper.ToGuest(960.0f, 500.0f);
+    Check(!playfieldHit.has_value(), "playfield point is not captured by HUD mapper");
+}
+
 } // namespace
 
 int main() {
@@ -142,5 +179,6 @@ int main() {
     TestInverseMapperDoesNotCapturePlayfieldGaps();
     TestLayoutRejectsNonFiniteGeometry();
     TestLayoutRejectsPanelsOutsideGuestOrDestinationExtent();
+    TestFullHd1080pWithInverseMapper();
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }

@@ -5,15 +5,23 @@
 #include <aoe2/assets/asset_path_resolver.hpp>
 #include <aoe2/assets/asset_resolver.hpp>
 #include <aoe2/assets/loose_hd_asset_provider.hpp>
+#include <aoe2/input/hud_inverse_mapper.hpp>
 #include <aoe2/renderer/gles_renderer.hpp>
+#include <aoe2/renderer/hud_layout.hpp>
 #include <iostream>
 #include <memory>
+
+namespace aoe2::game_hooks::detail {
+void SetActiveHudMapper(const aoe2::input::HudInverseMapper* mapper);
+}
 
 namespace {
 std::array<PS2Runtime::RecompiledFunction, 7> originals{};
 std::unique_ptr<aoe2::assets::LooseHdAssetProvider> s_hd_provider;
 std::unique_ptr<aoe2::assets::AssetResolver> s_hd_resolver;
 std::unique_ptr<aoe2::renderer::GlesRenderer> s_gles_renderer;
+std::unique_ptr<aoe2::renderer::HudLayout> s_hud_layout;
+std::unique_ptr<aoe2::input::HudInverseMapper> s_hud_mapper;
 
 bool NativeDrawHook(uint8_t kind, uint32_t cmd_addr, uint32_t work_state) {
     if (kind == 0 && s_hd_resolver && s_gles_renderer) {
@@ -49,6 +57,14 @@ void InstallNativeGpu(PS2Runtime& runtime) {
             s_hd_resolver->LoadPalette(aoe2::assets::AssetCategory::Interface, 50507);
             s_gles_renderer = std::make_unique<aoe2::renderer::GlesRenderer>();
             s_gles_renderer->Initialize({1920, 1080});
+            std::vector<aoe2::renderer::HudRegionSpec> hud_specs{
+                {aoe2::renderer::HudRegionRole::ResourceBar, aoe2::renderer::HudAnchor::Top, {0, 0, 640, 32}, 1920, 32, 0, 0},
+                {aoe2::renderer::HudRegionRole::CommandBar, aoe2::renderer::HudAnchor::Bottom, {0, 300, 640, 148}, 1920, 148, 0, 0},
+            };
+            s_hud_layout = std::make_unique<aoe2::renderer::HudLayout>(
+                aoe2::renderer::HudLayout::ForExtent({640, 448}, {1920, 1080}, hud_specs));
+            s_hud_mapper = std::make_unique<aoe2::input::HudInverseMapper>(s_hud_layout->regions());
+            aoe2::game_hooks::detail::SetActiveHudMapper(s_hud_mapper.get());
             gpu::SetNativeDrawInterceptor(NativeDrawHook);
             std::cout << "[aoe2] native GLES renderer and HD asset resolver active (1920x1080)\n";
         } catch (const std::exception& e) {
