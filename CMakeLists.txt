@@ -47,6 +47,8 @@ add_library(aoe2_interfaces STATIC
     net/src/lan_discovery.cpp
     net/src/null_transport.cpp
     renderer/src/null_renderer.cpp
+    renderer/src/hud_layout.cpp
+    input/src/hud_inverse_mapper.cpp
     runtime/src/guest_memory.cpp
 )
 
@@ -307,6 +309,10 @@ add_test(NAME gpu_snapshot COMMAND aoe2_gpu_snapshot_tests)
 add_executable(aoe2_kt_gpu_model_tests tests/cpp/kt_gpu_model_tests.cpp)
 target_link_libraries(aoe2_kt_gpu_model_tests PRIVATE aoe2_interfaces)
 add_test(NAME kt_gpu_model COMMAND aoe2_kt_gpu_model_tests)
+
+add_executable(aoe2_hud_layout_tests tests/cpp/hud_layout_tests.cpp)
+target_link_libraries(aoe2_hud_layout_tests PRIVATE aoe2_interfaces)
+add_test(NAME hud_layout COMMAND aoe2_hud_layout_tests)
 
 option(AOE2_BUILD_GPU_DIFFERENTIAL_TESTS "Compare native GPU with owned generated originals" OFF)
 if(AOE2_BUILD_GPU_DIFFERENTIAL_TESTS)
