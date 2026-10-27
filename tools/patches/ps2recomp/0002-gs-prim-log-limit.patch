@@ -36,3 +36,14 @@
          {
              std::cout << "[gs:prim] idx=" << primitiveIndex
                        << " type=" << static_cast<uint32_t>(state.prim.type)
+@@ -755,6 +769,10 @@
+                       << " v0=(" << batch.vertices[0].x << "," << batch.vertices[0].y << ")"
+                       << " uv0=(" << (batch.vertices[0].u >> 4) << "," << (batch.vertices[0].v >> 4) << ")"
+                       << " stq0=(" << batch.vertices[0].s << "," << batch.vertices[0].t << "," << batch.vertices[0].q << ")"
++                      << " z0=" << batch.vertices[0].z
++                      << " zbuf=(zbp=" << ctx.zbuf.zbp << " psm=0x" << std::hex << static_cast<uint32_t>(ctx.zbuf.psm)
++                      << std::dec << " zmsk=" << static_cast<uint32_t>(ctx.zbuf.zmask ? 1u : 0u) << ")"
++                      << " fbmsk=0x" << std::hex << ctx.frame.fbmsk << std::dec
+                       << " v1=(" << batch.vertices[1].x << "," << batch.vertices[1].y << ")"
+                       << " uv1=(" << (batch.vertices[1].u >> 4) << "," << (batch.vertices[1].v >> 4) << ")"
+                       << " stq1=(" << batch.vertices[1].s << "," << batch.vertices[1].t << "," << batch.vertices[1].q << ")"
