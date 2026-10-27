@@ -34,9 +34,9 @@ constexpr std::array<int, 16> kRaylibButtons = {
     GAMEPAD_BUTTON_LEFT_FACE_RIGHT};
 
 // Keyboard fallback when no gamepad is connected. Index = aoe2::pad::HostButton, so the layout matches
-// kRaylibButtons: Cross, Circle, Square, Triangle, L1, R1, L2, R2, Select, Start, L3, R3, Up, Down, Left, Right.
+// kRaylibButtons (Enter/Space stay keyboard-only: a pad Cross posts a virtual click that swallows the key): Cross, Circle, Square, Triangle, L1, R1, L2, R2, Select, Start, L3, R3, Up, Down, Left, Right.
 constexpr std::array<std::array<int, 2>, 16> kKeyboardButtons = {{
-    {KEY_Z, KEY_ENTER},   {KEY_X, KEY_NULL},     {KEY_A, KEY_NULL},     {KEY_S, KEY_BACKSPACE},
+    {KEY_Z, KEY_NULL},    {KEY_X, KEY_NULL},     {KEY_A, KEY_NULL},     {KEY_S, KEY_BACKSPACE},
     {KEY_Q, KEY_NULL},    {KEY_W, KEY_NULL},     {KEY_E, KEY_NULL},     {KEY_R, KEY_NULL},
     {KEY_TAB, KEY_NULL},  {KEY_SPACE, KEY_NULL}, {KEY_NULL, KEY_NULL},  {KEY_NULL, KEY_NULL},
     {KEY_UP, KEY_NULL},   {KEY_DOWN, KEY_NULL},  {KEY_LEFT, KEY_NULL},  {KEY_RIGHT, KEY_NULL}}};

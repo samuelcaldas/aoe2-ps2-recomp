@@ -18,6 +18,8 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <cstdlib>
+#include <cstring>
 #include <iostream>
 #include <utility>
 #include <vector>
@@ -25,7 +27,14 @@
 namespace {
 
 constexpr std::size_t kMaxTracedFunctions = 256;
-constexpr uint64_t kAlwaysLogged = 3;
+// AOE2_CALL_TRACE_FIRST raises how many leading calls per function are always logged (default 3).
+uint64_t AlwaysLogged() {
+    static const uint64_t value = [] {
+        const char* text = std::getenv("AOE2_CALL_TRACE_FIRST");
+        return text != nullptr ? std::strtoull(text, nullptr, 10) : uint64_t{3};
+    }();
+    return value;
+}
 
 struct TracedFunction {
     uint32_t address = 0;
@@ -37,7 +46,21 @@ std::array<TracedFunction, kMaxTracedFunctions> g_traced;
 
 bool should_log(uint64_t call_number)
 {
-    return call_number <= kAlwaysLogged || (call_number & (call_number - 1)) == 0;
+    return call_number <= AlwaysLogged() || (call_number & (call_number - 1)) == 0;
+}
+
+// AOE2_CALL_TRACE_MEM=1 also prints the four words a0 points at (a message or argument block).
+void PrintArgumentMemory(const uint8_t* rdram, uint32_t address) {
+    static const bool enabled = std::getenv("AOE2_CALL_TRACE_MEM") != nullptr;
+    constexpr uint32_t kRamBytes = 32u * 1024u * 1024u;
+    if (!enabled || address == 0 || address > kRamBytes - 16u || (address & 3u) != 0) return;
+    std::cerr << " [a0]={" << std::hex;
+    for (uint32_t offset = 0; offset < 16; offset += 4) {
+        uint32_t word = 0;
+        std::memcpy(&word, rdram + address + offset, sizeof(word));
+        std::cerr << (offset ? "," : "") << "0x" << word;
+    }
+    std::cerr << "}" << std::dec;
 }
 
 template <std::size_t Slot>
@@ -48,7 +71,9 @@ void traced_call(uint8_t* rdram, R5900Context* ctx, PS2Runtime* runtime)
     if (should_log(call_number)) {
         std::cerr << "[call-trace] addr=0x" << std::hex << slot.address << " n=" << std::dec << call_number
                   << " a0=0x" << std::hex << getRegU32(ctx, 4) << " a1=0x" << getRegU32(ctx, 5) << " a2=0x" << getRegU32(ctx, 6) << " a3=0x" << getRegU32(ctx, 7)
-                  << " ra=0x" << getRegU32(ctx, 31) << std::dec << std::endl;
+                  << " ra=0x" << getRegU32(ctx, 31) << std::dec;
+        PrintArgumentMemory(rdram, getRegU32(ctx, 4));
+        std::cerr << std::endl;
     }
     const uint32_t slot_address = getRegU32(ctx, 4);
     if (slot.address == 0x001273D8 && !aoe2::game_hooks::diagnostics::native_libpad_installed)
