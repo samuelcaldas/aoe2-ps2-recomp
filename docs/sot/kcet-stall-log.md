@@ -846,3 +846,15 @@ With the native keyboard on and a real Escape from the host:
   the main menu renders and stays stable (Single Player, Multiplayer, Learn to Play, History, Player, Options).
 - Open: the frame loop runs at a few frames per second; a click lands about one key to the right on the
   on-screen keyboard (horizontal offset in the pointer mapping).
+
+## Single Player submenu: the main game thread ends (2026-10-27)
+
+Symptom: after the Single Player submenu appears, mouse and keys do nothing, no further disc reads, the picture is frozen except the host-drawn pointer.
+
+Evidence (desktop run, `tools/drive_desktop_scenario.py campaign`, `--stacks`, call trace on `0x1842F0`/`0x2FEEC0`/`0x185230`, `PS2X_GS_PRIM_LOG_LIMIT`):
+- The menu handler `0x2FEEC0` receives `WM_LBUTTONDOWN` (0x201) for the Single Player click (x=458,y=85) and returns. No later click or key produces any message.
+- The last `[frame:upload]` (idx=929) and the last GS primitive come right after `[sched:pc-zero] thread=2 from=0x185230 ra=0x0`: thread 2 (the thread running the main loop, `0x185230` called from `0x222158`) returns to pc 0 and never runs again. Threads 3/4/5 (interrupt servicing) and thread 8 (`th_Receiver`, network polling, normal) keep running.
+- Thread 8 busy-polling `sceILsockRecvFrom` (`0x388F90`) is expected game behaviour, not the blocker.
+- `aoe-decomp` addresses for the submenu constructor `0x2F97B0` and button dispatcher `0x2FA4A0` are never called at run time even though the submenu is drawn; the real menu message handler is `0x2FEEC0`.
+
+Open: why the main loop returns to `ra=0` (scheduler resume of a thread whose host stack was unwound, or a real loop exit). Next: trace `0x21BFB0`/`0x33B680` and the scheduler's resume path for thread 2.
