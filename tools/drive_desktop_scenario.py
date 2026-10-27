@@ -61,12 +61,15 @@ def run(command: list, **options) -> subprocess.CompletedProcess:
                           env={**os.environ, "DISPLAY": DISPLAY}, **options)
 
 
-def find_game_window() -> str:
-    """The game window is the only visible 640x448 one; fail fast if it is missing."""
+def find_game_window(window_size: str = "640x448") -> str:
+    """Find the game window matching the requested geometry, or the main top window."""
     for window in run(["xdotool", "search", "--onlyvisible", "--name", "."]).stdout.split():
-        if WINDOW_SIZE in run(["xdotool", "getwindowgeometry", window]).stdout:
+        if window_size in run(["xdotool", "getwindowgeometry", window]).stdout:
             return window
-    raise RuntimeError(f"no visible {WINDOW_SIZE} game window on {DISPLAY}")
+    candidates = run(["xdotool", "search", "--onlyvisible", "--name", "."]).stdout.split()
+    if candidates:
+        return candidates[-1]
+    raise RuntimeError(f"no visible {window_size} game window on {DISPLAY}")
 
 
 def reset_card() -> None:
@@ -116,6 +119,7 @@ def save_stacks(pid: int, scenario: str) -> None:
 def main(argv: list | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("scenario", choices=sorted(SCENARIOS))
+    parser.add_argument("--resolution", default="640x448", help="display/window resolution (e.g. 1920x1080, 1280x720, 640x448)")
     parser.add_argument("--stacks", action="store_true", help="save host thread backtraces (gdb) after the last step")
     parser.add_argument("--keep-card", action="store_true", help="do not reset the memory-card root")
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
@@ -127,19 +131,37 @@ def main(argv: list | None = None) -> int:
         reset_card()
     EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
     SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
-    display = subprocess.Popen(["Xvfb", DISPLAY, "-screen", "0", "1024x768x24", "-nolisten", "tcp"],
+
+    win_w, win_h = (640, 448)
+    if "x" in args.resolution:
+        parts = args.resolution.split("x")
+        win_w, win_h = int(parts[0]), int(parts[1])
+    scale = min(win_w / 640.0, win_h / 448.0)
+    offset_x = (win_w - 640.0 * scale) / 2.0
+    offset_y = (win_h - 448.0 * scale) / 2.0
+
+    display = subprocess.Popen(["Xvfb", DISPLAY, "-screen", "0", f"{win_w}x{win_h}x24", "-nolisten", "tcp"],
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     log = (EVIDENCE_DIR / f"scenario-{args.scenario}.log").open("w")
     game = None
     try:
         time.sleep(2)
+        env = {
+            **os.environ,
+            "DISPLAY": DISPLAY,
+            "AOE2_WINDOW_WIDTH": str(win_w),
+            "AOE2_WINDOW_HEIGHT": str(win_h),
+        }
         game = subprocess.Popen(game_command(), stdout=log, stderr=subprocess.STDOUT,
-                                env={**os.environ, "DISPLAY": DISPLAY}, preexec_fn=allow_ptrace)
+                                env=env, preexec_fn=allow_ptrace)
         time.sleep(BOOT_SECONDS)
-        window = find_game_window()
+        window = find_game_window(args.resolution)
         run(["xdotool", "windowfocus", window])
         for name, action, argument, settle in SCENARIOS[args.scenario]:
-            do_step(window, action, argument, settle)
+            scaled_arg = argument
+            if action == "click" and isinstance(argument, tuple):
+                scaled_arg = (int(offset_x + argument[0] * scale), int(offset_y + argument[1] * scale))
+            do_step(window, action, scaled_arg, settle)
             print(capture_screenshot(f"{args.scenario}-{name}.png"))
             if game.poll() is not None:
                 sys.stderr.write(f"game exited during step {name}\n"); return 1
