@@ -42,11 +42,10 @@ SCENARIOS = {
     "single-player": BOOT_TO_MENU + [("single-player", "click", (458, 85), 10)],
     "campaign": BOOT_TO_MENU + [
         ("single-player", "click", (458, 85), 10),
-        ("campaigns", "click", (418, 86), 10),
-        ("select-down", "key", "Down", 3),
-        ("select-up", "key", "Up", 3),
-        ("confirm-cross", "key", "z", 10),
-        ("confirm-return", "key", "Return", 12),
+        ("campaigns", "click", (418, 86), 12),
+        ("wallace-marker", "click", (221, 77), 12),
+        ("scenario-1", "click", (183, 57), 40),
+        ("scenario-1-later", "key", "shift", 40),
     ],
 }
 
