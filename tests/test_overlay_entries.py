@@ -3,7 +3,7 @@ import unittest
 from tests.test_kcet_resolver_elf import PF_RX, build_elf, code
 from tools.kcet_resolver.elf_image import ElfImage
 from tools.kcet_resolver.mips import jal
-from tools.overlay_entries import entry_targets, seeds_for
+from tools.overlay_entries import entry_targets, seeds_for, switch_targets
 
 BASE = 0x100000
 J = 0x08000000
@@ -34,6 +34,33 @@ class TestEntryTargets(unittest.TestCase):
 
     def test_seed_in_the_header_is_excluded(self):
         self.assertEqual(seeds_for([0x1D98010], 0x1D98000, 0x40, 0x600), [])
+
+
+LUI_V0, ADDIU_V1_V0 = 0x3C020000, 0x24430000
+
+
+class TestSwitchTargets(unittest.TestCase):
+    LOAD, HEADER, TEXT = 0x1D98000, 0x40, 0x80
+
+    def overlay(self, table):
+        """Text builds the table address (data at the end of the text) then the table follows."""
+        table_address = self.LOAD + self.HEADER + self.TEXT
+        text = [0] * (self.HEADER // 4) + [LUI_V0 | (((table_address + 0x8000) >> 16) & 0xFFFF), ADDIU_V1_V0 | (table_address & 0xFFFF)]
+        text += [0] * ((self.HEADER + self.TEXT) // 4 - len(text))
+        return b"".join(word.to_bytes(4, "little") for word in text + table)
+
+    def test_collects_every_entry_of_a_referenced_table(self):
+        inside = [self.LOAD + 0x60, self.LOAD + 0x64, self.LOAD + 0x70]
+        raw = self.overlay(inside + [0])
+        self.assertEqual(switch_targets(raw, self.LOAD, self.HEADER, self.TEXT), inside)
+
+    def test_ignores_unreferenced_runs_of_addresses(self):
+        empty_text = bytes(self.HEADER + self.TEXT)
+        table = b"".join(w.to_bytes(4, "little") for w in [self.LOAD + 0x60, self.LOAD + 0x64])
+        self.assertEqual(switch_targets(empty_text + table, self.LOAD, self.HEADER, self.TEXT), [])
+
+    def test_a_single_stray_address_is_not_a_table(self):
+        self.assertEqual(switch_targets(self.overlay([self.LOAD + 0x60, 0]), self.LOAD, self.HEADER, self.TEXT), [])
 
 
 if __name__ == "__main__":
