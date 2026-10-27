@@ -47,7 +47,7 @@ void traced_call(uint8_t* rdram, R5900Context* ctx, PS2Runtime* runtime)
     const uint64_t call_number = ++slot.calls;
     if (should_log(call_number)) {
         std::cerr << "[call-trace] addr=0x" << std::hex << slot.address << " n=" << std::dec << call_number
-                  << " a0=0x" << std::hex << getRegU32(ctx, 4) << " a1=0x" << getRegU32(ctx, 5)
+                  << " a0=0x" << std::hex << getRegU32(ctx, 4) << " a1=0x" << getRegU32(ctx, 5) << " a2=0x" << getRegU32(ctx, 6) << " a3=0x" << getRegU32(ctx, 7)
                   << " ra=0x" << getRegU32(ctx, 31) << std::dec << std::endl;
     }
     const uint32_t slot_address = getRegU32(ctx, 4);

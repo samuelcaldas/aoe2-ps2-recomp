@@ -817,3 +817,16 @@ Evidence, in order, with the `memory_card` switch routing libmc `GetInfo`, `Sync
   `docs/decomp-requests.md`).
 - A forced dispatch of message 0x520 to the dialog was proposed and rejected: it forces state instead of fixing
   the producer.
+
+### Memory card screen: input path verified end to end (2026-10-26, branch m1-libmc)
+
+With the native keyboard on and a real Escape from the host:
+
+- The keyboard status function reports ready after the first frame, the HID usage becomes a WM_KEYDOWN with
+  wParam 0x1B, it reaches the screen's message handler, the container, the screen's key handler and the base key
+  handler, and then the Cancel button.
+- The button ignores it because it is invisible: the end of the card check hides it when the screen runs in
+  mode 0 (the boot mode), leaving a single other button as the active control. Escape therefore cannot leave the
+  screen in this mode; a click or confirm on that other button is the expected input (asked of the decomp).
+- Host side: the call trace now prints a2 and a3 (message id and wParam), Escape no longer closes the host window
+  while the native keyboard owns the keys, and without a gamepad the host keyboard drives the pad.
