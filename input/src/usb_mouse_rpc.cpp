@@ -30,6 +30,12 @@ void UsbMouseRpcModel::Submit(const HostMouseReport& report) {
     buttons_ = report.buttons & kReportedButtons;
 }
 
+void UsbMouseRpcModel::SteerTo(float remaining_x, float remaining_y, uint32_t buttons) {
+    pending_x_ = static_cast<int>(std::lround(remaining_x));
+    pending_y_ = static_cast<int>(std::lround(remaining_y));
+    buttons_ = buttons & kReportedButtons;
+}
+
 UsbMouseRpcModel::Reply UsbMouseRpcModel::InfoReply() const {
     Reply reply{};
     reply[0] = 1;

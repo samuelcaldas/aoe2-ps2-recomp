@@ -3,10 +3,12 @@
 #include <aoe2/input/usb_mouse_rpc.hpp>
 #include "input_synthetic.hpp"
 #include "native_input_internal.hpp"
+#include <aoe2/input/surface_mapping.hpp>
 #include "raylib.h"
 #include "runtime/ps2_memory.h"
 
 #include <cstring>
+#include <iostream>
 #include <mutex>
 
 namespace aoe2::game_hooks::detail {
@@ -46,17 +48,48 @@ void SampleSyntheticMouse() {
     g_mouse_model.SetConnected(true);
     g_mouse_model.Submit(g_synthetic_mouse.Next(LogicalSteps(Module::kMouse).load()));
 }
+
+// The game's cursor, in its 640x448 screen, as stored by its set-cursor-position routine
+// (0x2257C0, which clamps x to 0..628 and y to 0..431).
+constexpr uint32_t kGuestCursorX = 0x00C5E840;
+constexpr uint32_t kGuestCursorY = 0x00C5E844;
+constexpr float kGuestScreenWidth = 640.0f;
+constexpr float kGuestScreenHeight = 448.0f;
+
+int32_t LoadGuestInt(uint8_t* rdram, uint32_t address) {
+    int32_t value = 0;
+    if (const uint8_t* source = getMemPtr(rdram, address)) std::memcpy(&value, source, sizeof(value));
+    return value;
+}
+
+void LogButtonChange(uint32_t buttons) {
+    static uint32_t last_buttons = 0;
+    if (buttons != last_buttons) std::cerr << "[host-mouse] buttons=0x" << std::hex << buttons << std::dec << std::endl;
+    last_buttons = buttons;
+}
+
+// Absolute pointing: the host pointer's place in the window is where the game's cursor should be.
+void SteerGuestCursor(uint8_t* rdram, Vector2 position, uint32_t buttons) {
+    const aoe2::input::SurfaceMapping mapping({static_cast<float>(GetScreenWidth()), static_cast<float>(GetScreenHeight())},
+                                              {kGuestScreenWidth, kGuestScreenHeight});
+    const aoe2::input::GuestPoint target = mapping.ToGuest(position.x, position.y);
+    g_mouse_model.SteerTo(target.x - static_cast<float>(LoadGuestInt(rdram, kGuestCursorX)),
+                          target.y - static_cast<float>(LoadGuestInt(rdram, kGuestCursorY)), buttons);
+}
 }  // namespace
 
 namespace aoe2::game_hooks::detail {
-void SampleHostMouse() {
+void SampleHostMouse(uint8_t* rdram) {
     if (aoe2::game_hooks::synthetic::Enabled()) return SampleSyntheticMouse();
     const Vector2 position = GetMousePosition();
+    const uint32_t buttons = HostButtons();
+    g_mouse_model.SetConnected(true);
+    LogButtonChange(buttons);
+    if (rdram != nullptr && IsCursorOnScreen()) return SteerGuestCursor(rdram, position, buttons);
     const Vector2 last = g_has_last_position ? g_last_position : position;
     g_last_position = position;
     g_has_last_position = true;
-    g_mouse_model.SetConnected(true);
-    g_mouse_model.Submit(HostMouseReport{position.x - last.x, position.y - last.y, HostButtons(), 0, GetMouseWheelMove()});
+    g_mouse_model.Submit(HostMouseReport{position.x - last.x, position.y - last.y, buttons, 0, GetMouseWheelMove()});
 }
 }  // namespace aoe2::game_hooks::detail
 
@@ -76,7 +109,7 @@ void MouseBind(uint8_t*, R5900Context* ctx, PS2Runtime*) {
 
 void MouseGetInfo(uint8_t* rdram, R5900Context* ctx, PS2Runtime*) {
     std::lock_guard<std::mutex> lock(g_mouse_mutex);
-    SampleHostMouse();
+    SampleHostMouse(rdram);
     WriteReply(rdram, getRegU32(ctx, kRegA0), g_mouse_model.InfoReply());
     ReturnToCaller(ctx, 0);
 }

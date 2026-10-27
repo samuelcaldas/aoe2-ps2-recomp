@@ -30,7 +30,7 @@ public:
         uint8_t* dest = getMemPtr(rdram, reply);
         if (!dest) return -1;
         std::lock_guard<std::mutex> lock(g_mouse_mutex);
-        SampleHostMouse();
+        SampleHostMouse(rdram);
         const auto rep = g_mouse_model.InfoReply();
         std::memcpy(dest, rep.data(), rep.size());
         return 0;
