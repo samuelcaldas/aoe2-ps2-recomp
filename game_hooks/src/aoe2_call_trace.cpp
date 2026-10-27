@@ -127,7 +127,7 @@ void traced_call(uint8_t* rdram, R5900Context* ctx, PS2Runtime* runtime)
     if (should_log(call_number)) {
         std::cerr << "[call-trace] addr=0x" << std::hex << slot.address << " n=" << std::dec << call_number
                   << " a0=0x" << std::hex << getRegU32(ctx, 4) << " a1=0x" << getRegU32(ctx, 5) << " a2=0x" << getRegU32(ctx, 6) << " a3=0x" << getRegU32(ctx, 7)
-                  << " ra=0x" << getRegU32(ctx, 31) << std::dec;
+                  << " ra=0x" << getRegU32(ctx, 31) << " sp=0x" << getRegU32(ctx, 29) << std::dec;
         PrintArgumentMemory(rdram, getRegU32(ctx, 4));
         std::cerr << std::endl;
     }
@@ -152,7 +152,8 @@ void traced_call(uint8_t* rdram, R5900Context* ctx, PS2Runtime* runtime)
         aoe2::game_hooks::diagnostics::ObserveHdState(rdram, call_number);
     if (should_log(call_number)) {
         std::cerr << "[call-trace] ret addr=0x" << std::hex << slot.address << " v0=0x"
-                  << getRegU32(ctx, 2) << std::dec << std::endl;
+                  << getRegU32(ctx, 2) << " sp=0x" << getRegU32(ctx, 29) << " ra=0x" << getRegU32(ctx, 31)
+                  << " pc=0x" << ctx->pc << std::dec << std::endl;
     }
 }
 
