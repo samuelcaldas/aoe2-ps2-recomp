@@ -19,10 +19,10 @@ diff --git a/ps2xRuntime/src/lib/ps2_runtime.cpp b/ps2xRuntime/src/lib/ps2_runti
          m_audioBackend.setAudioReady(IsAudioDeviceReady());
  #endif
 @@ -2598,6 +2608,7 @@ void PS2Runtime::run()
-     // A blank image to use as a framebuffer
-     Image blank = GenImageColor(FB_WIDTH, FB_HEIGHT, BLANK);
-     Texture2D frameTex = LoadTextureFromImage(blank);
-+    SetTextureFilter(frameTex, TEXTURE_FILTER_BILINEAR);
-     UnloadImage(blank);
+      // A blank image to use as a framebuffer
+      Image blank = GenImageColor(FB_WIDTH, FB_HEIGHT, BLANK);
+      Texture2D frameTex = LoadTextureFromImage(blank);
++     SetTextureFilter(frameTex, TEXTURE_FILTER_BILINEAR);
+      UnloadImage(blank);
 
-     std::atomic<bool> gameThreadFinished{false};
+      std::atomic<bool> gameThreadFinished{false};
