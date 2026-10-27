@@ -50,6 +50,7 @@ Texture2D GetOrCreateHostTexture(uint32_t texId, const aoe2::assets::ResolvedSpr
     };
     Texture2D tex = LoadTextureFromImage(img);
     SetTextureFilter(tex, TEXTURE_FILTER_BILINEAR);
+    SetTextureWrap(tex, TEXTURE_WRAP_CLAMP);
     s_host_textures[texId] = {tex, true};
     return tex;
 }
@@ -62,7 +63,12 @@ bool IsGameplayActive(PS2Runtime& runtime) {
     if (const uint8_t* ptr = getConstMemPtr(rdram, 0x0050A5A0)) {
         std::memcpy(&visibleMapPtr, ptr, sizeof(visibleMapPtr));
     }
-    return visibleMapPtr != 0;
+    uint32_t cursorController = 0;
+    // D_004E3248 is the in-game zone cursor controller (0 during briefing slides/menus)
+    if (const uint8_t* ptr = getConstMemPtr(rdram, 0x004E3248)) {
+        std::memcpy(&cursorController, ptr, sizeof(cursorController));
+    }
+    return visibleMapPtr != 0 && cursorController != 0;
 }
 
 void NativePresentationCallback(PS2Runtime& runtime, void*) {
@@ -82,40 +88,39 @@ void NativePresentationCallback(PS2Runtime& runtime, void*) {
         gameplay_logged = true;
     }
 
-    // 1. Render Top Resource Bar with HD Asset 50792 preserving aspect ratio
+    // Proportional dimensions matching the 640x448 playfield scaled to host height
+    const float playfieldScale = screenH / 448.0f;
+    const float playfieldW = 640.0f * playfieldScale;
+    const float playfieldX = (screenW - playfieldW) * 0.5f;
+
+    // 1. Render Top Resource Bar with HD Asset 50792 covering the low-res PS2 bar
     auto topSprite = s_hd_resolver->ResolveSprite(aoe2::assets::AssetCategory::Interface, 50792, 0);
     if (topSprite.has_value() && topSprite->width > 0 && topSprite->height > 0) {
         Texture2D tex = GetOrCreateHostTexture(topSprite->texture_id, *topSprite);
-        const float topScale = (screenH >= 1080.0f) ? 2.0f : 1.5f;
-        const float topW = static_cast<float>(tex.width) * topScale;
-        const float topH = static_cast<float>(tex.height) * topScale;
-        const float topX = (screenW - topW) * 0.5f;
+        const float topH = 32.0f * playfieldScale;
 
         // Dark wood background bar filling the full widescreen top
         DrawRectangle(0, 0, static_cast<int>(screenW), static_cast<int>(topH), Color{35, 18, 9, 255});
 
-        // Centered HD resource bar with 1:1 / 2:1 aspect ratio
+        // HD resource bar aligned with playfield
         Rectangle src{0.0f, 0.0f, static_cast<float>(tex.width), static_cast<float>(tex.height)};
-        Rectangle dst{topX, 0.0f, topW, topH};
+        Rectangle dst{playfieldX, 0.0f, playfieldW, topH};
         DrawTexturePro(tex, src, dst, Vector2{0.0f, 0.0f}, 0.0f, WHITE);
     }
 
-    // 2. Render Bottom Command Bar with HD Asset 50150 preserving aspect ratio
+    // 2. Render Bottom Command Bar with HD Asset 50150 covering the low-res PS2 bar
     auto bottomSprite = s_hd_resolver->ResolveSprite(aoe2::assets::AssetCategory::Interface, 50150, 0);
     if (bottomSprite.has_value() && bottomSprite->width > 0 && bottomSprite->height > 0) {
         Texture2D tex = GetOrCreateHostTexture(bottomSprite->texture_id, *bottomSprite);
-        const float botScale = (screenH >= 1080.0f) ? 2.0f : 1.5f;
-        const float botW = static_cast<float>(tex.width) * botScale;
-        const float botH = static_cast<float>(tex.height) * botScale;
-        const float botX = (screenW - botW) * 0.5f;
-        const float botY = screenH - botH;
+        const float botY = 300.0f * playfieldScale;
+        const float botH = screenH - botY;
 
         // Dark wood background bar filling the full widescreen bottom
         DrawRectangle(0, static_cast<int>(botY), static_cast<int>(screenW), static_cast<int>(botH), Color{35, 18, 9, 255});
 
-        // Centered HD command bar with proper proportions
+        // HD command bar aligned with playfield
         Rectangle src{0.0f, 0.0f, static_cast<float>(tex.width), static_cast<float>(tex.height)};
-        Rectangle dst{botX, botY, botW, botH};
+        Rectangle dst{playfieldX, botY, playfieldW, botH};
         DrawTexturePro(tex, src, dst, Vector2{0.0f, 0.0f}, 0.0f, WHITE);
     }
 }
