@@ -10,6 +10,13 @@ struct FramebufferInfo {
     uint32_t height{480};
 };
 
+struct RectF {
+    float x{0.0f};
+    float y{0.0f};
+    float width{0.0f};
+    float height{0.0f};
+};
+
 class IRenderer {
 public:
     virtual ~IRenderer() = default;
@@ -20,6 +27,12 @@ public:
     virtual void Shutdown() = 0;
     virtual std::string_view GetBackendName() const = 0;
     virtual uint64_t GetFrameCount() const = 0;
+
+    virtual bool UploadTexture(uint32_t texture_id, uint32_t width, uint32_t height, const uint32_t* rgba_pixels) {
+        return false;
+    }
+    virtual void DrawSprite(uint32_t texture_id, const RectF& src_rect, const RectF& dst_rect, uint32_t tint_color = 0xFFFFFFFF) {}
+    virtual bool HasTexture(uint32_t texture_id) const { return false; }
 };
 
 class NullRenderer : public IRenderer {

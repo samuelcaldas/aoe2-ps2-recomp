@@ -49,6 +49,7 @@ add_library(aoe2_interfaces STATIC
     net/src/lan_discovery.cpp
     net/src/null_transport.cpp
     renderer/src/null_renderer.cpp
+    renderer/src/gles_renderer.cpp
     renderer/src/hud_layout.cpp
     input/src/hud_inverse_mapper.cpp
     runtime/src/guest_memory.cpp
@@ -323,6 +324,10 @@ add_test(NAME jasc_palette COMMAND aoe2_jasc_palette_tests)
 add_executable(aoe2_slp_decoder_tests tests/cpp/slp_decoder_tests.cpp)
 target_link_libraries(aoe2_slp_decoder_tests PRIVATE aoe2_interfaces)
 add_test(NAME slp_decoder COMMAND aoe2_slp_decoder_tests)
+
+add_executable(aoe2_gles_renderer_tests tests/cpp/gles_renderer_tests.cpp)
+target_link_libraries(aoe2_gles_renderer_tests PRIVATE aoe2_interfaces)
+add_test(NAME gles_renderer COMMAND aoe2_gles_renderer_tests)
 
 option(AOE2_BUILD_GPU_DIFFERENTIAL_TESTS "Compare native GPU with owned generated originals" OFF)
 if(AOE2_BUILD_GPU_DIFFERENTIAL_TESTS)
