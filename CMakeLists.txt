@@ -9,6 +9,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_library(aoe2_interfaces STATIC
     assets/src/asset_path_resolver.cpp
     assets/src/loose_hd_asset_provider.cpp
+    assets/src/jasc_palette.cpp
     input/src/actions.cpp
     input/src/guest_keyboard.cpp
     input/src/guest_mouse.cpp
@@ -313,6 +314,10 @@ add_test(NAME kt_gpu_model COMMAND aoe2_kt_gpu_model_tests)
 add_executable(aoe2_hud_layout_tests tests/cpp/hud_layout_tests.cpp)
 target_link_libraries(aoe2_hud_layout_tests PRIVATE aoe2_interfaces)
 add_test(NAME hud_layout COMMAND aoe2_hud_layout_tests)
+
+add_executable(aoe2_jasc_palette_tests tests/cpp/jasc_palette_tests.cpp)
+target_link_libraries(aoe2_jasc_palette_tests PRIVATE aoe2_interfaces)
+add_test(NAME jasc_palette COMMAND aoe2_jasc_palette_tests)
 
 option(AOE2_BUILD_GPU_DIFFERENTIAL_TESTS "Compare native GPU with owned generated originals" OFF)
 if(AOE2_BUILD_GPU_DIFFERENTIAL_TESTS)
