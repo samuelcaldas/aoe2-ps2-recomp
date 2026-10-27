@@ -830,3 +830,19 @@ With the native keyboard on and a real Escape from the host:
   screen in this mode; a click or confirm on that other button is the expected input (asked of the decomp).
 - Host side: the call trace now prints a2 and a3 (message id and wParam), Escape no longer closes the host window
   while the native keyboard owns the keys, and without a gamepad the host keyboard drives the pad.
+
+### Main menu reached (2026-10-26, branch m1-libmc)
+
+- Black screen root cause: the runtime's CPU rasterizer ignored TEST.ZTE and treated ZTE=0 with ZTST=0 as
+  depth NEVER. The game draws its whole UI into an off-screen buffer with the depth test off, so every UI pixel
+  was dropped; only the cursor (drawn straight to the display with depth ALWAYS) showed. Fixed by
+  `tools/patches/ps2recomp/0003-gs-zte-disables-depth-test.patch`.
+- Input: the memory card screen in boot mode waits for the player (New Player, name on the on-screen keyboard,
+  OK). The on-screen keyboard closes on its own ENTER key; a physical Return only toggles its flags, and the
+  native keyboard posts no WM_CHAR, so letters come from a click (mouse or pad Cross at the cursor).
+- Absolute mouse: the native mouse now steers the game's cursor to the host pointer's place in the window
+  (`UsbMouseRpcModel::SteerTo` + `SurfaceMapping`), through the game's own packet path.
+- With the card routed to the host (libmc GetInfo/Sync/GetDir) and the clicks above, the card screen exits and
+  the main menu renders and stays stable (Single Player, Multiplayer, Learn to Play, History, Player, Options).
+- Open: the frame loop runs at a few frames per second; a click lands about one key to the right on the
+  on-screen keyboard (horizontal offset in the pointer mapping).
