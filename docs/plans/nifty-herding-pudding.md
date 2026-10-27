@@ -29,13 +29,13 @@
 - Modify: `gpu/include/aoe2/gpu/kt_gpu_model.hpp`
 - Modify: `docs/sot/gpu-semantics.md`
 
-- [ ] **Step 1: Instrumentar `KtGpuModel::ValidateCommand` e dispatch para registrar `kind` e payload de pacotes**
-- [ ] **Step 2: Adicionar teste unitário de captura e formatação de comandos GPU em `tests/cpp/kt_gpu_model_tests.cpp`**
-- [ ] **Step 3: Compilar e rodar testes de modelo GPU**
-- [ ] **Step 4: Identificar no binário e decomp os endereços e propósitos dos 29 handlers de `D_38C740`**
-- [ ] **Step 5: Solicitar decomp ao `decomp-worker` para handlers de desenho essenciais (PRIM, sprite, blit)**
-- [ ] **Step 6: Atualizar `docs/sot/gpu-semantics.md` com a tabela dos handlers mapeados**
-- [ ] **Step 7: Commit**
+- [x] **Step 1: Instrumentar `KtGpuModel::ValidateCommand` e dispatch para registrar `kind` e payload de pacotes**
+- [x] **Step 2: Adicionar teste unitário de captura e formatação de comandos GPU em `tests/cpp/kt_gpu_model_tests.cpp`**
+- [x] **Step 3: Compilar e rodar testes de modelo GPU**
+- [x] **Step 4: Identificar no binário e decomp os endereços e propósitos dos 29 handlers de `D_38C740`**
+- [x] **Step 5: Solicitar decomp ao `decomp-worker` para handlers de desenho essenciais (PRIM, sprite, blit)**
+- [x] **Step 6: Atualizar `docs/sot/gpu-semantics.md` com a tabela dos handlers mapeados**
+- [x] **Step 7: Commit**
 
 ---
 
@@ -45,10 +45,10 @@
 - Modify: `CMakeLists.txt`
 - Modify: `cmake/Aoe2HostTests.cmake` (se existente) ou `CMakeLists.txt`
 
-- [ ] **Step 1: Adicionar `renderer/src/hud_layout.cpp` e `input/src/hud_inverse_mapper.cpp` na lib `aoe2_interfaces`**
-- [ ] **Step 2: Registrar `tests/cpp/hud_layout_tests.cpp` como ctest `hud_layout_tests`**
-- [ ] **Step 3: Compilar e rodar `ctest -R hud_layout`**
-- [ ] **Step 4: Commit**
+- [x] **Step 1: Adicionar `renderer/src/hud_layout.cpp` e `input/src/hud_inverse_mapper.cpp` na lib `aoe2_interfaces`**
+- [x] **Step 2: Registrar `tests/cpp/hud_layout_tests.cpp` como ctest `hud_layout_tests`**
+- [x] **Step 3: Compilar e rodar `ctest -R hud_layout`**
+- [x] **Step 4: Commit**
 
 ---
 
@@ -60,11 +60,11 @@
 - Create: `tests/cpp/jasc_palette_tests.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Escrever teste de parsing JASC-PAL (header ASCII `JASC-PAL`, `0100`, 256 cores RGBA)**
-- [ ] **Step 2: Executar teste para verificar falha (arquivo ausente)**
-- [ ] **Step 3: Implementar `JascPalette::Load(std::span<const uint8_t>)` e `GetColor(uint8_t index)`**
-- [ ] **Step 4: Executar `ctest -R jasc_palette` e verificar sucesso**
-- [ ] **Step 5: Commit**
+- [x] **Step 1: Escrever teste de parsing JASC-PAL (header ASCII `JASC-PAL`, `0100`, 256 cores RGBA)**
+- [x] **Step 2: Executar teste para verificar falha (arquivo ausente)**
+- [x] **Step 3: Implementar `JascPalette::Load(std::span<const uint8_t>)` e `GetColor(uint8_t index)`**
+- [x] **Step 4: Executar `ctest -R jasc_palette` e verificar sucesso**
+- [x] **Step 5: Commit**
 
 ---
 
@@ -76,12 +76,12 @@
 - Create: `tests/cpp/slp_decoder_tests.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Escrever teste para parse de header SLP 2.0N e decodificação de frame simples**
-- [ ] **Step 2: Executar teste para verificar falha**
-- [ ] **Step 3: Implementar `SlpDecoder` com suporte aos comandos básicos (skip, draw, player color, shadow)**
-- [ ] **Step 4: Executar `ctest -R slp_decoder` e verificar sucesso**
-- [ ] **Step 5: Testar com arquivo real de interface `game/hd-edition/source/resources/_common/drs/interface/50100.slp` se disponível**
-- [ ] **Step 6: Commit**
+- [x] **Step 1: Escrever teste para parse de header SLP 2.0N e decodificação de frame simples**
+- [x] **Step 2: Executar teste para verificar falha**
+- [x] **Step 3: Implementar `SlpDecoder` com suporte aos comandos básicos (skip, draw, player color, shadow)**
+- [x] **Step 4: Executar `ctest -R slp_decoder` e verificar sucesso**
+- [x] **Step 5: Testar com arquivo real de interface `game/hd-edition/source/resources/_common/drs/interface/50100.slp` se disponível**
+- [x] **Step 6: Commit**
 
 ---
 
@@ -93,12 +93,12 @@
 - Modify: `CMakeLists.txt`
 - Modify: `renderer/include/aoe2/renderer/renderer.hpp`
 
-- [ ] **Step 1: Escrever teste de ciclo de vida e estado do GlesRenderer (`Initialize`, `BeginFrame`, `EndFrame`, `Shutdown`)**
-- [ ] **Step 2: Executar teste para verificar compilação/falha**
-- [ ] **Step 3: Implementar `GlesRenderer` implementando `IRenderer` com shaders de quad e suporte a texturas**
-- [ ] **Step 4: Implementar `UploadTexture(uint32_t id, uint32_t w, uint32_t h, const uint32_t* rgba)` e `DrawSprite(...)`**
-- [ ] **Step 5: Executar testes de renderer e verificar sucesso**
-- [ ] **Step 6: Commit**
+- [x] **Step 1: Escrever teste de ciclo de vida e estado do GlesRenderer (`Initialize`, `BeginFrame`, `EndFrame`, `Shutdown`)**
+- [x] **Step 2: Executar teste para verificar compilação/falha**
+- [x] **Step 3: Implementar `GlesRenderer` implementando `IRenderer` com shaders de quad e suporte a texturas**
+- [x] **Step 4: Implementar `UploadTexture(uint32_t id, uint32_t w, uint32_t h, const uint32_t* rgba)` e `DrawSprite(...)`**
+- [x] **Step 5: Executar testes de renderer e verificar sucesso**
+- [x] **Step 6: Commit**
 
 ---
 
@@ -110,10 +110,10 @@
 - Create: `tests/cpp/asset_resolver_tests.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: Escrever teste unitário de resolução de recurso PS2 para asset HD (com fallback para ausente)**
-- [ ] **Step 2: Implementar `AssetResolver` com cache de texturas e consulta ao `LooseHdAssetProvider`**
-- [ ] **Step 3: Executar `ctest -R asset_resolver` e verificar sucesso**
-- [ ] **Step 4: Commit**
+- [x] **Step 1: Escrever teste unitário de resolução de recurso PS2 para asset HD (com fallback para ausente)**
+- [x] **Step 2: Implementar `AssetResolver` com cache de texturas e consulta ao `LooseHdAssetProvider`**
+- [x] **Step 3: Executar `ctest -R asset_resolver` e verificar sucesso**
+- [x] **Step 4: Commit**
 
 ---
 
@@ -124,11 +124,11 @@
 - Modify: `game_hooks/src/kcet_gpu_module.cpp`
 - Modify: `game_hooks/src/gpu_runtime_adapter.hpp`
 
-- [ ] **Step 1: Inicializar `LooseHdAssetProvider` e `GlesRenderer` no `main.cpp` desktop**
-- [ ] **Step 2: Interceptar os handlers de draw mapeados no M1 para direcionar ao `AssetResolver` + `GlesRenderer`**
-- [ ] **Step 3: Aplicar fallback para a implementação PS2 gerada quando asset HD não estiver disponível**
-- [ ] **Step 4: Executar ctests de integração**
-- [ ] **Step 5: Commit**
+- [x] **Step 1: Inicializar `LooseHdAssetProvider` e `GlesRenderer` no `main.cpp` desktop**
+- [x] **Step 2: Interceptar os handlers de draw mapeados no M1 para direcionar ao `AssetResolver` + `GlesRenderer`**
+- [x] **Step 3: Aplicar fallback para a implementação PS2 gerada quando asset HD não estiver disponível**
+- [x] **Step 4: Executar ctests de integração**
+- [x] **Step 5: Commit**
 
 ---
 
@@ -138,10 +138,10 @@
 - Modify: `tools/docker_build.py`
 - Modify: `docs/plans/nifty-herding-pudding.md`
 
-- [ ] **Step 1: Executar build diagnóstico desktop via `python3 tools/docker_build.py --platform desktop --jobs 4`**
-- [ ] **Step 2: Executar suite de testes Python e ctests completos**
-- [ ] **Step 3: Configurar guards Switch no `gles_renderer.cpp` (EGL / Mesa switch / libnx)**
-- [ ] **Step 4: Validar build Switch via container `devkitpro/devkita64` quando aplicável**
-- [ ] **Step 5: Registrar resultados finais e atualizar documentação**
-- [ ] **Step 6: Commit**
+- [x] **Step 1: Executar build diagnóstico desktop via `python3 tools/docker_build.py --platform desktop --jobs 4`**
+- [x] **Step 2: Executar suite de testes Python e ctests completos**
+- [x] **Step 3: Configurar guards Switch no `gles_renderer.cpp` (EGL / Mesa switch / libnx)**
+- [x] **Step 4: Validar build Switch via container `devkitpro/devkita64` quando aplicável**
+- [x] **Step 5: Registrar resultados finais e atualizar documentação**
+- [x] **Step 6: Commit**
 
