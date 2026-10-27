@@ -11,6 +11,7 @@ add_library(aoe2_interfaces STATIC
     assets/src/loose_hd_asset_provider.cpp
     assets/src/jasc_palette.cpp
     assets/src/slp_decoder.cpp
+    assets/src/asset_resolver.cpp
     input/src/actions.cpp
     input/src/guest_keyboard.cpp
     input/src/guest_mouse.cpp
@@ -328,6 +329,10 @@ add_test(NAME slp_decoder COMMAND aoe2_slp_decoder_tests)
 add_executable(aoe2_gles_renderer_tests tests/cpp/gles_renderer_tests.cpp)
 target_link_libraries(aoe2_gles_renderer_tests PRIVATE aoe2_interfaces)
 add_test(NAME gles_renderer COMMAND aoe2_gles_renderer_tests)
+
+add_executable(aoe2_asset_resolver_tests tests/cpp/asset_resolver_tests.cpp)
+target_link_libraries(aoe2_asset_resolver_tests PRIVATE aoe2_interfaces)
+add_test(NAME asset_resolver COMMAND aoe2_asset_resolver_tests)
 
 option(AOE2_BUILD_GPU_DIFFERENTIAL_TESTS "Compare native GPU with owned generated originals" OFF)
 if(AOE2_BUILD_GPU_DIFFERENTIAL_TESTS)
