@@ -96,6 +96,11 @@ def enforce_guardrail(csv_path: Path, elf_path: Path) -> None:
         raise PipelineError(f"function map guardrail found {len(violations)} violation(s) in {csv_path.name}")
 
 
+# Overlays whose code continues into the section the header calls data (found at run time: the
+# loader calls a function at the start of that section). The data start is then a seed too.
+CODE_THROUGH_DATA = frozenset({"MO_OV_CD.BIN"})
+
+
 def process(entry: dict, raw: bytes, ghidra_home: Path, targets: list) -> dict:
     name = overlay_name(entry["file"])
     work = ANALYSIS / name
@@ -106,17 +111,20 @@ def process(entry: dict, raw: bytes, ghidra_home: Path, targets: list) -> dict:
     out.mkdir(parents=True)
     header = parse_overlay_header(raw)
     code_bin = work / "code.bin"
-    code_bin.write_bytes(raw[:HEADER_BYTES + header.text])
+    text_bytes = header.text + (header.data if entry["file"] in CODE_THROUGH_DATA else 0)
+    code_bin.write_bytes(raw[:HEADER_BYTES + text_bytes])
     toml, csv_path = work / "overlay.toml", work / "overlay.csv"
     seeds = work / "seeds.txt"
-    called = drop_delay_slot_seeds(seeds_for(targets, header.load_address, HEADER_BYTES, header.text), raw, header.load_address)
+    called = drop_delay_slot_seeds(seeds_for(targets, header.load_address, HEADER_BYTES, text_bytes), raw, header.load_address)
     entries = set(called)
-    entries.update(switch_targets(raw, header.load_address, HEADER_BYTES, header.text))
+    entries.update(switch_targets(raw, header.load_address, HEADER_BYTES, text_bytes))
+    if text_bytes != header.text:
+        entries.add(header.load_address + HEADER_BYTES + header.text)
     seeds.write_text("".join(f"0x{address:x}\n" for address in sorted(entries)))
     export_functions(ghidra_home, name, code_bin, header.load_address, toml, csv_path, seeds)
     first = first_function_start(csv_path.read_text())
     elf_path = work / "overlay.elf"
-    elf_path.write_bytes(overlay_to_elf(raw, code_only=True, entry=first))
+    elf_path.write_bytes(overlay_to_elf(raw, code_only=True, entry=first, text_bytes=text_bytes))
     enforce_guardrail(csv_path, elf_path)
     toml.write_text(rewrite_toml(toml.read_text(), str(elf_path), str(out)))
     run([str(RECOMP), str(toml)], work / "recomp.log")
