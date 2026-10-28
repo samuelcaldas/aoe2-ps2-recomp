@@ -198,6 +198,20 @@ Not done: the HD frame is not yet drawn in place of the PS2 frame, and nothing h
 presented. The next step is a per-id scale table (ignored, local) and a replacement at
 the shape-draw seam, verified against the PS2 frame's position in a 1080p capture.
 
+## Free guest RAM for a larger map buffer: none in the gap
+
+The guest heap is configured at `0x17953a0` with reserved size `0x602c60`. The
+`PS2X_WRITE_WATCH=0x1D98000-0x1F98000` summary over the mission shows CPU writes
+throughout that gap: the busiest writer stores 6,400 bytes per window in
+`0x1E93000`–`0x1E97000`, and others write near `0x1D98004`. So the gap is in use and
+cannot host a larger map buffer. A guest heap probe in `guestMalloc` never fired, so
+the game's allocations do not go through that path; it was removed. DMA writes are not
+covered by this measurement, so the gap is not proven empty even in the other direction.
+
+A larger map view therefore needs more guest RAM (64 MB) or a smaller use of the
+existing RAM elsewhere. The 64 MB option touches about 150 masking sites and the DMA
+wrap logic and forces a full rebuild.
+
 ## Consequences for the HD plan
 
 1. Presentation and pointing share one transform (Phase 1): done in code; see
