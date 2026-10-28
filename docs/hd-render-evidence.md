@@ -174,6 +174,24 @@ data-relative in the same way, and the command bytecode cannot be decoded yet. T
 decomp's 2.0N rasterizer (commit range `55d6ddf6c`–`938131ba9`) cannot be applied
 directly until the 4.2k row addressing is known.
 
+## ID-based substitution: feasibility (no pixels replaced yet)
+
+Decision (2026-10-28, user: "comece C depois B"): substitute at the draw seam by shape
+id, using the HD SLP as the source, since the PS2 4.2k command table is not decoded.
+Measured over 629 ids that have both a `4.2k` shape and an HD `2.0N` file with the same
+frame count:
+
+- Frame size and hotspot scale with the same factor (median 1.59–1.60), so an HD frame
+  anchored at its scaled hotspot lands where the PS2 frame would.
+- The factor is uniform within an id (median per-id standard deviation 0.000) but not
+  across ids: the per-id median width ratio ranges from 1.00 to 2.54 (max per-id
+  deviation 0.325 in one id). A single global factor would be wrong for some assets, so
+  each id needs its own measured scale (ratio of HD to PS2 width and height).
+
+Not done: the HD frame is not yet drawn in place of the PS2 frame, and nothing has been
+presented. The next step is a per-id scale table (ignored, local) and a replacement at
+the shape-draw seam, verified against the PS2 frame's position in a 1080p capture.
+
 ## Consequences for the HD plan
 
 1. Presentation and pointing share one transform (Phase 1): done in code; see
