@@ -14,8 +14,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xvfb \
     x11-apps \
     imagemagick \
+    x11vnc \
+    novnc \
+    websockify \
+    libgl1 \
     libgl1-mesa-dri \
-    libgl1-mesa-glx \
+    libglx-mesa0 \
     libglu1-mesa \
     libvulkan1 \
     mesa-vulkan-drivers \
@@ -25,8 +29,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  && rm -rf /var/lib/apt/lists/*
 
 # Install Ryujinx release archive or user-provided binary
-ARG RYUJINX_VERSION=1.3.3
-ARG RYUJINX_URL=https://git.ryujinx.app/projects/Ryubing/releases/download/${RYUJINX_VERSION}/ryujinx-${RYUJINX_VERSION}-linux_x64.tar.gz
+ARG RYUJINX_VERSION=1.3.31
+ARG RYUJINX_URL=https://github.com/ADEMOLA200/Ryujinx-Canary-Builds/releases/download/${RYUJINX_VERSION}/ryujinx-canary-${RYUJINX_VERSION}-linux_x64.tar.gz
 
 RUN mkdir -p /opt/ryujinx \
  && (curl -fsSL --retry 3 "${RYUJINX_URL}" -o /tmp/ryujinx.tar.gz \
@@ -43,5 +47,7 @@ RUN (getent group "${BUILD_GID}" || groupadd -g "${BUILD_GID}" builder) \
 
 USER ${BUILD_UID}:${BUILD_GID}
 WORKDIR /src
+
+EXPOSE 6080 5900
 
 HEALTHCHECK NONE
