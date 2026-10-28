@@ -1,12 +1,12 @@
 # PS2Recomp runtime dependency inventory
 
-Purpose: list what this repository depends on in the upstream PS2Recomp runtime and its local patch series, before any change to the runtime's memory model (for example, removing the 32 MB guest RAM limit). Every count below was measured in the working tree on 2026-10-28; re-measure with the commands in §6 before relying on a number.
+Purpose: inventory the PS2Recomp runtime interfaces and the dedicated fork's 64 MiB guest memory model. API counts below were measured on 2026-10-28; re-measure with §6 before relying on a number. See [documentation index](README.md) and the [RAM expansion plan](plans/nifty-herding-pudding.md).
 
 ## 1. Pin and status
 
-- Upstream: `ran-j/PS2Recomp`, commit `eb8688b2fd191129f103a39543002c005b33409c`, license **GPL-3.0** (`third_party_provenance.lock.json`).
-- The checkout in `third_party/PS2Recomp` is the pin plus the patch series in `third_party/PS2Recomp/patches/`. The pin alone does not reproduce the running runtime (`README.md`).
-- Patches apply through `tools/runtime_patches.py`; `tests/test_runtime_patches.py` checks that the series applies and that git can parse it.
+- Dedicated fork: `samuelcaldas/PS2Recomp`, license **GPL-3.0**; the authoritative revision is in `third_party_provenance.lock.json`.
+- Runtime changes are committed directly in `third_party/PS2Recomp`. No local patch series is applied; bootstrap's `PATCH_DIRECTORIES` is empty.
+- Record only a changed fork pin with `python3 tools/bootstrap_dependencies.py --record-current PS2Recomp`; `--check` verifies installed commits against the lockfile without writes. Recording a pin does not publish the fork commit or regenerate game code.
 
 ## 2. Generated game code
 
@@ -53,15 +53,15 @@ Counts are occurrences outside `third_party/`, `generated/` and `build/`:
 
 Patch 0008 has no current use. Deciding its retention is a decision for the owner (see `docs/hd-render-evidence.md`).
 
-## 5. Memory and presentation seams (the parts a 64 MB change would touch)
+## 5. Memory and presentation seams (expanded to 64 MB)
 
-- `PS2_RAM_SIZE` (`ps2_memory.h`): 104 uses under `third_party/PS2Recomp/ps2xRuntime`.
-- `PS2_RAM_MASK`: 51 uses in the same tree.
-- Guest heap configured in `ps2_runtime.cpp` (`kGuestHeapHardLimit = 0x01F00000`, `m_asyncCallbackStackFloor`, `m_asyncCallbackStackTop = PS2_RAM_SIZE`). The async callback stacks sit at the top of RAM.
-- DMA chain walking in `ps2_memory.cpp` clamps addresses to `PS2_RAM_SIZE`.
+- `PS2_RAM_SIZE` (`ps2_memory.h`): Expanded to `64u * 1024u * 1024u` (64 MB).
+- `PS2_RAM_MASK`: `0x03FFFFFFu`.
+- Guest heap configured in `ps2_runtime.cpp` (`kGuestHeapHardLimit = PS2_RAM_SIZE - 0x00100000u`, `m_asyncCallbackStackFloor = PS2_RAM_SIZE - 0x00100000u`, `m_asyncCallbackStackTop = PS2_RAM_SIZE`).
+- SIF HLE masks (`SifCommandEndpoint.cpp`, `SifCdvdServer.cpp`) updated to `PS2_RAM_MASK`.
+- DMA chain walking in `ps2_memory.cpp` automatically clamps addresses to the expanded `PS2_RAM_SIZE`.
 - The GS VRAM (4 MB) is a separate allocation and is not the guest RAM limit.
-- Our map buffer is a constant guest address (`0x01F98000`) passed by game code to the draw-area initializer (`0x31A410`/`0x1AB7E0`). See `docs/hd-render-evidence.md`.
-- Measured free space: writes by the game cover `0x1D98000`–`0x1F98000`, so that gap is not free (`docs/hd-render-evidence.md`).
+- Main repo `kEeRamSize` (`runtime/include/aoe2/runtime/guest_memory.hpp`) and diagnostic snapshots updated to 64 MB (`0x03FFFFFF`).
 
 ## 6. How to re-measure
 
