@@ -27,7 +27,7 @@ int main() {
         services.LogError("Failed to initialize guest memory!");
         return 1;
     }
-    services.LogInfo("Guest memory (32MB) allocated successfully.");
+    services.LogInfo("Guest memory (64 MiB) allocated successfully.");
 
     // Simple read/write test
     memory.Write32(0x1000, 0x12345678);

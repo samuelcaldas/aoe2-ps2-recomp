@@ -22,7 +22,7 @@ flowchart TD
     SOT_INDEX --> SOT_LAN["docs/sot/multiplayer-lan-architecture.md (i.LINK & LAN SOT)"]
     SOT_INDEX --> SOT_PLAY["docs/sot/play-emulator-sot.md (Hardware Reference Emulator SOT)"]
 
-    ARCH --> ACTIVE_PLAN["docs/plans/nifty-herding-pudding.md (Active Widescreen/HUD Plan)"]
+    ARCH --> ACTIVE_PLAN["docs/plans/nifty-herding-pudding.md (Active RAM Expansion Plan)"]
 ```
 
 ---
@@ -57,7 +57,7 @@ Subsystem-specific behavioral specifications:
 ---
 
 ### Plans & Work in Progress (`docs/plans/`)
-* **[`docs/plans/nifty-herding-pudding.md`](plans/nifty-herding-pudding.md)**: **Active implementation plan** for Phase A–D (configurable engine viewport, 1:1 playfield presentation, and border-anchored HUD recomposition).
+* **[`docs/plans/nifty-herding-pudding.md`](plans/nifty-herding-pudding.md)**: **Active implementation plan** for 64 MiB guest RAM and heap/HLE/stack reservation validation, prerequisite for viewport expansion.
 
 ---
 

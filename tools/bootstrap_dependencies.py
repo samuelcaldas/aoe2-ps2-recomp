@@ -134,13 +134,13 @@ def main():
         sys.exit(0)
 
     dest_dir.mkdir(parents=True, exist_ok=True)
-    lock_data = {
-        "version": 1,
-        "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        "dependencies": {},
-    }
+    lock_data = {"version": 1, "dependencies": {}}
+    if lock_file.exists():
+        lock_data = json.loads(lock_file.read_text(encoding="utf-8"))
+    lock_data["generated_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
     for name, meta in DEPENDENCIES.items():
+        meta = {**meta, **lock_data["dependencies"].get(name, {})}
         repo_path = dest_dir / name
         if not repo_path.exists():
             print(f"Cloning {name} from {meta['url']} (recursively)...")
@@ -148,14 +148,11 @@ def main():
                 ["git", "clone", "--recursive", meta["url"], str(repo_path)],
                 check=True,
             )
-        else:
-            print(f"Repository {name} already present at {repo_path}")
-            # Ensure submodules are initialized if present
-            subprocess.run(
-                ["git", "submodule", "update", "--init", "--recursive"],
-                cwd=repo_path,
-                check=True,
-            )
+        if "commit_sha" in meta:
+            subprocess.run(["git", "checkout", "--detach", meta["commit_sha"]],
+                           cwd=repo_path, check=True)
+        subprocess.run(["git", "submodule", "update", "--init", "--recursive"],
+                       cwd=repo_path, check=True)
 
         if name in PATCH_DIRECTORIES:
             try:

@@ -6,7 +6,7 @@ Purpose: inventory the PS2Recomp runtime interfaces and the dedicated fork's 64 
 
 - Dedicated fork: `samuelcaldas/PS2Recomp`, license **GPL-3.0**; the authoritative revision is in `third_party_provenance.lock.json`.
 - Runtime changes are committed directly in `third_party/PS2Recomp`. No local patch series is applied; bootstrap's `PATCH_DIRECTORIES` is empty.
-- Record only a changed fork pin with `python3 tools/bootstrap_dependencies.py --record-current PS2Recomp`; `--check` verifies installed commits against the lockfile without writes. Recording a pin does not publish the fork commit or regenerate game code.
+- Bootstrap checks out existing locked revisions and preserves dependencies it does not manage. Record only a changed fork pin with `python3 tools/bootstrap_dependencies.py --record-current PS2Recomp`; `--check` verifies installed commits against the lockfile without writes. Recording a pin does not publish the fork commit or regenerate game code.
 
 ## 2. Generated game code
 
@@ -35,7 +35,9 @@ Counts are occurrences outside `third_party/`, `generated/` and `build/`:
 | `presentedFrameExtent` | 1 | our patch `0010` (frame size for mouse mapping) |
 | `setPresentationCallback` | **0** | patch `0008` adds it, but no code calls it now |
 
-## 4. Local patch series
+## 4. Historical patch inventory (now incorporated in the fork)
+
+The identifiers below describe the former patch series, not an active bootstrap step. Changes to these features are now committed directly in the fork.
 
 | Patch | File(s) touched | Purpose | Used by us? |
 | :--- | :--- | :--- | :--- |
@@ -57,7 +59,9 @@ Patch 0008 has no current use. Deciding its retention is a decision for the owne
 
 - `PS2_RAM_SIZE` (`ps2_memory.h`): Expanded to `64u * 1024u * 1024u` (64 MB).
 - `PS2_RAM_MASK`: `0x03FFFFFFu`.
-- Guest heap configured in `ps2_runtime.cpp` (`kGuestHeapHardLimit = PS2_RAM_SIZE - 0x00100000u`, `m_asyncCallbackStackFloor = PS2_RAM_SIZE - 0x00100000u`, `m_asyncCallbackStackTop = PS2_RAM_SIZE`).
+- Heap exclusive end: `PS2_HLE_RESERVATION_BASE = PS2_RAM_SIZE - 0x00140000u` (62.75 MiB). HLE RPC/TLS/BootMode pools occupy the following reserved 256 KiB, retaining their relative offsets. Callback stacks independently occupy the top 1 MiB, starting at `PS2_ASYNC_STACK_FLOOR`.
+- ELF segment loads reject any RDRAM interval extending into these reservations before copying that segment. Heap allocations cannot cross the HLE reservation; callback stacks cannot descend into it.
+- Extra RAM is addressable, not exclusively assigned to a future map buffer. Viewport expansion still requires explicit buffer ownership and allocation.
 - SIF HLE masks (`SifCommandEndpoint.cpp`, `SifCdvdServer.cpp`) updated to `PS2_RAM_MASK`.
 - DMA chain walking in `ps2_memory.cpp` automatically clamps addresses to the expanded `PS2_RAM_SIZE`.
 - The GS VRAM (4 MB) is a separate allocation and is not the guest RAM limit.
@@ -73,13 +77,15 @@ grep -rl "WRITE32(" generated/SLES-50282 | wc -l
 # memory-limit uses in the runtime
 grep -rn "PS2_RAM_SIZE" third_party/PS2Recomp/ps2xRuntime --include=*.cpp --include=*.h | wc -l
 grep -rn "PS2_RAM_MASK" third_party/PS2Recomp/ps2xRuntime --include=*.cpp --include=*.h | wc -l
-# patch series parses and applies
-python3 -m unittest tests.test_runtime_patches
+# installed commits match lockfile; fork has no patch series
+python3 tools/bootstrap_dependencies.py --check
+python3 -m unittest tests.test_deps_bootstrap tests.test_generation_manifest
 ```
 
-## 7. Open items before removing the 32 MB limit
+## 7. Remaining viewport work (outside RAM expansion)
 
-1. Decide patch `0008` (keep or remove).
-2. Confirm the guest code never relies on address wrap-around: no generated code references addresses at or above `0x02000000`, and no `0x1FFFFFF` masks appear (checked 2026-10-28).
-3. Measure the real guest RAM budget, including DMA-written regions, since the write-watch measurement does not see DMA.
-4. Decide the target map view size from the PC reference (demo binary and partial decomp), not from the PS2 layout.
+1. Measure the real guest RAM budget, including DMA-written regions, since write-watch does not see DMA.
+2. Choose the target map view size from the PC reference (demo binary and partial decomp), not from the PS2 layout.
+3. Reserve or allocate the enlarged playfield buffer explicitly, then validate rendering and input geometry. Expanded RAM and passing initialization tests do not establish HD gameplay.
+
+The presentation callback API remains in the fork; removing an unused API is not required by the RAM expansion.

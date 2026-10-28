@@ -58,6 +58,28 @@ class TestDependenciesBootstrap(unittest.TestCase):
         self.assertIn("commit mismatch", result.stderr.lower())
         self.assertEqual(lock.read_bytes(), before)
 
+    def test_bootstrap_reproduces_locked_commits_without_dropping_other_entries(self):
+        dependencies = {}
+        for name in ("PS2Recomp", "libnx", "deko3d"):
+            commit = self.create_repository(name)
+            dependencies[name] = {"commit_sha": commit,
+                                  "url": str(self.test_root / "third_party" / name)}
+        dependencies["other"] = {"commit_sha": "1" * 40}
+        lock = self.test_root / "deps.lock.json"
+        lock.write_text(json.dumps({"version": 1, "dependencies": dependencies}), encoding="utf-8")
+        repository = self.test_root / "third_party" / "PS2Recomp"
+        subprocess.run(["git", "-c", "user.name=Test", "-c", "user.email=test@example.invalid",
+                        "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-qm", "new HEAD"],
+                       cwd=repository, check=True)
+        result = self.run_bootstrap()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        recorded = json.loads(lock.read_text(encoding="utf-8"))
+        self.assertEqual(recorded["dependencies"]["other"], dependencies["other"])
+        for name in ("PS2Recomp", "libnx", "deko3d"):
+            actual = subprocess.check_output(["git", "rev-parse", "HEAD"],
+                                             cwd=self.test_root / "third_party" / name, text=True).strip()
+            self.assertEqual(actual, dependencies[name]["commit_sha"])
+
     def test_fork_configuration_has_no_patch_series(self):
         from tools.bootstrap_dependencies import DEPENDENCIES, PATCH_DIRECTORIES
         self.assertEqual(DEPENDENCIES["PS2Recomp"]["url"],

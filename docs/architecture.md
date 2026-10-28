@@ -35,7 +35,7 @@ To ensure separation of concerns and portability across systems, the project is 
   * Zero external host OS dependencies.
 
 * **`runtime/`**:
-  * Guest memory abstraction (`GuestMemory`: 32 MB PS2 EE main RAM layout).
+  * Guest memory abstraction (`GuestMemory`: 64 MiB EE RAM in the dedicated fork, expanded from the PS2's original 32 MiB). Runtime heap/HLE/stack reservations are documented in the [dependency inventory](runtime-dependency-inventory.md#5-memory-and-presentation-seams-expanded-to-64-mb).
   * Function dispatch adapters and recompiled symbol binding stubs.
   * Abstract platform services interface (`PlatformServices`) for clocks, logging, and OS interactions.
 
