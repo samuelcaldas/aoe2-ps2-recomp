@@ -14,7 +14,7 @@ inline constexpr StateRegion kMcRegion{"mc", 0x004E2CB8, 0x100};
 inline const uint8_t* ResolveMcRdramOffset(const uint8_t* rdram, uint32_t address, uint32_t size) {
     if (!rdram) return nullptr;
     const uint32_t offset = address & 0x03FFFFFFu;
-    if (offset + size > 64 * 1024 * 1024) return nullptr;
+    if (size > 64 * 1024 * 1024 - offset) return nullptr;
     return rdram + offset;
 }
 

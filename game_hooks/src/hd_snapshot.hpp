@@ -14,7 +14,7 @@ inline constexpr StateRegion kHdRegion{"hd", 0x004EA180, 0x080};
 inline const uint8_t* ResolveHdRdramOffset(const uint8_t* rdram, uint32_t address, uint32_t size) {
     if (!rdram) return nullptr;
     const uint32_t offset = address & 0x03FFFFFFu;
-    if (offset + size > 64 * 1024 * 1024) return nullptr;
+    if (size > 64 * 1024 * 1024 - offset) return nullptr;
     return rdram + offset;
 }
 
