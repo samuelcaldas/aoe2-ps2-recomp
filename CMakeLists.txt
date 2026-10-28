@@ -11,6 +11,7 @@ add_library(aoe2_interfaces STATIC
     assets/src/loose_hd_asset_provider.cpp
     assets/src/jasc_palette.cpp
     assets/src/slp_decoder.cpp
+    assets/src/slp4k_reader.cpp
     assets/src/asset_resolver.cpp
     input/src/actions.cpp
     input/src/guest_keyboard.cpp
@@ -142,6 +143,11 @@ add_test(NAME presentation_transform COMMAND aoe2_presentation_transform_tests)
 add_executable(aoe2_shape_trace_model_tests tests/cpp/shape_trace_model_tests.cpp)
 target_include_directories(aoe2_shape_trace_model_tests PRIVATE game_hooks/src)
 add_test(NAME shape_trace_model COMMAND aoe2_shape_trace_model_tests)
+
+# PS2 "4.2k" shape container: frame table reader
+add_executable(aoe2_slp4k_reader_tests tests/cpp/slp4k_reader_tests.cpp)
+target_link_libraries(aoe2_slp4k_reader_tests PRIVATE aoe2_interfaces)
+add_test(NAME slp4k_reader COMMAND aoe2_slp4k_reader_tests)
 
 # Decoupled HD asset provider tests
 add_executable(aoe2_asset_tests
