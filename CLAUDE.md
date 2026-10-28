@@ -50,9 +50,18 @@ Layers (C++ namespaces `aoe2::<layer>`, headers under `<layer>/include/aoe2/<lay
 - `renderer/` — `IRenderer` + `NullRenderer` (headless). Design mandate: replace rendering at the high level (sprite/tile/UI draws mapped to `IRenderer`), **not** low-level GS emulation.
 - `tools/` — Python 3 stdlib-only, fail-fast scripts; each resolves `REPO_ROOT` and inserts it into `sys.path` to import `core.target`.
 
-See `docs/architecture.md` (layer rationale, EE/VU/GS/IOP notes), `docs/switch-target-architecture.md` (Switch homebrew roadmap, post-recompilation graphics, audren audio, inputs, and Title Takeover memory rules), `docs/sot/hd-assets-strategy.md` (consolidated HD asset strategy, viewport expansion, and presentation architecture), and `docs/ghidra-ps2recomp-workflow.md` (exact pipeline commands, TOML config, manifest schema).
+## Documentation Chain & Canonical References
 
-`docs/sot/prior-art-and-reuse.md` is the source of truth for prior art and what may be reused: PS2Recomp already supports ARM through sse2neon (`USE_SSE2NEON`; the ARM64 gate should reuse it, not add a SIMD layer), the God of War native runtime (AOT VU1/IRX, native GS) via the GPL-3.0 `KIexster/god-of-war-recomp`, and `SwitchWakerHD` (MPL-2.0, libnx + deko3d) as the Switch backend model. Check each source's license there before copying code. It also records the graphics decision (OpenGL ES 3 via devkitPro's Mesa on Switch, one GLES backend shared with desktop; no Vulkan; deko3d only if profiling demands) and that **devkitPro runs only in Docker** (`devkitpro/devkita64` on the `docker-dev` context, repo mounted), never on the host.
+Every document in the repository links into a coherent chain leading back to this file (see [`docs/README.md`](docs/README.md) for the complete documentation index and visual hierarchy):
+
+- **System Architecture**: [`docs/architecture.md`](docs/architecture.md) (subsystems, EE/VU/GS/IOP notes, and layer boundaries).
+- **Nintendo Switch Target**: [`docs/switch-target-architecture.md`](docs/switch-target-architecture.md) (Horizon OS services, `appletHook` 720p/1080p scaling, `audren` audio, Title Takeover memory protection, and touch/Joy-Con input).
+- **HD Asset Strategy & Viewport**: [`docs/sot/hd-assets-strategy.md`](docs/sot/hd-assets-strategy.md) (canonical SOT for HD 2013 assets, runtime playfield rasterization, and viewport expansion).
+- **KCET Native Boundary**: [`docs/adr/0001-kcet-boundary-replacement.md`](docs/adr/0001-kcet-boundary-replacement.md) (ADR governing the runtime replacement of the game's hardware abstraction layer).
+- **Prior Art, Reuse & Permissions**: [`docs/sot/prior-art-and-reuse.md`](docs/sot/prior-art-and-reuse.md) (provenance, clean-room rules, dependency licenses, and authorized decompilation reuse).
+- **Recompilation Workflow**: [`docs/ghidra-ps2recomp-workflow.md`](docs/ghidra-ps2recomp-workflow.md) (Ghidra headless export, TOML configuration, and PS2Recomp codegen).
+- **Desktop Probe & Overlays**: [`docs/desktop-runtime-probe.md`](docs/desktop-runtime-probe.md) (Linux host probe and dynamic code overlay milestones).
+- **Active Implementation Plan**: [`docs/plans/nifty-herding-pudding.md`](docs/plans/nifty-herding-pudding.md) (Phase A–D: configurable engine viewport, 1:1 playfield presentation, and border-anchored HUD recomposition).
 
 ## Legal / provenance rules (enforced by tooling — do not weaken)
 
