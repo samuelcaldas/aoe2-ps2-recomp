@@ -9,6 +9,8 @@ import sys
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 VERIFIER = REPO_ROOT / "tools" / "verify_generation_manifest.py"
+LOCK_DATA = json.loads((REPO_ROOT / "third_party_provenance.lock.json").read_text(encoding="utf-8"))
+PS2RECOMP_COMMIT = LOCK_DATA["dependencies"]["PS2Recomp"]["commit_sha"]
 VALID_GUARDRAIL = {"max_entry_bytes": 131072, "max_return_gap_bytes": 65536, "violations": 0}
 
 class TestGenerationManifestVerification(unittest.TestCase):
@@ -35,7 +37,7 @@ class TestGenerationManifestVerification(unittest.TestCase):
             "target_id": "SLES-50282",
             "elf_sha1": "0000000000000000000000000000000000000000",
             "function_map_source": "ghidra_export",
-            "ps2recomp_commit": "eb8688b2fd191129f103a39543002c005b33409c",
+            "ps2recomp_commit": PS2RECOMP_COMMIT,
             "ghidra_version": "11.1",
             "java_version": "25.0.4.1",
             "exporter_script": "ps2xRecomp/tools/ghidra/ExportPS2Functions.java",
@@ -69,7 +71,7 @@ class TestGenerationManifestVerification(unittest.TestCase):
             "target_id": "SLES-50282",
             "elf_sha1": "f478e19f2059d52899b691483ef5c7522e30e17c",
             "function_map_source": "fallback_analyzer",
-            "ps2recomp_commit": "eb8688b2fd191129f103a39543002c005b33409c",
+            "ps2recomp_commit": PS2RECOMP_COMMIT,
             "timestamp": "2026-10-19T12:00:00Z",
             "exported_function_count": 0,
             "generated_cpp_file_count": 6371,
@@ -96,7 +98,7 @@ class TestGenerationManifestVerification(unittest.TestCase):
             "target_id": "SLES-50282",
             "elf_sha1": "f478e19f2059d52899b691483ef5c7522e30e17c",
             "function_map_source": "ghidra_export",
-            "ps2recomp_commit": "eb8688b2fd191129f103a39543002c005b33409c",
+            "ps2recomp_commit": PS2RECOMP_COMMIT,
             "java_version": "25.0.4.1",
             "exporter_script": "ps2xRecomp/tools/ghidra/ExportPS2Functions.java",
             "exporter_script_sha256": "abcdef123456",
@@ -129,7 +131,7 @@ class TestGenerationManifestVerification(unittest.TestCase):
             "target_id": "SLES-50282",
             "elf_sha1": "f478e19f2059d52899b691483ef5c7522e30e17c",
             "function_map_source": "ghidra_export",
-            "ps2recomp_commit": "eb8688b2fd191129f103a39543002c005b33409c",
+            "ps2recomp_commit": PS2RECOMP_COMMIT,
             "ghidra_version": "11.1",
             "java_version": "25.0.4.1",
             "exporter_script": "ps2xRecomp/tools/ghidra/ExportPS2Functions.java",
@@ -162,7 +164,7 @@ class TestGenerationManifestVerification(unittest.TestCase):
             "target_id": "SLES-50282",
             "elf_sha1": "f478e19f2059d52899b691483ef5c7522e30e17c",
             "function_map_source": "ghidra_export",
-            "ps2recomp_commit": "eb8688b2fd191129f103a39543002c005b33409c",
+            "ps2recomp_commit": PS2RECOMP_COMMIT,
             "ghidra_version": "11.1",
             "java_version": "25.0.4.1",
             "exporter_script": "ps2xRecomp/tools/ghidra/ExportPS2Functions.java",
@@ -198,7 +200,7 @@ class TestGenerationManifestVerification(unittest.TestCase):
             "target_id": "SLES-50282",
             "elf_sha1": "f478e19f2059d52899b691483ef5c7522e30e17c",
             "function_map_source": "ghidra_export",
-            "ps2recomp_commit": "eb8688b2fd191129f103a39543002c005b33409c",
+            "ps2recomp_commit": PS2RECOMP_COMMIT,
             "ghidra_version": "11.1",
             "java_version": "25.0.4.1",
             "exporter_script": "ps2xRecomp/tools/ghidra/ExportPS2Functions.java",
@@ -245,7 +247,7 @@ class TestFunctionMapGuardrailInManifest(unittest.TestCase):
             "target_id": "SLES-50282",
             "elf_sha1": "f478e19f2059d52899b691483ef5c7522e30e17c",
             "function_map_source": "ghidra_export",
-            "ps2recomp_commit": "eb8688b2fd191129f103a39543002c005b33409c",
+            "ps2recomp_commit": PS2RECOMP_COMMIT,
             "ghidra_version": "11.1",
             "java_version": "25.0.4.1",
             "function_map_sha256": "123456abcdef",
@@ -283,6 +285,12 @@ class TestFunctionMapGuardrailInManifest(unittest.TestCase):
         result = self.verify(self.manifest(ghidra_language="MIPS:LE:64:64-32addr"))
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("ghidra_language", result.stderr)
+
+    def test_commit_different_from_lockfile_fails(self):
+        different_commit = "0" * 40 if PS2RECOMP_COMMIT != "0" * 40 else "1" * 40
+        result = self.verify(self.manifest(ps2recomp_commit=different_commit))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("commit mismatch against lockfile", result.stderr)
 
     def test_complete_guardrail_record_passes(self):
         result = self.verify(self.manifest())
