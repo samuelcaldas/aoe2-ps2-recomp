@@ -21,14 +21,14 @@ uint8_t GuestMemory::Read8(uint32_t addr) const {
 }
 
 uint16_t GuestMemory::Read16(uint32_t addr) const {
-    if (addr + 1 >= memory_.size()) return 0;
+    if (uint64_t{addr} + 1 >= memory_.size()) return 0;
     uint16_t val;
     std::memcpy(&val, &memory_[addr], sizeof(val));
     return val;
 }
 
 uint32_t GuestMemory::Read32(uint32_t addr) const {
-    if (addr + 3 >= memory_.size()) return 0;
+    if (uint64_t{addr} + 3 >= memory_.size()) return 0;
     uint32_t val;
     std::memcpy(&val, &memory_[addr], sizeof(val));
     return val;
@@ -41,13 +41,13 @@ void GuestMemory::Write8(uint32_t addr, uint8_t val) {
 }
 
 void GuestMemory::Write16(uint32_t addr, uint16_t val) {
-    if (addr + 1 < memory_.size()) {
+    if (uint64_t{addr} + 1 < memory_.size()) {
         std::memcpy(&memory_[addr], &val, sizeof(val));
     }
 }
 
 void GuestMemory::Write32(uint32_t addr, uint32_t val) {
-    if (addr + 3 < memory_.size()) {
+    if (uint64_t{addr} + 3 < memory_.size()) {
         std::memcpy(&memory_[addr], &val, sizeof(val));
     }
 }
