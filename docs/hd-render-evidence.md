@@ -163,6 +163,17 @@ So the map view size is driven by the panel rectangle. Enlarging the view is
 therefore a buffer problem: the current buffer is 640×272 with a 5-row guard band and
 ends at `0x01FC2800`, so a larger view needs a relocated buffer and free guest RAM.
 
+## 4.2k pixel commands: blocked
+
+The frame table is confirmed (`assets/src/slp4k_reader.cpp`, commit `f835d4d`). The
+command table is not. Assuming the SLP 2.0N layout (a u32 per row at `cmd_offset`,
+each giving a data-relative start for that row's commands) fails on the real data:
+for id 2296 frame 0 (53×35) the row values are non-monotonic and exceed the 6,264-byte
+shape; for id 3580 they are in the tens of millions. So the row table is not
+data-relative in the same way, and the command bytecode cannot be decoded yet. The
+decomp's 2.0N rasterizer (commit range `55d6ddf6c`–`938131ba9`) cannot be applied
+directly until the 4.2k row addressing is known.
+
 ## Consequences for the HD plan
 
 1. Presentation and pointing share one transform (Phase 1): done in code; see
