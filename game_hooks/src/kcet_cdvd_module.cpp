@@ -109,7 +109,7 @@ constexpr uint32_t kFunc0012BC10 = 0x0012BC10u;
 void Handler_FlushPendingNcmdSignals(uint8_t* rdram, R5900Context* context, PS2Runtime* runtime) {
     // Replicate func_0012BC10: return *(int32_t*)(0x4F0000 - 0x2CB8) = *(int32_t*)(0x4ED348).
     uint32_t ncmd_sema = 0u;
-    std::memcpy(&ncmd_sema, rdram + (0x4ED348u & 0x01FFFFFFu), sizeof(ncmd_sema));
+    std::memcpy(&ncmd_sema, rdram + (0x4ED348u & 0x03FFFFFFu), sizeof(ncmd_sema));
     const int32_t sema_id = static_cast<int32_t>(ncmd_sema);
 
     if (sema_id > 0 && runtime) {

@@ -14,8 +14,8 @@ inline constexpr StateRegion kCdvdRegion{"cdvd", 0x004F16C0, 0x020};
 
 inline const uint8_t* ResolveRdramOffset(const uint8_t* rdram, uint32_t address, uint32_t size) {
     if (!rdram) return nullptr;
-    const uint32_t offset = address & 0x01FFFFFFu;
-    if (offset + size > 32 * 1024 * 1024) return nullptr;
+    const uint32_t offset = address & 0x03FFFFFFu;
+    if (offset + size > 64 * 1024 * 1024) return nullptr;
     return rdram + offset;
 }
 
