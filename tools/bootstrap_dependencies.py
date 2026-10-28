@@ -2,13 +2,14 @@
 """Bootstrap and check third-party dependencies.
 
 Manages external repositories:
-- PS2Recomp: https://github.com/ran-j/PS2Recomp.git (GPL-3.0)
+- PS2Recomp: https://github.com/samuelcaldas/PS2Recomp.git (GPL-3.0)
 - libnx:     https://github.com/switchbrew/libnx.git (ISC)
 - deko3d:    https://github.com/devkitPro/deko3d.git (Zlib / MIT)
 
-Clones recursively into third_party/ (ignored by git), then applies the local patch
-series in third_party/<dependency>/patches/ (idempotent; the lock records the unpatched upstream SHA).
-Generates or updates a tracked lock/provenance file: third_party_provenance.lock.json
+Clones recursively into third_party/ (ignored by git). The game-specific runtime
+changes live directly in the PS2Recomp fork; no patch series is applied to it.
+Use --record-current NAME to update only that dependency's pin after a local commit.
+The tracked lock/provenance file is third_party_provenance.lock.json.
 """
 import argparse
 import datetime
@@ -59,6 +60,8 @@ def get_git_head_sha(repo_dir: Path) -> str:
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Bootstrap or verify third-party repositories.")
+    parser.add_argument("--record-current", choices=DEPENDENCIES,
+                        help="Record one installed dependency's HEAD without changing other pins")
     parser.add_argument(
         "--check",
         action="store_true",
@@ -78,10 +81,35 @@ def parse_args():
     )
     return parser.parse_args()
 
+def record_current(lock_file: Path, dest_dir: Path, name: str):
+    """Record an installed repository's commit while preserving unrelated lock entries."""
+    data = json.loads(lock_file.read_text(encoding="utf-8"))
+    entry = data["dependencies"][name]
+    entry["commit_sha"] = get_git_head_sha(dest_dir / name)
+    data["generated_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    lock_file.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
+def verify_locked_commits(lock_file: Path, dest_dir: Path):
+    """Reject installed dependency commits that differ from their recorded pins."""
+    data = json.loads(lock_file.read_text(encoding="utf-8"))
+    for name in DEPENDENCIES:
+        expected = data["dependencies"][name]["commit_sha"]
+        actual = get_git_head_sha(dest_dir / name)
+        if actual != expected:
+            raise ValueError(f"{name} commit mismatch: lockfile {expected}, installed {actual}")
+
+
 def main():
     args = parse_args()
     lock_file = (args.lock_file or (REPO_ROOT / "third_party_provenance.lock.json")).resolve()
     dest_dir = (args.dest_dir or (REPO_ROOT / "third_party")).resolve()
+
+    if args.record_current:
+        if args.check:
+            raise SystemExit("--check and --record-current are mutually exclusive")
+        record_current(lock_file, dest_dir, args.record_current)
+        return
 
     if args.check:
         missing = []
@@ -96,12 +124,13 @@ def main():
             sys.stderr.write(f"Error: Lock file missing: {lock_file}\n")
             sys.exit(1)
         try:
+            verify_locked_commits(lock_file, dest_dir)
             for name, patch_dir in PATCH_DIRECTORIES.items():
                 verify_patches(dest_dir / name, patch_dir)
-        except PatchError as error:
+        except (PatchError, ValueError, KeyError, OSError, subprocess.CalledProcessError) as error:
             sys.stderr.write(f"Error: {error}\n")
             sys.exit(1)
-        print("All dependencies, local patches, and lock file verified.")
+        print("All installed dependency commits and configured patch series verified against the lock file.")
         sys.exit(0)
 
     dest_dir.mkdir(parents=True, exist_ok=True)
