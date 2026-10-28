@@ -3,7 +3,8 @@
 
 Every run starts from the same state: any previous game/Xvfb started by this tool is
 stopped, the memory-card root is reset (unless --keep-card), a fresh Xvfb and game are
-launched, and the scenario's steps run at fixed host-window coordinates (640x448 window).
+launched, and the scenario's steps run at fixed logical-screen points (640x448), mapped to the
+window through tools/presentation_geometry.py.
 Screenshots land in .playwright-mcp/ as <scenario>-<step>.png.
 """
 from __future__ import annotations
@@ -19,6 +20,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
+from tools.presentation_geometry import to_window  # noqa: E402
 from tools.validate_desktop import (  # noqa: E402
     EVIDENCE_DIR, SCREENSHOT_DIR, capture_screenshot, game_command, stop_process,
 )
@@ -29,7 +31,7 @@ BOOT_SECONDS = 13
 WINDOW_SIZE = "640x448"
 CAMPAIGN_ROW_OFFSET = 38  # 0 = Campaigns, 38 = Random Map (row pitch)
 
-# (step name, action, argument, settle seconds). Coordinates are host-window pixels.
+# (step name, action, argument, settle seconds). Coordinates are logical-screen pixels.
 BOOT_TO_MENU = [
     ("key-return-1", "key", "Return", 5),
     ("key-return-2", "key", "Return", 5),
@@ -136,9 +138,6 @@ def main(argv: list | None = None) -> int:
     if "x" in args.resolution:
         parts = args.resolution.split("x")
         win_w, win_h = int(parts[0]), int(parts[1])
-    scale = min(win_w / 640.0, win_h / 448.0)
-    offset_x = (win_w - 640.0 * scale) / 2.0
-    offset_y = (win_h - 448.0 * scale) / 2.0
 
     display = subprocess.Popen(["Xvfb", DISPLAY, "-screen", "0", f"{win_w}x{win_h}x24", "-nolisten", "tcp"],
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -160,7 +159,8 @@ def main(argv: list | None = None) -> int:
         for name, action, argument, settle in SCENARIOS[args.scenario]:
             scaled_arg = argument
             if action == "click" and isinstance(argument, tuple):
-                scaled_arg = (int(offset_x + argument[0] * scale), int(offset_y + argument[1] * scale))
+                window_x, window_y = to_window(argument, (win_w, win_h))
+                scaled_arg = (int(window_x), int(window_y))
             do_step(window, action, scaled_arg, settle)
             print(capture_screenshot(f"{args.scenario}-{name}.png"))
             if game.poll() is not None:

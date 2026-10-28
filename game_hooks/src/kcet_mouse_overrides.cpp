@@ -1,12 +1,13 @@
 // KCET host input replacements; guest addresses are loaded from local configuration.
 #include <aoe2/game_hooks/kcet_handlers.hpp>
-#include <aoe2/input/surface_mapping.hpp>
+#include <aoe2/input/presentation_transform.hpp>
 #include <aoe2/input/usb_mouse_rpc.hpp>
 #include "input_synthetic.hpp"
 #include "native_input_internal.hpp"
 #include "raylib.h"
 #include "runtime/ps2_memory.h"
 
+#include <atomic>
 #include <cstring>
 #include <iostream>
 #include <mutex>
@@ -55,6 +56,8 @@ constexpr uint32_t kGuestCursorX = 0x00C5E840;
 constexpr uint32_t kGuestCursorY = 0x00C5E844;
 constexpr float kGuestScreenWidth = 640.0f;
 constexpr float kGuestScreenHeight = 448.0f;
+// Set once hooks are installed; the runtime publishes the GS frame size it presents.
+std::atomic<const PS2Runtime*> g_presentation_runtime{nullptr};
 
 int32_t LoadGuestInt(uint8_t* rdram, uint32_t address) {
     int32_t value = 0;
@@ -68,12 +71,22 @@ void LogButtonChange(uint32_t buttons) {
     last_buttons = buttons;
 }
 
+// The game's 640x448 screen fills whatever frame the runtime draws (640x512 once PAL display is set).
+aoe2::input::PresentationTransform CurrentPresentation() {
+    uint32_t width = 0;
+    uint32_t height = 0;
+    if (const PS2Runtime* runtime = g_presentation_runtime.load(std::memory_order_acquire)) runtime->presentedFrameExtent(width, height);
+    const aoe2::input::Extent frame = width != 0 && height != 0
+        ? aoe2::input::Extent{static_cast<float>(width), static_cast<float>(height)}
+        : aoe2::input::Extent{kGuestScreenWidth, kGuestScreenHeight};
+    return aoe2::input::PresentationTransform::LogicalFillsFrame(
+        {static_cast<float>(GetScreenWidth()), static_cast<float>(GetScreenHeight())}, frame,
+        {kGuestScreenWidth, kGuestScreenHeight});
+}
+
 // Absolute pointing: the host pointer's place in the window is where the game's cursor should be.
 void SteerGuestCursor(uint8_t* rdram, Vector2 position, uint32_t buttons) {
-    const aoe2::input::SurfaceMapping mapping(
-        {static_cast<float>(GetScreenWidth()), static_cast<float>(GetScreenHeight())},
-        {kGuestScreenWidth, kGuestScreenHeight});
-    const auto target = mapping.ToGuest(position.x, position.y);
+    const auto target = CurrentPresentation().ToLogical(position.x, position.y);
     g_mouse_model.SteerTo(target.x - static_cast<float>(LoadGuestInt(rdram, kGuestCursorX)),
                           target.y - static_cast<float>(LoadGuestInt(rdram, kGuestCursorY)), buttons);
 }
@@ -131,6 +144,10 @@ void MouseDeviceInfo(uint8_t* rdram, R5900Context* ctx, PS2Runtime*) {
 } // namespace
 
 namespace aoe2::game_hooks {
+void SetMousePresentationSource(const PS2Runtime& runtime) {
+    g_presentation_runtime.store(&runtime, std::memory_order_release);
+}
+
 void RegisterMouseHandlers(KcetHandlers& handlers) {
     handlers.emplace("kcet.mouse.bind", MouseBind);
     handlers.emplace("kcet.mouse.get_info", MouseGetInfo);

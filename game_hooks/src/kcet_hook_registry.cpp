@@ -50,6 +50,7 @@ void apply_aliases(PS2Runtime& runtime, const KcetHookConfig& config) {
 void apply_kcet_hooks(PS2Runtime& runtime) {
     const auto config = load_config();
     const auto handlers = host_handlers();
+    aoe2::game_hooks::SetMousePresentationSource(runtime);
     apply_replacements(runtime, config, handlers);
     apply_aliases(runtime, config);
     const int overlays = RegisterGeneratedOverlays(runtime);

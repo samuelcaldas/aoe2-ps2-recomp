@@ -16,6 +16,7 @@ add_library(aoe2_interfaces STATIC
     input/src/guest_keyboard.cpp
     input/src/guest_mouse.cpp
     input/src/input_routing.cpp
+    input/src/presentation_transform.cpp
     input/src/surface_mapping.cpp
     input/src/touch_gestures.cpp
     input/src/usb_mouse.cpp
@@ -131,6 +132,11 @@ add_executable(aoe2_input_tests
 
 target_link_libraries(aoe2_input_tests PRIVATE aoe2_interfaces)
 add_test(NAME input_tests COMMAND aoe2_input_tests)
+
+# Shared window <-> GS frame <-> logical screen presentation transform
+add_executable(aoe2_presentation_transform_tests tests/cpp/presentation_transform_tests.cpp)
+target_link_libraries(aoe2_presentation_transform_tests PRIVATE aoe2_interfaces)
+add_test(NAME presentation_transform COMMAND aoe2_presentation_transform_tests)
 
 # Decoupled HD asset provider tests
 add_executable(aoe2_asset_tests

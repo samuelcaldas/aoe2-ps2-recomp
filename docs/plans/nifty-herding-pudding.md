@@ -1,183 +1,191 @@
-# Plano: GLES3 nativo em 1080p com assets HD Edition
+# Plano: apresentação HD/GLES3 1080p — geometria correta, captura semântica e assets HD
 
 ## Contexto
 
-O pedido é corrigir o resultado visual: a interface PS2 de baixa resolução continua ampliada, apesar de a janela abrir em 1920×1080 e de o log anunciar GLES/HD. A captura `.playwright-mcp/campaign-mission.png` confirma o problema. Em `game_hooks/src/kcet_gpu_module.cpp`, `NativeDrawHook` sempre retorna `false`; inicializar `GlesRenderer` e `AssetResolver` não demonstra que desenhem pixels apresentados.
+Pedido: "fix hd/gles 1080p". Estado verificado em 2026-10-27 (commit `324ab1d`):
 
-Este plano refina e substitui a lista anterior, marcada como concluída sem comprovar o objetivo visual. Componentes existentes serão reaproveitados, mas integração, rasterização, layout e validação precisam ser demonstrados separadamente. Nenhuma tarefa abaixo foi executada nesta fase de planejamento.
+- A janela abre em 1920×1080, mas mostra o framebuffer GS 640×512 ampliado com
+  filtro bilinear (`ps2_runtime.cpp` run loop, `DrawTexturePro` com aspect-fit).
+  Na captura `.playwright-mcp/campaign-mission.png` a área útil tem ~1350×1080
+  (proporção 640:512), e o HUD ocupa as linhas ~2–505 de 512.
+- Mouse (`kcet_mouse_overrides.cpp`, `SurfaceMapping` 640×448) e o driver de
+  cenário (`tools/drive_desktop_scenario.py`, aspect-fit 640×448) usam outra
+  transformação. Em 1080p, isso dá ~1543 px de largura contra os 1350 px exibidos:
+  o erro é horizontal **e** vertical. Os clamps do cursor também divergem. O comentário
+  do hook cita `0x2257C0`, com y em 0..431. O decomp tem `func_002255A0`, com y em 0..479.
+- O overlay HD anterior foi revertido. `GlesRenderer` só grava comandos. Não cria
+  contexto nem desenha quads. O build desktop usa `GRAPHICS_API_OPENGL_33`.
+- Não existe mapeamento PS2→HD. O disco PS2 guarda os dados em `DATA.CAT`/`ALL_DATA.BIN`
+  (formato não verificado), e não há `.drs`. O HD 2013 local tem SLPs soltos por ID
+  (170 em interface, 1768 em graphics), 32 paletas JASC e 18 TTFs.
+- No decomp recuperado, o único ponto de desenho concreto é `func_0021C990`. Ele monta
+  quad texturizado a partir de UV e pontos e não recebe ID de recurso. O jogo carrega
+  shapes por nome/ID via `func_25D6D0` (ex.: `"%s.slp"`, id `0x124E`) e tem um
+  decodificador SLP 2.0N próprio.
+- Os dumps antigos do GS (`build/desktop-validation/gs-*.ppm`, de menus) mostram três
+  texturas: um "back buffer" **T8 640×448** que cobre 99% da tela, um atlas de fonte
+  **T4 1024×256** e uma imagem T8 128×128. Hipótese: o jogo compõe a tela lógica
+  640×448 por software num buffer de 8 bits, como o motor PC. O GS então desenha essa
+  textura esticada para 640×512 (PAL), e o texto vai em quads separados. Ainda não
+  foi verificado durante o gameplay.
 
-**Objetivo:** renderizar a primeira missão de William Wallace em GLES3, com alvo real 1920×1080, interface HD recomposta e interativa, texto rasterizado na resolução nativa e recursos do HD Edition efetivamente visíveis. Suportar também 1280×720 sem depender de ampliar o framebuffer PS2.
+Resultado pretendido: a primeira missão (William Wallace) apresentada em 1920×1080
+(e em 1280×720), com geometria e mouse corretos e cena redesenhada em resolução nativa.
+Os sprites/HUD trocados por SLPs do HD Edition só entram onde o mapeamento for
+verificado. O fallback continua sendo o framebuffer guest, nunca overlay decorativo.
 
 ## Restrições
 
-- Trabalhar diretamente em `main`, sem worktrees e sem PRs.
-- Não alterar simulação, regras, saves, rede ou comportamento de entrada para disfarçar problemas gráficos.
-- Não editar C++ gerado; decomp autorizado é referência, e divergências são resolvidas pelo binário/código gerado.
-- Não modificar o repositório de decomp a partir daqui. Portes devem registrar origem e commit.
-- Não versionar assets, binários, ISOs, mapas de funções, dumps ou screenshots. Capturas somente em `.playwright-mcp/`.
-- Alterações no PS2Recomp precisam de patches reproduzíveis em `tools/patches/ps2recomp/`.
-- devkitPro somente no Docker `docker-dev`; build não equivale a validação no hardware Switch.
-- TDD nas mudanças de comportamento; sem declarar HD ativo por logs de inicialização ou contadores sem leitura de pixels.
+- Trabalhar em `main`, sem worktrees e sem PRs; commit por tarefa.
+- Não editar C++ gerado; não alterar simulação/regras/entrada para mascarar gráfico.
+- Mudanças no PS2Recomp só como patch em `tools/patches/ps2recomp/NNNN-*.patch`
+  (próximo número: `0009`), verificadas por `tests/test_runtime_patches.py`.
+- Nada de assets, dumps, tabelas de correlação, endereços derivados do binário ou
+  screenshots versionados. Tabelas locais ficam em `game/SLES-50282/` (ignorado);
+  capturas em `.playwright-mcp/`. Endereços/nomes do decomp `../aoe` podem ser
+  citados, com origem e commit.
+- devkitPro só no Docker `docker-dev`; build Switch não é validação de hardware.
+- TDD em toda mudança de comportamento; "HD ativo" só com leitura de pixels.
+- Cada hook replica o comportamento original (chama o original) até a paridade 1×
+  ser provada. O framebuffer guest é sempre o oráculo e o fallback.
 
-## Estado verificado em 2026-10-27
+## Fase 0 — Evidência (diagnóstico, sem mudança de comportamento)
 
-A última captura com `50102`/`50588` **reprovou a validação visual**: a decoração
-cobriu a interface funcional, sem reconstruir seus conteúdos dinâmicos. Os commits
-parciais das tarefas 1–5 não satisfazem os critérios de conclusão. O overlay e seu
-mapeamento de entrada independente foram removidos para preservar o framebuffer
-guest. Isso é uma correção de regressão, **não a conclusão de HD/GLES3**.
+Objetivo: decidir o ponto de captura e a geometria com dados de gameplay.
 
-As identidades e paletas sugeridas abaixo não são mapeamentos semânticos
-verificados e não devem ser reutilizadas como se fossem. A configuração lógica
-640×448 também difere dos frames 640×512 reportados pelo GS; não escolher um crop
-sem evidência do retângulo ativo. Diagnóstico e gates para retomar a implementação:
-[HD presentation validation](../hd-presentation-validation.md).
+1. **Registradores de apresentação.** No build de diagnóstico, registrar por frame
+   PMODE, SMODE2, DISPFB1/2 e DISPLAY1/2 crus. Usar o ponto onde
+   `GS::buildPresentationRequestUnlocked` (`gs_frontend.cpp:506-524`) já copia esses
+   valores, com uma variável de ambiente gate no patch `0009-presentation-diagnostics`.
+   Registrar também DX/DY/MAGV, que `decodeDisplaySize` (`gs_cpu_backend.cpp:304-334`)
+   hoje ignora.
+2. **Modelo de composição.** Fazer um histograma por frame, em menu, briefing e missão,
+   de uploads (BITBLT/TRXDIR: tamanho, PSM, destino) e de primitivas (tipo, TEX0,
+   tamanho do quad). Partir do log de primitivas do patch `0002`. Responder: no
+   gameplay, a cena é um T8 640×448 por frame (composição por software) ou muitas
+   texturas por asset?
+3. **Escritores do back buffer.** Se a composição for por software, usar o write-watch
+   (patch `0004`) e `aoe2_call_trace.cpp` sobre o buffer de 8 bits. O objetivo é listar
+   as funções que escrevem nele: blitter de shape SLP, preenchimento, terreno, linhas.
+   Cruzar com o decomp (`func_25D6D0` e o tipo do shape carregado) para achar a assinatura
+   do desenho de shape: ponteiro do shape, frame, x/y, cor do jogador, flags e clip.
+4. **Clamp do cursor.** Confirmar no código gerado qual rotina limita o cursor que
+   `SteerGuestCursor` move: `0x2257C0` (0..431) ou `func_002255A0` (0..479).
 
-## Levantamento em andamento
+Saída: `docs/hd-render-evidence.md`, com valores de registradores, o modelo de
+composição e o ponto de captura escolhido. Endereços citados só se vierem do decomp;
+o resto fica no INI local ignorado (padrão de `tools/resolve_kcet_hooks.py`).
 
-- Rastrear apresentação/contexto/thread, rasterização real e configuração GLES3.
-- Identificar a fronteira de desenho com identidade de recursos, antes dos pacotes GS perderem essa informação.
-- Conferir inventário HD disponível, paletas, layout, texto e transformação inversa de entrada.
-- Definir tarefas e verificação a partir das interfaces realmente existentes.
+**Ponto de decisão:** se o gameplay usar texturas por asset, sem back buffer por
+software, a única identidade disponível é o hash de textura no nível kt_gpu/GS. Isso
+desvia do mandato "renderizar no alto nível" do CLAUDE.md. Nesse caso, parar e pedir
+decisão ao usuário antes da Fase 2.
 
+## Fase 1 — Transformação de apresentação única (independente de HD)
 
-# Plano: Renderização Nativa em 1080p (GLES3/Raylib) com Assets HD Edition
+Objetivo: desenho, mouse e driver de cenário consomem a mesma transformação
+janela ↔ frame ↔ tela lógica, redimensionável e correta em 1080p e 720p.
 
-## Contexto
+- Criar `aoe2::presentation::PresentationTransform` em `core/` (header + `.cpp`, sem
+  dependência de SO). Entradas: tamanho da janela, tamanho do frame GS e retângulo
+  lógico ativo dentro do frame. Pela hipótese da Fase 0, o retângulo é 640×448
+  esticado para 640×512, a confirmar pelos registradores. Saídas: o retângulo de destino
+  do `DrawTexturePro`, `ToLogical(window_xy)` e `ToWindow(logical_xy)`. Reusar a
+  semântica de clamp de `input/src/surface_mapping.cpp`.
+- Patch `0010-shared-presentation-rect`: `ps2_runtime.cpp` passa a publicar, por
+  frame, o tamanho do frame latched e o retângulo de destino usado (atômico/mutex,
+  thread do host). Opcionalmente aceita um provedor de retângulo instalado pelo host.
+- `kcet_mouse_overrides.cpp::SteerGuestCursor` passa a usar a transformação publicada
+  no lugar do `SurfaceMapping` fixo 640×448, com os limites confirmados na Fase 0.4.
+- `tools/drive_desktop_scenario.py`: mesma fórmula, com constantes compartilhadas.
+  Um teste Python compara seus pontos com os vetores do teste C++.
+- Testes (RED primeiro): `tests/cpp/presentation_transform_tests.cpp`, com vetores em
+  1920×1080, 1280×720, 640×448 e janela redimensionada não-16:9. Mais um teste de
+  calibração em execução real, com dois pontos. Para cada ponto: posicionar o ponteiro
+  do host, ler o cursor guest na RAM e localizar o sprite do cursor na captura; o
+  erro tem de ficar ≤ 1 px lógico.
 
-Atualmente, ao executar a primeira missão da campanha (William Wallace) em 1920×1080, o jogo abre na resolução especificada, porém a interface e o jogo são apresentados por meio de upscale bilinear do framebuffer PS2 de baixa resolução (640×448). No módulo GPU nativo (`game_hooks/src/kcet_gpu_module.cpp`), o `NativeDrawHook` retorna `false` incondicionalmente e a renderização em `GlesRenderer` ainda não desenha quads nem rasteriza fontes em alta resolução no frame apresentado.
+## Fase 2 — Captura da lista de desenho com oráculo 1×
 
-**Objetivo:** Substituir a apresentação esticada de baixa resolução por uma renderização nativa em alta definição (1920×1080 no desktop / docked e 1280×720 no Switch), utilizando os assets HD (paletas e sprites SLP 2.0N da edição HD 2013), layout widescreen recomposto via `HudLayout` e mapeamento de cliques/toque com `HudInverseMapper`, mantendo a simulação do jogo intacta e com fallback seguro.
+Assumindo composição por software (Fase 0). Caso contrário, parar no ponto de decisão.
 
----
+- Hooks de passagem (ADR 0001) nos escritores identificados: desenho de shape,
+  preenchimentos, terreno e texto (ponto do atlas T4). Cada hook grava um comando
+  semântico e depois chama o original. Comandos: `ShapeDraw{shape_key, frame, x, y,
+  player, flags, clip}`, `Fill`, `TerrainTile`, `Text`. O `shape_key` sai do nome/ID
+  passado a `func_25D6D0` no carregamento: um mapa ponteiro→chave preenchido por hook
+  no loader. Nada de ler ponteiros guest sem sincronização.
+- Lista por frame publicada no mesmo latch de VSYNC que `UploadFrame` já usa
+  (`ps2_runtime.cpp:377-387`): buffer duplo, posse transferida para a thread do host.
+- Oráculo: um replayer de CPU desenha a lista em 1× num buffer 8-bit, decodificando os
+  SLPs do PS2 já carregados na RAM (reusar `assets/src/slp_decoder.cpp` se o formato
+  coincidir). O resultado deve ser idêntico pixel a pixel ao back buffer guest do mesmo
+  frame. Métrica de cobertura: % de pixels iguais por cena (menu, briefing, missão).
+- Testes: `tests/cpp/draw_list_tests.cpp`, para ordem, buffer duplo e clip. Teste de
+  paridade sobre um frame capturado localmente (fixture ignorada; pula com motivo
+  explícito quando ausente, mais um fixture sintético rastreável que sempre roda).
 
-## Arquitetura e Decisões de Design
+## Fase 3 — Replay nativo em resolução da janela
 
-1. **Pipeline de Apresentação e Contexto Gráfico:**
-   - O PS2Recomp gerencia a janela e o contexto gráfico via Raylib (`ps2xRuntime/src/lib/ps2_runtime.cpp`).
-   - Em vez de tentar criar um segundo contexto EGL conflitante no mesmo processo, o `GlesRenderer` / camada nativa injeta o desenho dos elementos de interface HD e renderização nativa diretamente no loop de desenho do host (`BeginDrawing()` / `EndDrawing()`), ou via shaders/quads OpenGL ES 3.0 / GL 3.3 compatíveis.
-   - O framebuffer PS2 do mundo continua sendo renderizado pelo backend do jogo, enquanto a interface (HUD superior, painel de comando inferior, minimapa, textos e cursores) é recomposta de forma nítida e nativa em 1080p.
+- `GlesRenderer` vira backend real sobre `rlgl`/raylib, na thread que possui o
+  contexto. Faz upload de textura, quads texturizados com projeção ortográfica e paleta
+  via shader ou pré-decodificação RGBA. `IRenderer` recebe os comandos da Fase 2.
+- A apresentação troca para o replay **por frame**, só quando a paridade 1× do frame for
+  100%. Nos demais frames, usa o framebuffer guest. A escala vem da
+  `PresentationTransform` da Fase 1, mantendo a proporção da tela lógica com
+  pillarbox: sem widescreen nesta fase.
+- Teste: renderização offscreen (`LoadRenderTexture` + `LoadImageFromTexture`) de uma
+  lista sintética em 1920×1080. Comparar com a referência gerada pelo replayer CPU
+  escalado (nearest). Diferença 0 nas bordas dos quads.
 
-2. **Recomposição da HUD Widescreen (1080p / 720p):**
-   - Reutilização de `aoe2::renderer::HudLayout` (`renderer/src/hud_layout.cpp`):
-     - Barra de recursos superior: ancorada ao topo, estendida ou preenchida com o asset HD `50792.slp` em 1080p.
-     - Barra inferior de comando/minimapa: ancorada na base, utilizando os módulos `50150.slp`, `50100.slp` e `50341.slp`.
-   - Reutilização de `aoe2::input::HudInverseMapper` (`input/src/hud_inverse_mapper.cpp`):
-     - Mapeia as coordenadas de clique/toque de 1920×1080 na HUD realocada de volta para os retângulos de teste de colisão do guest (640×448), permitindo clicar em botões, unidades e comandos sem desalinhamento.
+## Fase 4 — Substituição por assets HD Edition
 
-3. **Resolução de Assets HD e Cache:**
-   - Correção do `aoe2::assets::AssetResolver`:
-     - Chave de cache composta (`category`, `asset_id`, `frame_index`, `player_id`, `palette_id`) evitando que mudanças de paleta reutilizem texturas incorretas.
-     - Suporte a decodificação com paleta `50507.bina` / `50500.bina` em conjunto com `SlpDecoder` e upload direto para texturas GPU.
-     - Fallback gracioso: quando um asset HD não estiver mapeado ou disponível, preserva o desenho original do guest.
+- Ferramenta local `tools/correlate_hd_shapes.py` (stdlib). Para cada `shape_key`
+  visto em gameplay, decodifica o SLP PS2 e os candidatos HD (`LooseHdAssetProvider`,
+  `AssetResolver`, `JascPalette`). Compara frame a frame, com contagem de frames,
+  dimensões ×2 e similaridade após redução. Escreve `game/SLES-50282/hd_shape_map.json`
+  (ignorado) com score por entrada. Uma entrada só fica ativa após inspeção visual
+  registrada.
+- O replay usa o frame HD com o mesmo hotspot/âncora (escala HD/PS2 por eixo **igual**;
+  rejeita mapeamentos anisotrópicos) e a paleta HD verificada. Sem mapeamento, desenha o
+  shape PS2. Ordem: peças estáticas do HUD, depois unidades/edifícios e por último
+  terreno.
+- Testes: `asset_resolver_tests` / `slp_decoder_tests` para âncora e escala isotrópica.
+  Teste Python da ferramenta com fixtures sintéticos.
 
-4. **Rasterização de Textos e Fontes Nativas:**
-   - Renderização dos textos de recursos (Madeira, Alimento, Ouro, Pedra, População) e objetivos da missão em alta resolução nativa, sem o borrado do estiramento bilinear.
+## Fase 5 — Texto nativo e GLES3 real
 
----
+- Texto: no ponto de string da Fase 2, rasterizar com TTF do HD (raylib `LoadFontEx`)
+  no tamanho de destino. Fallback para os glyphs do atlas T4.
+- GLES3: build desktop com `GRAPHICS_API_OPENGL_ES3` (raylib via ANGLE/Mesa EGL no
+  Docker desktop). Afirmar `GL_VERSION`/`GL_SHADING_LANGUAGE_VERSION` em runtime e no
+  log. Build Switch no `docker-dev`, sem afirmar validação de hardware.
 
-## Tarefas de Implementação
+## Arquivos críticos
 
-### Tarefa 1: Refatoração do `AssetResolver` e Cache de Texturas HD
+- `third_party/PS2Recomp/ps2xRuntime/src/lib/ps2_runtime.cpp`,
+  `.../gs/gs_cpu_backend.cpp`, `.../gs/gs_frontend.cpp`: só via patches `0009`+.
+- `core/` (nova `PresentationTransform`), `input/src/surface_mapping.cpp` (reuso).
+- `game_hooks/src/kcet_mouse_overrides.cpp`, `game_hooks/src/kcet_gpu_module.cpp`,
+  `game_hooks/src/aoe2_call_trace.cpp`, novos hooks de captura em `game_hooks/src/`.
+- `renderer/src/gles_renderer.cpp`, `renderer/include/aoe2/renderer/renderer.hpp`.
+- `assets/src/{slp_decoder,asset_resolver,loose_hd_asset_provider,jasc_palette}.cpp`.
+- `tools/drive_desktop_scenario.py`, `tools/correlate_hd_shapes.py` (novo).
+- `docs/hd-presentation-validation.md` (gates), `docs/hd-render-evidence.md` (novo),
+  `README.md` (status).
 
-**Arquivos:**
-- `assets/include/aoe2/assets/asset_resolver.hpp`
-- `assets/src/asset_resolver.cpp`
-- `tests/cpp/asset_resolver_tests.cpp`
+## Verificação
 
-- [ ] **Step 1 (TDD Red):** Escrever teste unitário verificando que a chave de cache invalida ou distingue paletas diferentes e que a resolução de IDs mapeados retorna o sprite com dimensões e pixels corretos.
-- [ ] **Step 2:** Executar `ctest -R asset_resolver` e verificar falha.
-- [ ] **Step 3 (Green):** Implementar chave de cache estendida (`palette_id`) e registro de tabela de correspondência PS2 → HD (`RegisterMapping`).
-- [ ] **Step 4:** Executar `ctest -R asset_resolver` e verificar aprovação.
-- [ ] **Step 5:** Commit.
-
----
-
-### Tarefa 2: Conexão do `GlesRenderer` ao Pipeline de Apresentação Nativa
-
-**Arquivos:**
-- `renderer/include/aoe2/renderer/gles_renderer.hpp`
-- `renderer/src/gles_renderer.cpp`
-- `renderer/include/aoe2/renderer/renderer.hpp`
-- `tests/cpp/gles_renderer_tests.cpp`
-- `CMakeLists.txt`
-
-- [ ] **Step 1 (TDD Red):** Escrever teste para `GlesRenderer::DrawSprite` e upload de texturas garantindo que quads texturizados gerem comandos e coordenadas de projeção corretas para a resolução de destino (1920×1080).
-- [ ] **Step 2:** Executar `ctest -R gles_renderer` e verificar falha.
-- [ ] **Step 3 (Green):** Implementar geração e submissão de quads com coordenadas de tela normalizadas/projeção ortográfica para resolução nativa, compatível com o contexto Raylib/OpenGL.
-- [ ] **Step 4:** Executar `ctest -R gles_renderer` e verificar aprovação.
-- [ ] **Step 5:** Commit.
-
----
-
-### Tarefa 3: Integração do `HudLayout` e `HudInverseMapper` no Módulo Gráfico e de Entrada
-
-**Arquivos:**
-- `game_hooks/src/kcet_gpu_module.cpp`
-- `game_hooks/src/kcet_mouse_overrides.cpp`
-- `input/include/aoe2/input/hud_inverse_mapper.hpp`
-- `renderer/include/aoe2/renderer/hud_layout.hpp`
-- `tests/cpp/hud_layout_tests.cpp`
-
-- [ ] **Step 1 (TDD Red):** Escrever teste integrando `HudLayout` em 1920×1080 com `HudInverseMapper`, garantindo que coordenadas de cliques nas barras superior e inferior mapeiem com precisão para os limites 640×448 do guest.
-- [ ] **Step 2:** Executar `ctest -R hud_layout` e verificar validações.
-- [ ] **Step 3 (Green):** Configurar o layout de HUD para resolução de 1080p (`HudRegionRole::ResourceBar`, `HudRegionRole::CommandBar`) em `kcet_gpu_module.cpp` e integrar a transformação inversa no tratamento de cliques do mouse em `kcet_mouse_overrides.cpp`.
-- [ ] **Step 4:** Executar `ctest -R hud_layout` e verificar sucesso.
-- [ ] **Step 5:** Commit.
-
----
-
-### Tarefa 4: Hook de Apresentação no Runtime (Patch PS2Recomp)
-
-**Arquivos:**
-- `third_party/PS2Recomp/ps2xRuntime/include/ps2_runtime.h`
-- `third_party/PS2Recomp/ps2xRuntime/src/lib/ps2_runtime.cpp`
-- `tools/patches/ps2recomp/0008-native-hud-presentation-hook.patch`
-
-- [ ] **Step 1 (Red):** Criar teste/verificação de callback de apresentação do host no runtime para desenho sobreposto antes do swap de buffers.
-- [ ] **Step 2 (Green):** Adicionar hook de renderização customizada pós-frame no `ps2_runtime.cpp` (`m_customRenderCallback`), permitindo que a camada nativa desenhe elementos em resolução total (1920×1080) sobre a janela do Raylib.
-- [ ] **Step 3:** Gerar patch rastreado `tools/patches/ps2recomp/0008-native-hud-presentation-hook.patch` e validar via `python3 -m unittest tests.test_runtime_patches`.
-- [ ] **Step 4:** Commit.
-
----
-
-### Tarefa 5: Mapeamento de Assets HD da Interface e Renderização da HUD em 1080p
-
-**Arquivos:**
-- `game_hooks/src/kcet_gpu_module.cpp`
-- `game_hooks/src/gpu_runtime_adapter.hpp`
-- `assets/src/asset_resolver.cpp`
-
-- [ ] **Step 1 (TDD Red):** Escrever teste de renderização da HUD com `AssetResolver` carregando os SLPs `50792` (barra superior), `50150` (barra inferior) e paleta `50507`.
-- [ ] **Step 2 (Green):** Conectar os sprites decodificados ao callback de apresentação nativa, desenhando a barra de recursos e o painel de comando nas posições 1080p do `HudLayout`.
-- [ ] **Step 3:** Executar `ctest` da suíte de renderização e asset resolution.
-- [ ] **Step 4:** Commit.
-
----
-
-### Tarefa 6: Validação End-to-End na Primeira Missão (William Wallace) em 1920×1080
-
-**Arquivos:**
-- `tools/drive_desktop_scenario.py`
-- `tools/validate_desktop.py`
-
-- [ ] **Step 1:** Executar build do runner diagnóstico com Docker:
-  `python3 tools/docker_build.py --platform desktop --diagnostics --jobs 4`
-- [ ] **Step 2:** Executar cenário de campanha em 1080p:
-  `python3 tools/drive_desktop_scenario.py campaign --resolution 1920x1080`
-- [ ] **Step 3:** Inspecionar a captura `.playwright-mcp/campaign-mission.png` para confirmar que a barra de recursos superior e os painéis de comando utilizam os sprites HD nítidos em vez da textura borrada esticada.
-- [ ] **Step 4:** Verificar que o soldado escocês responde ao clique/seleção e que os cliques na HUD funcionam com o mapeamento inverso.
-- [ ] **Step 5:** Commit final da documentação e resultados.
-
----
-
-## Verificação e Critérios de Sucesso
-
-1. **Testes Automatizados:**
-   - Todos os testes C++ (`ctest --test-dir build`) passando, cobrindo `asset_resolver`, `slp_decoder`, `jasc_palette`, `gles_renderer`, `hud_layout` e `runtime_patches`.
-2. **Qualidade Visual em 1080p:**
-   - A captura de tela `campaign-mission.png` em 1920×1080 exibe bordas e elementos da HUD nítidos (1:1 com os assets do HD Edition), sem estiramento borrado 4:3.
-3. **Interatividade e Jogabilidade:**
-   - O mouse em 1080p seleciona e move unidades corretamente no mapa de William Wallace graças ao `HudInverseMapper`.
-4. **Compatibilidade Switch:**
-   - O código utiliza tipos e interfaces portáteis (`HudLayout`, `GlesRenderer`, `AssetResolver`) compatíveis com 1280×720 handheld e 1920×1080 docked.
+- Por tarefa: `python3 -m unittest discover -s tests`; `cmake --build build && ctest
+  --test-dir build --output-on-failure`. Os novos testes devem ser vistos falhando antes.
+- Patches: `python3 -m unittest tests.test_runtime_patches`, com toda a série aplicável
+  e já aplicada.
+- Build: `python3 tools/docker_build.py --platform desktop --diagnostics --jobs 3`.
+- Execução real: `python3 tools/drive_desktop_scenario.py campaign --resolution
+  1920x1080 --keep-card` e o mesmo em `1280x720`. Ler as capturas de menu, briefing,
+  missão e retorno ao menu em `.playwright-mcp/`. Conferir cliques em unidade, movimento,
+  botões de comando e minimapa com a calibração da Fase 1.
+- Critério final: na missão, os pixels apresentados vêm do replay nativo (log por frame
+  de origem replay/fallback e taxa de paridade), com elementos HD mapeados nítidos em
+  1080p. Nenhum conteúdo dinâmico pode sumir em relação ao frame guest.
+- Cada fase atualiza `docs/hd-presentation-validation.md` só com o que foi medido.
