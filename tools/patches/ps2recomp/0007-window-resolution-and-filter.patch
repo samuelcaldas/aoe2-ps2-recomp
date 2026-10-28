@@ -1,7 +1,9 @@
 diff --git a/ps2xRuntime/src/lib/ps2_runtime.cpp b/ps2xRuntime/src/lib/ps2_runtime.cpp
 --- a/ps2xRuntime/src/lib/ps2_runtime.cpp
 +++ b/ps2xRuntime/src/lib/ps2_runtime.cpp
-@@ -735,7 +735,17 @@ bool PS2Runtime::initialize(const char *title)
+@@ -739,7 +739,17 @@ bool PS2Runtime::initialize(const char *title)
+         InitWindow(HOST_WINDOW_WIDTH, HOST_WINDOW_HEIGHT, title); // raylib vita does not support audio
+ #else
          SetConfigFlags(FLAG_WINDOW_RESIZABLE);
 -        InitWindow(HOST_WINDOW_WIDTH, HOST_WINDOW_HEIGHT, title);
 +        int hostWinW = HOST_WINDOW_WIDTH;
@@ -18,11 +20,11 @@ diff --git a/ps2xRuntime/src/lib/ps2_runtime.cpp b/ps2xRuntime/src/lib/ps2_runti
          InitAudioDevice();
          m_audioBackend.setAudioReady(IsAudioDeviceReady());
  #endif
-@@ -2598,6 +2608,7 @@ void PS2Runtime::run()
-      // A blank image to use as a framebuffer
-      Image blank = GenImageColor(FB_WIDTH, FB_HEIGHT, BLANK);
-      Texture2D frameTex = LoadTextureFromImage(blank);
-+     SetTextureFilter(frameTex, TEXTURE_FILTER_BILINEAR);
-      UnloadImage(blank);
+@@ -2592,6 +2602,7 @@ void PS2Runtime::run()
+     // A blank image to use as a framebuffer
+     Image blank = GenImageColor(FB_WIDTH, FB_HEIGHT, BLANK);
+     Texture2D frameTex = LoadTextureFromImage(blank);
++    SetTextureFilter(frameTex, TEXTURE_FILTER_BILINEAR);
+     UnloadImage(blank);
 
-      std::atomic<bool> gameThreadFinished{false};
+     std::atomic<bool> gameThreadFinished{false};

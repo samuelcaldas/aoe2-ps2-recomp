@@ -19,6 +19,20 @@ Este plano refina e substitui a lista anterior, marcada como concluída sem comp
 - devkitPro somente no Docker `docker-dev`; build não equivale a validação no hardware Switch.
 - TDD nas mudanças de comportamento; sem declarar HD ativo por logs de inicialização ou contadores sem leitura de pixels.
 
+## Estado verificado em 2026-10-27
+
+A última captura com `50102`/`50588` **reprovou a validação visual**: a decoração
+cobriu a interface funcional, sem reconstruir seus conteúdos dinâmicos. Os commits
+parciais das tarefas 1–5 não satisfazem os critérios de conclusão. O overlay e seu
+mapeamento de entrada independente foram removidos para preservar o framebuffer
+guest. Isso é uma correção de regressão, **não a conclusão de HD/GLES3**.
+
+As identidades e paletas sugeridas abaixo não são mapeamentos semânticos
+verificados e não devem ser reutilizadas como se fossem. A configuração lógica
+640×448 também difere dos frames 640×512 reportados pelo GS; não escolher um crop
+sem evidência do retângulo ativo. Diagnóstico e gates para retomar a implementação:
+[HD presentation validation](../hd-presentation-validation.md).
+
 ## Levantamento em andamento
 
 - Rastrear apresentação/contexto/thread, rasterização real e configuração GLES3.

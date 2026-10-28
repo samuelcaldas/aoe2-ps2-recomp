@@ -1,5 +1,5 @@
---- a/include/runtime/ee_scheduler.h
-+++ b/include/runtime/ee_scheduler.h
+--- a/ps2xRuntime/include/runtime/ee_scheduler.h
++++ b/ps2xRuntime/include/runtime/ee_scheduler.h
 @@ -280,6 +280,9 @@
      void requestStop();
      void postEvent(EeEvent event);
@@ -18,8 +18,8 @@
      uint32_t m_debugPublishCountdown = 0u;
  
      mutable std::mutex m_eventMutex;
---- a/src/lib/Kernel/EeScheduler.cpp
-+++ b/src/lib/Kernel/EeScheduler.cpp
+--- a/ps2xRuntime/src/lib/Kernel/EeScheduler.cpp
++++ b/ps2xRuntime/src/lib/Kernel/EeScheduler.cpp
 @@ -310,6 +310,7 @@
          try
          {
@@ -52,8 +52,8 @@
          return true;
      }
  
---- a/src/lib/ps2_runtime.cpp
-+++ b/src/lib/ps2_runtime.cpp
+--- a/ps2xRuntime/src/lib/ps2_runtime.cpp
++++ b/ps2xRuntime/src/lib/ps2_runtime.cpp
 @@ -1488,6 +1488,13 @@
  
      if (ctx->pc == entryPc)
