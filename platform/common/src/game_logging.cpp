@@ -11,9 +11,6 @@
 #include <cstring>
 #include <thread>
 #include <unistd.h>
-#elif defined(__SWITCH__)
-#include <switch.h>
-#endif
 
 namespace {
 int logcat_pipe[2] = {-1, -1};
@@ -51,6 +48,8 @@ void redirect_logcat() {
     if (std::atexit(stop_logcat) != 0) stop_logcat();
 }
 }
+#elif defined(__SWITCH__)
+#include <switch.h>
 #endif
 
 namespace aoe2::platform {
