@@ -121,6 +121,23 @@ go through the GS (whose texture width limit is 1024). The current buffer is
 followed at `0x01FC2800` by another surface. Space for a larger buffer has not been
 found yet.
 
+## Shape object and data format
+
+A shape object is 0x14 bytes: `+8` points at the data and `+0` holds its size. The
+data is **not** SLP 2.0N. Two layouts were seen in the mission:
+
+- Raw frame tables: `00 00 00 00 | frame count (u16) | 01 00 | offset table ...`,
+  followed by per-frame width/height fields (e.g. a full-screen 640×448 frame and
+  small interface frames). This is the PS2's own packed shape format.
+- Data starting with the ASCII tag `4.1k` or `4.2k` (two variants of one container).
+
+Shape draws carry the arguments `(shape, area, x, y, frame, flags)`; x/y can be
+negative (off-view origin) and flags were 0 in every sampled draw. Replacing a
+drawn shape by an HD file therefore needs a decoder for the PS2 shape format as
+well as the id mapping. The span rasterizer is the pixel writer, so an exact
+oracle is available: replay the draws through it and compare with the playfield
+buffer.
+
 ## Consequences for the HD plan
 
 1. Presentation and pointing share one transform (Phase 1): done in code; see

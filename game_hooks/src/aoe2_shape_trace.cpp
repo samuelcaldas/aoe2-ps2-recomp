@@ -31,6 +31,7 @@ constexpr std::size_t kReportRows = 48;
 constexpr int kRegA0 = 4;
 constexpr int kRegA1 = 5;
 constexpr int kRegA2 = 6;
+constexpr int kRegA3 = 7;
 constexpr int kRegT0 = 8;
 
 std::mutex g_mutex;
@@ -54,6 +55,42 @@ void ObservedLoad(uint8_t* rdram, R5900Context* ctx, PS2Runtime* runtime) {
     g_original_load(rdram, ctx, runtime);
 }
 
+// First sight of each shape object: its 0x14 bytes and, for each word that points into RAM,
+// the first bytes there (looking for the SLP "2.0N" header).
+void DumpShapeOnce(uint8_t* rdram, uint32_t shape) {
+    static std::vector<uint32_t> seen;
+    if (std::find(seen.begin(), seen.end(), shape) != seen.end() || seen.size() >= 24) return;
+    seen.push_back(shape);
+    std::cout << "[shape-trace] shape=0x" << std::hex << shape;
+    for (uint32_t offset = 0; offset < 0x14; offset += 4) {
+        uint32_t word = 0;
+        if (const uint8_t* source = getConstMemPtr(rdram, shape + offset)) std::memcpy(&word, source, sizeof(word));
+        std::cout << " +" << offset << "=" << word;
+        const uint8_t* target = (word > 0x100000 && word < 0x2000000) ? getConstMemPtr(rdram, word) : nullptr;
+        if (target != nullptr && offset == 8) {
+            std::cout << "[";
+            for (int i = 0; i < 48; ++i) std::cout << (i ? " " : "") << static_cast<uint32_t>(target[i]);
+            std::cout << "]";
+        }
+    }
+    std::cout << std::dec << std::endl;
+}
+
+// AOE2_SHAPE_TRACE_DRAWS=<n>: the first n draws' arguments (shape, area, x, y, frame, flags).
+void LogDrawSample(R5900Context* ctx) {
+    static const uint64_t limit = [] {
+        const char* text = std::getenv("AOE2_SHAPE_TRACE_DRAWS");
+        return text != nullptr ? std::strtoull(text, nullptr, 10) : uint64_t{0};
+    }();
+    static uint64_t logged = 0;
+    if (logged >= limit) return;
+    ++logged;
+    std::cout << "[shape-draw] shape=0x" << std::hex << getRegU32(ctx, kRegA0) << " area=0x" << getRegU32(ctx, kRegA1)
+              << std::dec << " x=" << static_cast<int32_t>(getRegU32(ctx, kRegA2))
+              << " y=" << static_cast<int32_t>(getRegU32(ctx, kRegA3)) << " frame=" << static_cast<int32_t>(getRegU32(ctx, kRegT0))
+              << " flags=" << static_cast<int32_t>(getRegU32(ctx, kRegT0 + 1)) << std::endl;
+}
+
 // First sight of each draw area: its leading words (buffer, size, clip fields) for layout discovery.
 void DumpAreaOnce(uint8_t* rdram, uint32_t area) {
     static std::vector<uint32_t> seen;
@@ -74,6 +111,8 @@ void ObservedDraw(uint8_t* rdram, R5900Context* ctx, PS2Runtime* runtime) {
         std::lock_guard<std::mutex> lock(g_mutex);
         g_model.Drawn(getRegU32(ctx, kRegA0), static_cast<int32_t>(getRegU32(ctx, kRegT0)));
         DumpAreaOnce(rdram, getRegU32(ctx, kRegA1));
+        DumpShapeOnce(rdram, getRegU32(ctx, kRegA0));
+        LogDrawSample(ctx);
         if (g_model.draws() % g_interval == 0)
             std::cout << "[shape-trace] draws=" << g_model.draws() << " entry=" << Slot << " "
                       << g_model.Report(kReportRows) << std::endl;
