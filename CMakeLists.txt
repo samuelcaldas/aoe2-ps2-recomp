@@ -55,6 +55,8 @@ add_library(aoe2_interfaces STATIC
     renderer/src/gles_renderer.cpp
     renderer/src/hud_layout.cpp
     input/src/hud_inverse_mapper.cpp
+    platform/switch/src/switch_platform.cpp
+    platform/switch/src/switch_input.cpp
     runtime/src/guest_memory.cpp
 )
 
@@ -66,6 +68,7 @@ target_include_directories(aoe2_interfaces PUBLIC
     renderer/include
     runtime/include
     platform/desktop/include
+    platform/switch/include
     game_hooks/include
     kernel/include
     pad/include
@@ -148,6 +151,11 @@ add_test(NAME shape_trace_model COMMAND aoe2_shape_trace_model_tests)
 add_executable(aoe2_slp4k_reader_tests tests/cpp/slp4k_reader_tests.cpp)
 target_link_libraries(aoe2_slp4k_reader_tests PRIVATE aoe2_interfaces)
 add_test(NAME slp4k_reader COMMAND aoe2_slp4k_reader_tests)
+
+# Native Nintendo Switch platform services and input bridge tests
+add_executable(aoe2_switch_platform_tests tests/cpp/switch_platform_tests.cpp)
+target_link_libraries(aoe2_switch_platform_tests PRIVATE aoe2_interfaces)
+add_test(NAME switch_platform COMMAND aoe2_switch_platform_tests)
 
 # Decoupled HD asset provider tests
 add_executable(aoe2_asset_tests
