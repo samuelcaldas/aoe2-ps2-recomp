@@ -91,6 +91,11 @@ Como na Fase 5 original.
   depois sprites HD**, e pediu para usar o material do PC como inspiração para a vista
   ampliada. O decomp do PC (`third_party/aoe-decomp`) traz só a demo `EMPIRES2.EXE`
   (1999) e um plano de referência gráfica, sem o layout dos painéis descompilado.
+- **Decisão (2026-10-28, após a captura da redução):** Fase A pausada pelo usuário. O
+  experimento de redução (`22e008e`) confirmou que a vista é guiada pelos dados, mas
+  ampliar exige buffer realocado e RAM guest maior, com risco alto. Próximo passo:
+  sprites HD (Fase C) sobre a vista atual, começando pelo decodificador do formato
+  `4.2k` do PS2, com TDD e oráculo de pixels pelo rasterizador do decomp.
 - Fase A começa por um experimento barato: reduzir o painel do mapa em `0x31a410`
   (`AOE2_MAP_VIEW_OVERRIDE=<w>x<h>`) e medir se o tamanho da vista é dirigido por dados.
   O buffer do mapa é 640×272 com bandas de guarda de 5 linhas e termina em
