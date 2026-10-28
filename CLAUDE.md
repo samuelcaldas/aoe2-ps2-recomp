@@ -4,9 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `AGENTS.md` and `GEMINI.md` are symlinks to this file — edits here apply to all agents.
 
-## What this is
+## What this is & Project Philosophy
 
 Bootstrap foundation for a native static-recompilation port of *Age of Empires II: The Age of Kings*, PS2 PAL (`SLES-50282`, `AOK.ELF`, SHA-1 `f478e19f2059d52899b691483ef5c7522e30e17c`). Primary target: Nintendo Switch homebrew (libnx + deko3d). Bring-up order: desktop Linux x86-64 (validation host) → ARM64 portability gate → Switch. Nothing is playable yet. The full recompilation compiles and links on desktop x86-64: all generated units plus the pinned upstream PS2Recomp runtime build `desktop_runtime_probe` (see `docs/desktop-runtime-probe.md` §6), which has never executed guest code. It initializes headless (memory, subsystems, ELF load, entry point resolved; `ctest -R desktop_runtime_probe_init`) without calling `run()`. Next milestone: the ELF loads code overlays from disc at run time (eight executable PT_LOAD segments with `filesz = 0`, see `docs/desktop-runtime-probe.md` §7.1); identify them and recompile them through the same guarded pipeline — **without adding game-specific stubs**. Build it only with `python3 tools/run_desktop_probe_build.py --jobs N` (memory-capped systemd scope, C locale).
+
+### 1. Why PS2 Recompilation instead of PC Decompilation?
+- **Console-Native Architecture & Binary Structure**: The PS2 port was engineered by KCET (Konami Computer Entertainment Tokyo). The binary is a self-contained, statically-linked MIPS ELF (`AOK.ELF`) with a clean abstraction layer (the `kt_*` hardware libraries for graphics, sound, file I/O, memory card, and peripherals). Unlike the 1999 PC Win32 release—which is tightly bound to legacy DirectDraw, Win32 message loops, legacy GDI, DirectPlay, and x86 inline assembly—the PS2 codebase was already structured for a closed console runtime.
+- **Console-Tailored UI & Input Schemes**: The PS2 version is the only classic edition of Age of Empires II with native gamepad navigation (DualShock 2 pad maps, radial/context menus, console shortcuts, and auto-targeting) while also retaining native USB keyboard and mouse support. For handheld devices like the Nintendo Switch, having an interface and gameplay loop already designed and balanced for controllers and fixed-resolution displays is infinitely superior to retrofitting a 1999 mouse-only Win32 desktop UI.
+
+### 2. Recompilation & Decompilation Hand-in-Hand
+- **Surgical Replacement of Architectural Bottlenecks**: Recompilation and decompilation are not mutually exclusive; they work together. PS2Recomp automatically translates the vast majority (~17,000 game logic functions) into C++ without human error or years of manual decompilation.
+- **Native Host Subsystem Overrides**: Portions of the PS2 code constrained by hardware limitations (the 32 MB EE RAM boundary, KCET GS software rasterization blitters, low-level IOP/RPC calls, and CDVD streaming) are replaced surgically with native host implementations based directly on the matching decompilation (`samuelcaldas/age-of-empires-2-decomp`, local `../aoe`). The game's KCET layer (`kt_gpu`, `kt_mouse`, `kt_keybd`, `kt_file`, `kt_sound`) serves as the ideal boundary: host-side C++ interceptors override KCET entry points with modern hardware-accelerated equivalents (e.g. OpenGL ES 3 / deko3d rendering, native filesystem access, and Horizon OS touch/Joy-Con input).
+
+### 3. HD Assets Strategy & High-Resolution Presentation
+- **Asset Provenance & Scaling Realities**: The 2013 "HD Edition" on PC used the exact same 1999 sprite assets (`~85×56` px units, `800×600` UI art, 1:1 SLP tiles). The PS2 version rendered a letterboxed 640×262 software playfield at $y=40$ within a 640×448 logical framebuffer (PAL stretched to 640×512).
+- **Engine Viewport Expansion**: Achieving a crisp, native HD/1080p experience on modern displays (desktop and docked Switch) does **not** mean naive upscaling or replacing 1:1 sprites with distorted textures. Following the canonical strategy ([`docs/sot/hd-assets-strategy.md`](docs/sot/hd-assets-strategy.md)), the engine's internal map viewport is expanded (rendering more map area at 1:1 native scale), while HUD elements are anchored cleanly to display borders and UI screens use high-resolution assets or clean aspect-ratio preservation.
 
 ## Commands
 
