@@ -1,3 +1,9 @@
+> [!IMPORTANT]
+> **CONSOLIDATED DOCUMENTATION NOTICE**
+> This document is historical/fragmented. Its architectural conclusions, tooling commands, and evidence have been unified into the canonical Source of Truth: [`docs/sot/hd-assets-strategy.md`](docs/sot/hd-assets-strategy.md). Please refer to `docs/sot/hd-assets-strategy.md` for current decisions and implementation status.
+
+---
+
 # Asset Decoupling Architecture: HD Edition Assets as Primary Target
 
 This document establishes the architectural requirement and directory layout for **decoupling game assets from the core recompilation binary** across all target platforms (Desktop Linux/Windows, Nintendo Switch, and future ports).

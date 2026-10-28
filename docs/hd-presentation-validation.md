@@ -1,3 +1,9 @@
+> [!IMPORTANT]
+> **CONSOLIDATED DOCUMENTATION NOTICE**
+> This document is historical/fragmented. Its architectural conclusions, tooling commands, and evidence have been unified into the canonical Source of Truth: [`docs/sot/hd-assets-strategy.md`](docs/sot/hd-assets-strategy.md). Please refer to `docs/sot/hd-assets-strategy.md` for current decisions and implementation status.
+
+---
+
 # HD presentation: regression diagnosis and remaining gates
 
 ## Status (2026-10-27)

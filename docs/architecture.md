@@ -138,7 +138,7 @@ Switch touchscreen (libnx HID, 1280x720)        Desktop mouse / touch (SDL)
                                          recompiled game's mouse poll
 ```
 
-* **`SurfaceMapping`** maps host coordinates onto the guest framebuffer (640x480 by default), assuming the 4:3 image is aspect-fit and centered. On the 1280x720 handheld screen that is a 960x720 image with 160 px pillarbox bars; touches on the bars clamp to the nearest edge.
+* **`SurfaceMapping`** maps host coordinates onto the guest logical framebuffer (640x448 logical extent, confirmed by the game's `RenderManager` and GS presentation calibration), assuming the image is aspect-fit and centered. On a 16:9 screen that maps with pillarbox bars; touches on the bars clamp to the nearest active edge.
 * **`TouchGestureTranslator`** (platform-neutral, unit-tested on desktop) turns contacts into pointer actions:
 
   | Touch gesture | Action(s) | Guest mouse equivalent |
@@ -175,21 +175,21 @@ On PC, the community patch AoE2Wide patches the resolution constants (`1280`, `1
 Because rendering is replaced at a high level (§5), widescreen does not need GS changes:
 
 1. Locate the guest's viewport and screen-size values in the recompiled code. These are the PS2 equivalent of the constants AoE2Wide patches: map view rectangle, scroll limits, visible-tile culling bounds, cursor clamp. Override them through runtime hooks, not by editing generated sources.
-2. Widen the guest extent (e.g. 640x480 → 854x480 for 16:9) so the game simulates and culls a wider view, and `IRenderer` draws it at native host resolution.
+2. Widen the guest extent (e.g. 640x448 → 800x448 or dynamic 16:9) so the game simulates and culls a wider view, and `IRenderer` draws it at native host resolution.
 3. Input keeps working unchanged: `SurfaceMapping` takes the guest extent as a parameter, so a 16:9 guest fills the 1280x720 Switch screen without pillarbox bars. `GuestMouseAdapter` clamps to the new extent.
 
 Gameplay impact (more of the map visible) matches the PC widescreen mods. It must be an optional setting, and the default stays 4:3 for parity with the original PS2 game.
 
 ### 7.3 HD and widescreen assets from Age of Empires II (2013)
 
-Age of Empires II (2013) is the primary target source of higher-resolution, widescreen-ready, and modern decoupled assets. Its openage converter ID is `HD`. Detailed architectural specification for decoupling and platform layout: see `docs/architecture-hd-asset-decoupling.md`.
+Age of Empires II (2013) is the primary target source of higher-resolution, widescreen-ready, and modern decoupled assets. Its openage converter ID is `HD`. Detailed architectural specification for decoupling and platform layout: see `docs/sot/hd-assets-strategy.md`.
 
 Rationale:
 
 * It is the closest data lineage to the original game: the same SLP sprite format, the same graphic/unit identifiers, and it is supported by the openage converter. That keeps a PS2 → PC asset correlation tractable. Definitive Edition (`DE2`) has redrawn art in a different format (SMX) and is a later, separate option.
 * Its interface is built for arbitrary and widescreen resolutions, which gives a reference for a widescreen HUD instead of stretching 4:3 bitmaps the way AoE2Wide does.
 
-Rules, following the same provenance model as `AOK.ELF` (phase 1 implementation: `docs/hd-assets.md`):
+Rules, following the same provenance model as `AOK.ELF` (phase 1 implementation: `docs/sot/hd-assets-strategy.md` §3):
 
 * The user must own the 2013 edition. Its files are supplied and extracted locally, never committed or distributed. Place them under `game/` (already gitignored). Record only hashes, counts and versions in tracked metadata.
 * Add an import/verify tool equivalent to `tools/import_owned_game.py` (fail-fast, checksum-verified), and an untracked asset-manifest entry.

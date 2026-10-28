@@ -1,3 +1,9 @@
+> [!IMPORTANT]
+> **CONSOLIDATED DOCUMENTATION NOTICE**
+> This document is historical/fragmented. Its architectural conclusions, tooling commands, and evidence have been unified into the canonical Source of Truth: [`docs/sot/hd-assets-strategy.md`](docs/sot/hd-assets-strategy.md). Please refer to `docs/sot/hd-assets-strategy.md` for current decisions and implementation status.
+
+---
+
 # HD rendering evidence: presentation geometry and frame composition
 
 Measured 2026-10-27 with the desktop diagnostic build and

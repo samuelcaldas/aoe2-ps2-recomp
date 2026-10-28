@@ -70,16 +70,13 @@ Revisit when Mesa 26/NVK consolidates upstream in devkitPro, or if profiling con
 
 ## 4. Using the AoE2 decompilation
 
-The owner's matching decompilation (`samuelcaldas/age-of-empires-2-decomp` @ `d811ab3`, local `../aoe`) targets the same PAL `SLES-50282` binary. It already covers mouse handling (`src/kt_mouse.c`, `src/render_manager_mouse_dispatch.cpp`) and controller/input analysis (`docs/controller_*.md`, `docs/ps2_binary_analysis.md`).
+The owner's matching decompilation (`samuelcaldas/age-of-empires-2-decomp` @ `d811ab3`, local `../aoe`) targets the same PAL `SLES-50282` binary. It is the owner's own work and serves as the definitive reference and code source for native replacement across all subsystems.
 
 Rules:
-- Use it when needed to understand or hook peripherals and engine behavior, such as where and how the game polls the mouse and keyboard.
-- Matched C/C++ from it may be used in host-side override hooks when that is simpler than reverse-engineering the generated code again.
-- **Authorized for KCET replacement (2026-10-20):** it is the reference for replacing the game's KCET hardware layer (mouse, keyboard, pad, CD/DVD, files, memory card, GS dispatch); see `docs/adr/0001-kcet-boundary-replacement.md`.
-- **Authorized for porting any subsystem (2026-10-22):** the owner wrote the decompilation and has changed the rule. Any decompiled code related to KCET, mouse, keyboard, network (`mydplay`/`socketee`, see `docs/sot/multiplayer-lan-architecture.md`), graphics, or other subsystems may be ported into this recompilation, replacing generated code where needed. Replacement happens through host-side override hooks; generated C++ is still not edited or committed.
-- **Authorized to copy decomp code into this repository (2026-10-24):** the owner wrote the decompilation and authorizes using its code directly in tracked files here, including function names, addresses and structure layouts that appear in it, and its sidecar metadata. Each such file states its origin (decomp repository and commit). This covers compiling it for the host (debugging, native replacement of PS2-only code).
-- **Still not tracked:** game binaries, ISOs, Ghidra projects/exports, function maps, disassembly produced from the binary, and generated C++. Address-specific glue that is derived from the ELF (resolved hook addresses) stays in ignored locations or is derived at build time.
-- Do not modify the decomp repository from here.
+- **Full code reuse authorized:** Any matched C/C++ from the decompilation (source, headers, names, addresses, structure layouts, sidecar metadata) may be copied directly into tracked files of this repository. It may replace generated code through host-side override hooks (ADR 0001) or be compiled directly for the host.
+- Each such file states its origin (decomp repository and commit).
+- **Still not tracked:** game binaries, ISOs, Ghidra projects/exports, function maps, disassembly produced from the binary, and generated C++.
+- Do not modify the decomp repository from here. Generated C++ is never edited in place.
 
 ## 5. Sources
 - https://github.com/ran-j/PS2Recomp
