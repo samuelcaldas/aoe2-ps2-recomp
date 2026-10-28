@@ -5,7 +5,7 @@ Purpose: list what this repository depends on in the upstream PS2Recomp runtime 
 ## 1. Pin and status
 
 - Upstream: `ran-j/PS2Recomp`, commit `eb8688b2fd191129f103a39543002c005b33409c`, license **GPL-3.0** (`third_party_provenance.lock.json`).
-- The checkout in `third_party/PS2Recomp` is the pin plus the tracked patch series in `tools/patches/ps2recomp/`. The pin alone does not reproduce the running runtime (`README.md`).
+- The checkout in `third_party/PS2Recomp` is the pin plus the patch series in `third_party/PS2Recomp/patches/`. The pin alone does not reproduce the running runtime (`README.md`).
 - Patches apply through `tools/runtime_patches.py`; `tests/test_runtime_patches.py` checks that the series applies and that git can parse it.
 
 ## 2. Generated game code

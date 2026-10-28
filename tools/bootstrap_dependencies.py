@@ -7,7 +7,7 @@ Manages external repositories:
 - deko3d:    https://github.com/devkitPro/deko3d.git (Zlib / MIT)
 
 Clones recursively into third_party/ (ignored by git), then applies the local patch
-series in tools/patches/<dependency>/ (idempotent; the lock records the unpatched upstream SHA).
+series in third_party/<dependency>/patches/ (idempotent; the lock records the unpatched upstream SHA).
 Generates or updates a tracked lock/provenance file: third_party_provenance.lock.json
 """
 import argparse
@@ -23,7 +23,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from tools.runtime_patches import PatchError, apply_patches, verify_patches  # noqa: E402
 
-PATCH_DIRECTORIES = {"PS2Recomp": REPO_ROOT / "tools" / "patches" / "ps2recomp"}
+PATCH_DIRECTORIES = {"PS2Recomp": REPO_ROOT / "third_party" / "PS2Recomp" / "patches"}
 
 DEPENDENCIES = {
     "PS2Recomp": {

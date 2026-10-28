@@ -7,7 +7,7 @@ No PS2 game has a native Nintendo Switch port yet; the entries below are the clo
 
 | Source | License | Allowed use |
 | :--- | :--- | :--- |
-| PS2Recomp (customized fork / runtime) | GPL-3.0 | **Full modification authorized**: runtime enhancements, bug fixes, and game-specific compatibility adaptations (IOP handshakes, overlay dispatch, CDVD streaming, GS frame presentation) are actively encouraged and tracked via patches in `tools/patches/ps2recomp/`. |
+| PS2Recomp (customized fork / runtime) | GPL-3.0 | **Full modification authorized**: runtime enhancements, bug fixes, and game-specific compatibility adaptations (IOP handshakes, overlay dispatch, CDVD streaming, GS frame presentation) are actively encouraged and tracked via patches in `third_party/PS2Recomp/patches/`. |
 | `samuelcaldas/age-of-empires-2-decomp` (local: `../aoe`) | Owner's project, no license file | **Authorized by the owner**, including copying its code into tracked files (2026-10-24), as a reference and a source when the generated code alone is not enough: mouse and other peripherals, input polling, structure layouts, game behavior. See §4. |
 | Play! PS2 Emulator (`jpd002/Play-`) | BSD 2-Clause | **Runtime Source of Truth (SOT)** for reference hardware behavior, SIF/IOP HLE contracts, boot handshakes, and overlay loading (see `docs/sot/play-emulator-sot.md`). |
 | `KIexster/god-of-war-recomp` | GPL-3.0 | Code reuse allowed (GPL-compatible with PS2Recomp); game-specific overrides do not apply to AoE2. |

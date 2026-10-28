@@ -73,19 +73,19 @@ class TestTrackedPatchFormat(unittest.TestCase):
                          "pinned runtime absent")
     def test_installed_runtime_matches_tracked_patch_series(self):
         root = Path(__file__).resolve().parents[1]
-        for patch in sorted((root / "tools/patches/ps2recomp").glob("*.patch")):
+        for patch in sorted((root / "third_party/PS2Recomp/patches").glob("*.patch")):
             with self.subTest(patch=patch.name):
                 self.assertEqual(patch_state(root / "third_party/PS2Recomp", patch),
                                  PatchState.APPLIED, "bootstrap cannot reproduce the installed runtime patch")
 
     def test_repository_patches_are_parseable_by_git(self):
         root = Path(__file__).resolve().parents[1]
-        patches = sorted((root / "tools/patches/ps2recomp").glob("*.patch"))
+        patches = sorted((root / "third_party/PS2Recomp/patches").glob("*.patch"))
         self.assertTrue(patches, "runtime patch series must not be empty")
         for patch in patches:
             with self.subTest(patch=patch.name):
                 result = subprocess.run(["git", "apply", "--numstat", str(patch)],
-                                        cwd=root, capture_output=True, text=True)
+                                        cwd=root / "third_party/PS2Recomp", capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertTrue(result.stdout.strip(), "patch must describe a file change")
 
