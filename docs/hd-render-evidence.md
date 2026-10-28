@@ -146,6 +146,23 @@ well as the id mapping. The span rasterizer is the pixel writer, so an exact
 oracle is available: replay the draws through it and compare with the playfield
 buffer.
 
+## Map view size experiment (`AOE2_MAP_VIEW_OVERRIDE=320x130`)
+
+Setting the map panel to 320×130 at its initializer (guest `0x31a410`, panel `+0x14`/`+0x18`)
+changes the rest of the pipeline consistently in the mission:
+
+- the draw area becomes 0x140 × 0x82 (pitch 0x140) and the rasterizer window follows;
+- the playfield upload drops from 640×262 to 320×130 (120 transfers per 30 frames);
+- the GIF payload drops from 10,480 to 2,600 quadwords.
+
+The captured mission frame (`.playwright-mcp/campaign-mission.png`) shows the terrain
+clipped to the top-left 320×130 region at the same origin. Units outside that rectangle
+disappear; the resource bar, command panel, minimap and text are unchanged.
+
+So the map view size is driven by the panel rectangle. Enlarging the view is
+therefore a buffer problem: the current buffer is 640×272 with a 5-row guard band and
+ends at `0x01FC2800`, so a larger view needs a relocated buffer and free guest RAM.
+
 ## Consequences for the HD plan
 
 1. Presentation and pointing share one transform (Phase 1): done in code; see

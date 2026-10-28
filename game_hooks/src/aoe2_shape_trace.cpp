@@ -142,7 +142,41 @@ void Wrap(PS2Runtime& runtime, uint32_t address, PS2Runtime::RecompiledFunction 
         throw std::runtime_error("shape trace: cannot wrap guest function");
 }
 
+// AOE2_MAP_VIEW_OVERRIDE=<w>x<h>: experiment. The map view panel initializer (guest 0x31a410, $a0 =
+// panel, +0x14 width, +0x18 height) runs with that size to learn whether view size is data-driven.
+constexpr uint32_t kMapViewInit = 0x0031A410;
+constexpr uint32_t kPanelWidth = 0x14;
+constexpr uint32_t kPanelHeight = 0x18;
+int32_t g_view_width = 0;
+int32_t g_view_height = 0;
+PS2Runtime::RecompiledFunction g_original_view_init = nullptr;
+
+void ObservedViewInit(uint8_t* rdram, R5900Context* ctx, PS2Runtime* runtime) {
+    const uint32_t panel = getRegU32(ctx, kRegA0);
+    auto* width = reinterpret_cast<int32_t*>(getMemPtr(rdram, panel + kPanelWidth));
+    auto* height = reinterpret_cast<int32_t*>(getMemPtr(rdram, panel + kPanelHeight));
+    if (width != nullptr && height != nullptr) {
+        std::cout << "[map-view] panel=0x" << std::hex << panel << std::dec << " size " << *width << "x" << *height
+                  << " -> " << g_view_width << "x" << g_view_height << std::endl;
+        *width = g_view_width;
+        *height = g_view_height;
+    }
+    g_original_view_init(rdram, ctx, runtime);
+}
+
+void InstallMapViewOverride(PS2Runtime& runtime) {
+    const char* text = std::getenv("AOE2_MAP_VIEW_OVERRIDE");
+    if (text == nullptr) return;
+    char* separator = nullptr;
+    g_view_width = static_cast<int32_t>(std::strtol(text, &separator, 10));
+    g_view_height = separator != nullptr && *separator == 'x' ? static_cast<int32_t>(std::strtol(separator + 1, nullptr, 10)) : 0;
+    if (g_view_width <= 0 || g_view_height <= 0) throw std::invalid_argument("AOE2_MAP_VIEW_OVERRIDE must be <w>x<h>");
+    Wrap(runtime, kMapViewInit, ObservedViewInit, g_original_view_init);
+    std::cout << "[map-view] override " << g_view_width << "x" << g_view_height << std::endl;
+}
+
 void InstallShapeTrace(PS2Runtime& runtime) {
+    InstallMapViewOverride(runtime);
     const char* text = std::getenv("AOE2_SHAPE_TRACE");
     if (text == nullptr) return;
     g_interval = std::max<uint64_t>(1, std::strtoull(text, nullptr, 10));

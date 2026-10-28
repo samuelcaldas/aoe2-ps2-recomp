@@ -85,6 +85,17 @@ a escala for isotrópica. A entrada usa a mesma transformação por região.
 ### Fase D — Texto TTF, GLES3, 720p e Switch
 Como na Fase 5 original.
 
+- **Correção de premissa e decisão (2026-10-28):** `ALL_DATA.BIN` é um DRS com 1347
+  SLPs em variante PS2 (`4.2k`). Para os IDs em comum, os sprites HD são ~1,58× maiores
+  que os do PS2. O usuário manteve a ordem de preferência: **vista ampliada primeiro,
+  depois sprites HD**, e pediu para usar o material do PC como inspiração para a vista
+  ampliada. O decomp do PC (`third_party/aoe-decomp`) traz só a demo `EMPIRES2.EXE`
+  (1999) e um plano de referência gráfica, sem o layout dos painéis descompilado.
+- Fase A começa por um experimento barato: reduzir o painel do mapa em `0x31a410`
+  (`AOE2_MAP_VIEW_OVERRIDE=<w>x<h>`) e medir se o tamanho da vista é dirigido por dados.
+  O buffer do mapa é 640×272 com bandas de guarda de 5 linhas e termina em
+  `0x01FC2800`: qualquer ampliação exige realocar largura × (altura + 10).
+
 ## Fase 0 — Evidência (diagnóstico, sem mudança de comportamento)
 
 Objetivo: decidir o ponto de captura e a geometria com dados de gameplay.
