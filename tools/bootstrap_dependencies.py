@@ -23,14 +23,14 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from tools.runtime_patches import PatchError, apply_patches, verify_patches  # noqa: E402
 
-PATCH_DIRECTORIES = {"PS2Recomp": REPO_ROOT / "third_party" / "PS2Recomp" / "patches"}
+PATCH_DIRECTORIES = {}
 
 DEPENDENCIES = {
     "PS2Recomp": {
-        "url": "https://github.com/ran-j/PS2Recomp.git",
+        "url": "https://github.com/samuelcaldas/PS2Recomp.git",
         "license": "GPL-3.0",
         "intended_phase": "Desktop recompilation proof of concept",
-        "notes": "Static recompiler for MIPS R5900/VU. Emits C++ source code.",
+        "notes": "Static recompiler for MIPS R5900/VU with native AoE2 runtime patches incorporated.",
     },
     "libnx": {
         "url": "https://github.com/switchbrew/libnx.git",

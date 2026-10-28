@@ -3,11 +3,11 @@
   "generated_at": "2026-10-19T15:54:47.931363+00:00",
   "dependencies": {
     "PS2Recomp": {
-      "url": "https://github.com/ran-j/PS2Recomp.git",
-      "commit_sha": "eb8688b2fd191129f103a39543002c005b33409c",
+      "url": "https://github.com/samuelcaldas/PS2Recomp.git",
+      "commit_sha": "ce35b69f712a64197712c245c75b461e0bd3a2f5",
       "license": "GPL-3.0",
       "intended_phase": "Desktop recompilation proof of concept",
-      "notes": "Static recompiler for MIPS R5900/VU. Emits C++ source code.",
+      "notes": "Static recompiler for MIPS R5900/VU with native AoE2 runtime patches incorporated.",
       "local_path": "third_party/PS2Recomp"
     },
     "libnx": {

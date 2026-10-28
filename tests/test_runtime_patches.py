@@ -69,8 +69,8 @@ class TestRuntimePatches(unittest.TestCase):
 
 
 class TestTrackedPatchFormat(unittest.TestCase):
-    @unittest.skipUnless((Path(__file__).resolve().parents[1] / "third_party/PS2Recomp/ps2xRuntime").is_dir(),
-                         "pinned runtime absent")
+    @unittest.skipUnless((Path(__file__).resolve().parents[1] / "third_party/PS2Recomp/patches").is_dir(),
+                         "no separate runtime patch series (runtime patches incorporated)")
     def test_installed_runtime_matches_tracked_patch_series(self):
         root = Path(__file__).resolve().parents[1]
         for patch in sorted((root / "third_party/PS2Recomp/patches").glob("*.patch")):
@@ -78,6 +78,8 @@ class TestTrackedPatchFormat(unittest.TestCase):
                 self.assertEqual(patch_state(root / "third_party/PS2Recomp", patch),
                                  PatchState.APPLIED, "bootstrap cannot reproduce the installed runtime patch")
 
+    @unittest.skipUnless((Path(__file__).resolve().parents[1] / "third_party/PS2Recomp/patches").is_dir(),
+                         "no separate runtime patch series (runtime patches incorporated)")
     def test_repository_patches_are_parseable_by_git(self):
         root = Path(__file__).resolve().parents[1]
         patches = sorted((root / "third_party/PS2Recomp/patches").glob("*.patch"))
