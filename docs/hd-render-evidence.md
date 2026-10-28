@@ -78,6 +78,31 @@ per-row span list and clips against a global clip rectangle. That rasterizer sit
 below shape identity: the shape/frame/player parameters must be captured at its
 callers.
 
+## Shape identity at the draw seam
+
+The decomp's `func_0025E640(shape, area, x, y, frame, flags)` is the SLP shape-draw
+entry (`src/render/render_helper_2184D0.cpp`), and it calls the span rasterizer.
+`func_0025D6D0(shape, name, resource_id)` loads shapes. With `AOE2_SHAPE_TRACE=20000`
+(diagnostic `game_hooks/src/aoe2_shape_trace.cpp`, pass-through observers), the
+mission draws report the loader's resource ids. Examples: `scr2.shp#50100`,
+`cam.shp#50232`, `cam8.shp#50242`, `g_grs.shp#15001`, `g_sn2.shp#15019`, unit or
+flag graphics `#2296`, `#4652`, `#3578`–`#3580`, and PS2-only ids in the 56xxx range
+(`main1.shp#56281`, `n_icomap.slp#56260`, `dc_memo.shp#56110`). Some names read as
+`valid`, so the second argument is not always the file name; the ids are
+consistent.
+
+**The PS2 resource ids follow the PC numbering.** The local HD Edition install has
+`drs/graphics/2296.slp`, `4652.slp`, `3580.slp` and `drs/interface/50100.slp`,
+`50232.slp`, `50242.slp`. It has no 56xxx files (PS2-specific) and no 15xxx SLPs:
+HD terrain is under `terrain/` in another format.
+
+**HD Edition 2013 assets are the PC originals at PC resolution.** Unit frames are
+about 54×128 to 119×165 pixels. Interface screens are 800×600, against the PS2
+logical 640×448. Replacing PS2 shapes by these files gains at most the PC/PS2
+resolution ratio per asset, not 1080p-native detail. Sharpness at 1080p must also
+come from presenting without bilinear upscaling, or from rendering a larger view
+of the map.
+
 ## Consequences for the HD plan
 
 1. Presentation and pointing share one transform (Phase 1): done in code; see

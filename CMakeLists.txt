@@ -138,6 +138,11 @@ add_executable(aoe2_presentation_transform_tests tests/cpp/presentation_transfor
 target_link_libraries(aoe2_presentation_transform_tests PRIVATE aoe2_interfaces)
 add_test(NAME presentation_transform COMMAND aoe2_presentation_transform_tests)
 
+# Shape-draw trace model (identity of drawn SLP shapes)
+add_executable(aoe2_shape_trace_model_tests tests/cpp/shape_trace_model_tests.cpp)
+target_include_directories(aoe2_shape_trace_model_tests PRIVATE game_hooks/src)
+add_test(NAME shape_trace_model COMMAND aoe2_shape_trace_model_tests)
+
 # Decoupled HD asset provider tests
 add_executable(aoe2_asset_tests
     tests/cpp/asset_tests.cpp
