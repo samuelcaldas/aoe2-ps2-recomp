@@ -16,7 +16,7 @@ Build a reproducible native static-recompilation port of **Age of Empires II: Th
 | Headless initialization probe | The earlier pinned-runtime probe initialized memory and subsystems, loaded the owned ELF, and resolved the entry point with its then-current 17,047-entry map. It does **not** execute guest code and is separate from the local-fork game runs below. |
 | Desktop game runner | The local fork completes the SIF handshake and displays the game's loading screen. In a 300-second experiment with function-trace output discarded, all five audio-loading waits clear and the screen becomes black with a cursor. No menu or completed boot is verified; visual-progress validation still fails. |
 | Input | Platform-neutral touch, USB mouse, and keyboard adapters are tested. The strict KCET registry applied all ten configured mouse/keyboard hooks in a desktop run, with no pad aliases configured. In-game input and exact keyboard event-mask semantics remain unvalidated. |
-| Rendering | Native HD/GLES3 output is incomplete. The desktop uses the guest framebuffer fallback; an unverified HD overlay that obscured the HUD has been removed. See [presentation diagnosis and remaining gates](docs/hd-presentation-validation.md). |
+| Rendering | Native HD/GLES3 output is incomplete. The desktop uses the guest framebuffer fallback; an unverified HD overlay that obscured the HUD has been removed. See [HD asset strategy & presentation](docs/sot/hd-assets-strategy.md). |
 | ARM64, Android, and Switch | Build infrastructure exists; successful gameplay and Switch compatibility are not established. |
 
 ### Immediate blocker
@@ -171,4 +171,4 @@ The CMake option `AOE2_GAME_TTY` defaults to `ON`, independently of debug tracin
 - [KCET boundary replacement](docs/adr/0001-kcet-boundary-replacement.md) — accepted replacement strategy and input-hook contracts.
 - [Prior art and reuse](docs/sot/prior-art-and-reuse.md) — permissions, licenses, graphics decision, and Docker-only Switch toolchain policy.
 - [Runtime linkage audit](docs/runtime-linkage-audit.md) — runtime integration analysis.
-- [Optional HD asset tooling](docs/hd-assets.md) — local asset import and inventory, separate from the original PS2 boot milestone.
+- [HD asset tooling and strategy](docs/sot/hd-assets-strategy.md) — local asset import, inventory, and presentation pipeline.
