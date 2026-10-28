@@ -103,6 +103,24 @@ resolution ratio per asset, not 1080p-native detail. Sharpness at 1080p must als
 come from presenting without bilinear upscaling, or from rendering a larger view
 of the map.
 
+## Draw areas (map view size)
+
+The trace also dumps each draw area passed to the shape draw. The mission uses two:
+
+| Area | Buffer | Width × height | Pitch | Clip |
+| :--- | :--- | :--- | :--- | :--- |
+| screen | (16-bit) | 640 × 448 | 0x500 | (0,0)–(639,447) |
+| map view | `0x01F98000` | 640 × 262 | 640 | (0,0)–(639,261) |
+
+The map view panel creates its area at initialization. It takes one from the area
+pool, then calls the area initializer with the panel's own width and height (panel
+`+0x14`/`+0x18`) and the fixed buffer `0x01F98000`. The visible map size is
+therefore the panel rectangle. A PC-like larger view needs three things: a larger
+panel rectangle, a buffer big enough for it, and a presentation path that does not
+go through the GS (whose texture width limit is 1024). The current buffer is
+followed at `0x01FC2800` by another surface. Space for a larger buffer has not been
+found yet.
+
 ## Consequences for the HD plan
 
 1. Presentation and pointing share one transform (Phase 1): done in code; see

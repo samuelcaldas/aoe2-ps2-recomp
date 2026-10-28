@@ -49,6 +49,42 @@ verificado. O fallback continua sendo o framebuffer guest, nunca overlay decorat
 - Cada hook replica o comportamento original (chama o original) até a paridade 1×
   ser provada. O framebuffer guest é sempre o oráculo e o fallback.
 
+## Estado e redirecionamento (2026-10-28)
+
+- Fase 0 concluída (`ce7ed67`, `4cddf2d`, `36c8784`; `docs/hd-render-evidence.md`).
+  A composição é híbrida: o playfield 640×262 é composto por software em RAM
+  `0x01F98C80` por rasterizador de spans. Texto e HUD vêm em uploads por elemento.
+  A tela lógica 640×448 é esticada no frame PAL 640×512.
+- Fase 1 concluída: transformação única e calibração em dois pontos com erro (0,0).
+- O ponto de corte semântico foi achado: `func_0025E640(shape, area, x, y, frame,
+  flags)`, com o loader `func_0025D6D0(shape, nome, id)`. Os IDs do PS2 seguem a
+  numeração do PC.
+- Os assets do HD Edition 2013 são os SLPs do PC na resolução original. Trocar
+  sprites com a vista mantida em 640×448 não dá detalhe de 1080p.
+- **Decisão do usuário (2026-10-28): vista ampliada tipo PC.** O mapa passa a ser
+  renderizado na resolução da janela, com sprites 1:1, e o HUD é recomposto. Essa
+  meta substitui as Fases 2–4 abaixo pelas Fases A–D:
+
+### Fase A — Viewport do motor configurável
+Localizar onde o motor define a área do mapa (largura/altura da vista 640×262 em
+y=40, o retângulo de clip do rasterizador `D_004E30DC..E8` no decomp e o buffer
+`0x01F98C80`). Fazer o motor compor uma vista maior num buffer guest maior. A
+simulação não muda: só a área visível. Oráculo: com o tamanho original, o frame deve
+ser idêntico ao atual.
+
+### Fase B — Apresentação direta do playfield
+O host converte o buffer de 8 bits do playfield, com a paleta ativa, para RGBA e o
+apresenta 1:1 na janela. Esse caminho contorna o limite de 1024 px de textura e os
+4 MB de VRAM do GS. O HUD e o texto do frame guest continuam até a Fase C.
+
+### Fase C — HUD recomposto
+Capturar os desenhos de HUD no ponto de corte de shapes e de texto e desenhá-los
+ancorados às bordas da janela. Usar os SLPs de interface do HD quando o ID existir e
+a escala for isotrópica. A entrada usa a mesma transformação por região.
+
+### Fase D — Texto TTF, GLES3, 720p e Switch
+Como na Fase 5 original.
+
 ## Fase 0 — Evidência (diagnóstico, sem mudança de comportamento)
 
 Objetivo: decidir o ponto de captura e a geometria com dados de gameplay.
