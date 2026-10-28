@@ -56,6 +56,10 @@ SCENARIOS = {
         ("mission", "key", "shift", 40),
     ],
 }
+# Logical points checked by tools/check_pointer_calibration.py (run with AOE2_LOG_POINTER=1).
+CALIBRATION_POINTS = [(100, 120), (520, 380)]
+SCENARIOS["calibration"] = SCENARIOS["campaign"] + [
+    (f"calib-{x}-{y}", "move", (x, y), 4) for x, y in CALIBRATION_POINTS]
 
 
 def run(command: list, **options) -> subprocess.CompletedProcess:
@@ -94,6 +98,8 @@ def do_step(window: str, action: str, argument, settle: int) -> None:
         time.sleep(1.5)
         run(["xdotool", "mousedown", "1"]); time.sleep(0.8)
         run(["xdotool", "mouseup", "1"])
+    elif action == "move":
+        run(["xdotool", "mousemove", "--window", window, str(argument[0]), str(argument[1])])
     else:
         raise ValueError(f"unknown action {action!r}")
     time.sleep(settle)
@@ -158,7 +164,7 @@ def main(argv: list | None = None) -> int:
         run(["xdotool", "windowfocus", window])
         for name, action, argument, settle in SCENARIOS[args.scenario]:
             scaled_arg = argument
-            if action == "click" and isinstance(argument, tuple):
+            if action in ("click", "move") and isinstance(argument, tuple):
                 window_x, window_y = to_window(argument, (win_w, win_h))
                 scaled_arg = (int(window_x), int(window_y))
             do_step(window, action, scaled_arg, settle)

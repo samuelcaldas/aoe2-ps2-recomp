@@ -50,6 +50,34 @@ different routine. The host mapping is window → aspect-fit 640×512 frame →
 640×448 logical (`aoe2::input::PresentationTransform::LogicalFillsFrame`;
 `tools/presentation_geometry.py` for the scenario driver).
 
+### Two-point calibration (1920×1080)
+
+`AOE2_LOG_POINTER=1 python3 tools/drive_desktop_scenario.py calibration --resolution 1920x1080`
+drives the campaign into the mission and then places the host pointer at the
+window positions of logical points (100, 120) and (520, 380).
+`tools/check_pointer_calibration.py` reports a settled guest-cursor error of
+**(0, 0)** for both points. In the capture of the second point, the cursor tip is at
+about window (1383, 915) against the predicted (1382, 916), and the game shows its
+"Mini-map" tooltip for the hovered panel.
+
+## Playfield buffer source
+
+With patch `0009` reporting large GIF DMA payloads, the 640×262 PSMT8 playfield
+upload comes from guest RAM `0x01F98C80` (10,480 quadwords, twice per frame). A
+394×198 surface upload comes from `0x01FC2800`, the fixed surface address passed
+by the decomp's `func_001889a0` (`../aoe` `src/render/render_manager_surface.cpp`).
+
+## Playfield buffer writers
+
+`PS2X_WRITE_WATCH=0x1F98C80-0x1FC1C80 PS2X_WRITE_WATCH_SUMMARY=20000` (patch
+`0011`) aggregates CPU stores into the playfield buffer by guest pc. In the mission,
+all writes come from three byte-pixel span copiers (generated `FUN_001536a0`,
+`FUN_00154310`, `FUN_00153450`). The span rasterizer `func_0017e350` calls them
+(`../aoe` `src/trade/trade_action_stream_raster.cpp`, commit `c3233fd4f`). It walks a
+per-row span list and clips against a global clip rectangle. That rasterizer sits
+below shape identity: the shape/frame/player parameters must be captured at its
+callers.
+
 ## Consequences for the HD plan
 
 1. Presentation and pointing share one transform (Phase 1): done in code; see

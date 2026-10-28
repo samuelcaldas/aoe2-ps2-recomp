@@ -7,7 +7,9 @@
 #include "raylib.h"
 #include "runtime/ps2_memory.h"
 
+#include <algorithm>
 #include <atomic>
+#include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <mutex>
@@ -71,6 +73,17 @@ void LogButtonChange(uint32_t buttons) {
     last_buttons = buttons;
 }
 
+// AOE2_LOG_POINTER=1: one line per change of window position or guest cursor (calibration evidence).
+void LogPointer(Vector2 window, aoe2::input::GuestPoint target, int32_t cursor_x, int32_t cursor_y) {
+    static const bool enabled = std::getenv("AOE2_LOG_POINTER") != nullptr;
+    static int32_t last[4] = {-1, -1, -1, -1};
+    const int32_t now[4] = {static_cast<int32_t>(window.x), static_cast<int32_t>(window.y), cursor_x, cursor_y};
+    if (!enabled || std::equal(now, now + 4, last)) return;
+    std::copy(now, now + 4, last);
+    std::cerr << "[host-pointer] window=" << now[0] << "," << now[1] << " target=" << target.x << "," << target.y
+              << " cursor=" << cursor_x << "," << cursor_y << std::endl;
+}
+
 // The game's 640x448 screen fills whatever frame the runtime draws (640x512 once PAL display is set).
 aoe2::input::PresentationTransform CurrentPresentation() {
     uint32_t width = 0;
@@ -87,8 +100,10 @@ aoe2::input::PresentationTransform CurrentPresentation() {
 // Absolute pointing: the host pointer's place in the window is where the game's cursor should be.
 void SteerGuestCursor(uint8_t* rdram, Vector2 position, uint32_t buttons) {
     const auto target = CurrentPresentation().ToLogical(position.x, position.y);
-    g_mouse_model.SteerTo(target.x - static_cast<float>(LoadGuestInt(rdram, kGuestCursorX)),
-                          target.y - static_cast<float>(LoadGuestInt(rdram, kGuestCursorY)), buttons);
+    const int32_t cursor_x = LoadGuestInt(rdram, kGuestCursorX);
+    const int32_t cursor_y = LoadGuestInt(rdram, kGuestCursorY);
+    LogPointer(position, target, cursor_x, cursor_y);
+    g_mouse_model.SteerTo(target.x - static_cast<float>(cursor_x), target.y - static_cast<float>(cursor_y), buttons);
 }
 }  // namespace
 
