@@ -91,17 +91,25 @@ flag graphics `#2296`, `#4652`, `#3578`–`#3580`, and PS2-only ids in the 56xxx
 `valid`, so the second argument is not always the file name; the ids are
 consistent.
 
-**The PS2 resource ids follow the PC numbering.** The local HD Edition install has
+**The PS2 resource ids match the PC numbering (hypothesis, supported by 1341 shared ids
+with equal or near-equal frame counts).** The local HD Edition install has
 `drs/graphics/2296.slp`, `4652.slp`, `3580.slp` and `drs/interface/50100.slp`,
 `50232.slp`, `50242.slp`. It has no 56xxx files (PS2-specific) and no 15xxx SLPs:
 HD terrain is under `terrain/` in another format.
 
-**HD Edition 2013 assets are the PC originals at PC resolution.** Unit frames are
-about 54×128 to 119×165 pixels. Interface screens are 800×600, against the PS2
-logical 640×448. Replacing PS2 shapes by these files gains at most the PC/PS2
-resolution ratio per asset, not 1080p-native detail. Sharpness at 1080p must also
-come from presenting without bilinear upscaling, or from rendering a larger view
-of the map.
+**CORRECTION (2026-10-28) — the PS2 sprites are smaller than the HD ones.**
+`game/SLES-50282/ALL_DATA.BIN` is a standard DRS container (`1.00tribe`, one `slp `
+table, 1347 entries; the decomp's `docs/audio_and_asset_pipeline.md` says the same).
+Its shapes use a PS2 variant tag `4.2k` (header: tag, u32 frame count, then 16-byte
+frame entries `{u32 cmd, u32 outline, u16 w, u16 h, ...}`). Comparing frame sizes
+with the HD Edition files for the 1341 ids present in both: **HD/PS2 median size
+ratio is 1.58 (width) and 1.59 (height)**, and 629 of them have the same frame
+count. Example: id 2296 frame 0 is 53×35 on the PS2 and 85×56 in the HD files; id
+4652 is 74×89 versus 119×143. The PS2 build shipped PC art scaled by about 0.625;
+the HD files are the full-size PC art. The earlier "no gain" reading, which used
+only the 800×600 interface screens, was wrong for unit, building and terrain
+sprites. Interface screens still differ anisotropically (800/640 = 1.25 vs
+600/448 = 1.34), so only small, aspect-matching HUD pieces qualify.
 
 ## Draw areas (map view size)
 

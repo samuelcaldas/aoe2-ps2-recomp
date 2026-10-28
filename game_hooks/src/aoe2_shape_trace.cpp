@@ -59,9 +59,9 @@ void ObservedLoad(uint8_t* rdram, R5900Context* ctx, PS2Runtime* runtime) {
 // the first bytes there (looking for the SLP "2.0N" header).
 void DumpShapeOnce(uint8_t* rdram, uint32_t shape) {
     static std::vector<uint32_t> seen;
-    if (std::find(seen.begin(), seen.end(), shape) != seen.end() || seen.size() >= 24) return;
+    if (std::find(seen.begin(), seen.end(), shape) != seen.end() || seen.size() >= 400) return;
     seen.push_back(shape);
-    std::cout << "[shape-trace] shape=0x" << std::hex << shape;
+    std::cout << "[shape-trace] shape=0x" << std::hex << shape << " name=" << g_model.NameOf(shape);
     for (uint32_t offset = 0; offset < 0x14; offset += 4) {
         uint32_t word = 0;
         if (const uint8_t* source = getConstMemPtr(rdram, shape + offset)) std::memcpy(&word, source, sizeof(word));
@@ -69,7 +69,7 @@ void DumpShapeOnce(uint8_t* rdram, uint32_t shape) {
         const uint8_t* target = (word > 0x100000 && word < 0x2000000) ? getConstMemPtr(rdram, word) : nullptr;
         if (target != nullptr && offset == 8) {
             std::cout << "[";
-            for (int i = 0; i < 48; ++i) std::cout << (i ? " " : "") << static_cast<uint32_t>(target[i]);
+            for (int i = 0; i < 160; ++i) std::cout << (i ? " " : "") << static_cast<uint32_t>(target[i]);
             std::cout << "]";
         }
     }

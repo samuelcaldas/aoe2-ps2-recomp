@@ -33,6 +33,8 @@ public:
         return out.str();
     }
 
+    std::string NameOf(uint32_t shape) const { return Identity(shape); }
+
     uint64_t draws() const { return draws_; }
 
 private:
