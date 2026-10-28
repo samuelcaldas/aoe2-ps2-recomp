@@ -50,9 +50,8 @@ Counts are occurrences outside `third_party/`, `generated/` and `build/`:
 | 0009 | `gs_cpu_backend.cpp`, `gs_frontend.cpp`, `ps2_memory.cpp`, new `gs_frame_stats.h` | `PS2X_GS_FRAME_STATS` evidence | diagnostics |
 | 0010 | `ps2_runtime.h`, `ps2_runtime.cpp` | publish presented frame size | yes (mouse mapping) |
 | 0011 | `ps2_runtime.cpp`, new `write_watch_summary.h` | `PS2X_WRITE_WATCH_SUMMARY` | diagnostics |
-| 0012 | `ps2_runtime.cpp` | `PS2X_HEAP_PROBE` in `guestMalloc` | **no effect**: the game does not allocate through that path; committed by another session in `e8a6f08`, removal pending the user's decision |
 
-Patches 0008 and 0012 have no current use. Removing either is a decision for the owner (see `docs/hd-render-evidence.md`).
+Patch 0008 has no current use. Deciding its retention is a decision for the owner (see `docs/hd-render-evidence.md`).
 
 ## 5. Memory and presentation seams (the parts a 64 MB change would touch)
 
@@ -80,7 +79,7 @@ python3 -m unittest tests.test_runtime_patches
 
 ## 7. Open items before removing the 32 MB limit
 
-1. Decide patches `0008` and `0012` (keep or remove).
+1. Decide patch `0008` (keep or remove).
 2. Confirm the guest code never relies on address wrap-around: no generated code references addresses at or above `0x02000000`, and no `0x1FFFFFF` masks appear (checked 2026-10-28).
 3. Measure the real guest RAM budget, including DMA-written regions, since the write-watch measurement does not see DMA.
 4. Decide the target map view size from the PC reference (demo binary and partial decomp), not from the PS2 layout.
