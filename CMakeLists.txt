@@ -81,6 +81,9 @@ target_include_directories(aoe2_interfaces PUBLIC
     gpu/include
     tests/cpp
 )
+if(NINTENDO_SWITCH)
+    target_include_directories(aoe2_interfaces PUBLIC /opt/devkitpro/portlibs/switch/include)
+endif()
 
 add_executable(aoe2_kt_mouse_model_tests tests/cpp/kt_mouse_model_tests.cpp)
 target_link_libraries(aoe2_kt_mouse_model_tests PRIVATE aoe2_interfaces)

@@ -73,10 +73,18 @@ class TestSwitchValidationScript(unittest.TestCase):
             )
             self.assertFalse(validation.evidence_passed(True, PROGRESSING_LOG, shots, magick))
 
-    def test_preflight_fails_fast_on_missing_keys_or_binary(self):
+    def test_preflight_fails_fast_on_missing_binary(self):
         with tempfile.TemporaryDirectory() as directory:
             fake_keys = Path(directory) / "prod.keys"
-            with self.assertRaises(validation.PreflightError):
+            with patch.object(validation, "NRO_PATH", "nonexistent/aoe2_game.nro"):
+                with self.assertRaises(validation.PreflightError):
+                    validation.check_preflight(keys_path=fake_keys)
+
+    def test_preflight_allows_missing_keys_for_homebrew(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fake_keys = Path(directory) / "nonexistent.keys"
+            with patch.object(validation, "NRO_PATH", "tools/validate_switch.py"):
+                # Should not raise PreflightError when binary exists, even if keys are absent
                 validation.check_preflight(keys_path=fake_keys)
 
 

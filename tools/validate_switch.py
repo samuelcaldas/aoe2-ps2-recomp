@@ -102,8 +102,8 @@ def check_preflight(keys_path: Path = REPO_ROOT / PROD_KEYS_DEFAULT) -> None:
     nro = REPO_ROOT / NRO_PATH
     if not nro.exists():
         raise PreflightError(f"missing Switch binary {nro.relative_to(REPO_ROOT)}; run python3 tools/docker_build.py --platform switch")
-    if not keys_path.exists():
-        raise PreflightError(f"missing Switch cryptographic keys at {keys_path.relative_to(REPO_ROOT) if keys_path.is_relative_to(REPO_ROOT) else keys_path}; copy dumped prod.keys there")
+    if keys_path is not None and not keys_path.exists():
+        print(f"INFO: Switch prod.keys not found at {keys_path.relative_to(REPO_ROOT) if keys_path.is_relative_to(REPO_ROOT) else keys_path}; proceeding with homebrew NRO without keys", flush=True)
 
 
 def main(argv: list | None = None) -> int:
