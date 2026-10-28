@@ -140,6 +140,10 @@ add_executable(aoe2_input_tests
 target_link_libraries(aoe2_input_tests PRIVATE aoe2_interfaces)
 add_test(NAME input_tests COMMAND aoe2_input_tests)
 
+add_executable(aoe2_guest_memory_tests tests/cpp/guest_memory_tests.cpp)
+target_link_libraries(aoe2_guest_memory_tests PRIVATE aoe2_interfaces)
+add_test(NAME guest_memory COMMAND aoe2_guest_memory_tests)
+
 # Shared window <-> GS frame <-> logical screen presentation transform
 add_executable(aoe2_presentation_transform_tests tests/cpp/presentation_transform_tests.cpp)
 target_link_libraries(aoe2_presentation_transform_tests PRIVATE aoe2_interfaces)

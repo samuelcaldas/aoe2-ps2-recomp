@@ -38,6 +38,7 @@ flowchart TD
 6. **[`docs/sot/prior-art-and-reuse.md`](sot/prior-art-and-reuse.md)**: Provenance, license compatibility, third-party dependency rules, and authorized decompilation reuse permissions.
 7. **[`docs/desktop-runtime-probe.md`](desktop-runtime-probe.md)**: Desktop Linux bring-up probe results, runtime initialization, and dynamic overlay milestones.
 8. **[`docs/ghidra-ps2recomp-workflow.md`](ghidra-ps2recomp-workflow.md)**: Headless Ghidra export, TOML configuration, and PS2Recomp codegen pipeline.
+9. **[`docs/multiplatform-build-isolation.md`](multiplatform-build-isolation.md)**: Multi-platform build artifact isolation and target switching strategy (Desktop, Nintendo Switch, Android).
 
 ---
 

@@ -172,3 +172,4 @@ The CMake option `AOE2_GAME_TTY` defaults to `ON`, independently of debug tracin
 - [Prior art and reuse](docs/sot/prior-art-and-reuse.md) — permissions, licenses, graphics decision, and Docker-only Switch toolchain policy.
 - [Runtime linkage audit](docs/runtime-linkage-audit.md) — runtime integration analysis.
 - [HD asset tooling and strategy](docs/sot/hd-assets-strategy.md) — local asset import, inventory, and presentation pipeline.
+- [Multi-platform build artifact isolation](docs/multiplatform-build-isolation.md) — build directory partitioning across Desktop, Switch, and Android for zero-collision incremental target switching.
