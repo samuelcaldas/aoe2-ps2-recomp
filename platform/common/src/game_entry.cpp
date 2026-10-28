@@ -14,6 +14,11 @@ std::filesystem::path game_path(int count, char* arguments[]) {
 #if defined(PS2X_DEFAULT_BOOT_ELF)
     const std::filesystem::path configured = PS2X_DEFAULT_BOOT_ELF;
     if (configured.is_absolute()) return configured;
+#if defined(__SWITCH__)
+    // On Nintendo Switch, check sdmc:/switch/aoe2/<configured> first
+    const auto sdmc_candidate = std::filesystem::path("sdmc:/switch/aoe2") / configured;
+    if (std::filesystem::exists(sdmc_candidate)) return sdmc_candidate;
+#endif
     return (std::filesystem::current_path() / configured).lexically_normal();
 #else
     throw std::runtime_error("Pass the guest ELF as argv[1] or define PS2X_DEFAULT_BOOT_ELF");
@@ -21,11 +26,18 @@ std::filesystem::path game_path(int count, char* arguments[]) {
 }
 
 std::filesystem::path disc_image_path(int count, char* arguments[]) {
-    if (count < 3 || !arguments[2] || arguments[2][0] == '\0') return {};
-    const std::filesystem::path image = arguments[2];
-    if (!std::filesystem::is_regular_file(image))
-        throw std::runtime_error("Disc image not found: " + image.string());
-    return image;
+    if (count >= 3 && arguments[2] && arguments[2][0] != '\0') {
+        const std::filesystem::path image = arguments[2];
+        if (!std::filesystem::is_regular_file(image))
+            throw std::runtime_error("Disc image not found: " + image.string());
+        return image;
+    }
+#if defined(__SWITCH__)
+    // Check default disc image location on Switch SDMC
+    const auto default_iso = std::filesystem::path("sdmc:/switch/aoe2/aoe2.iso");
+    if (std::filesystem::is_regular_file(default_iso)) return default_iso;
+#endif
+    return {};
 }
 
 std::string game_window_title(const std::filesystem::path& path) {

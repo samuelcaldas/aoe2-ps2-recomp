@@ -2,6 +2,9 @@
 #include "game_entry.hpp"
 #include <aoe2/runtime/deci2_runtime_session.hpp>
 #include "ps2_runtime.h"
+#if defined(__SWITCH__)
+#include <aoe2/platform/switch/switch_platform.hpp>
+#endif
 #ifdef _DEBUG
 #include "ps2_log.h"
 #endif
@@ -39,6 +42,9 @@ void use_disc_image(const std::filesystem::path& image) {
 }
 
 int main(int count, char* arguments[]) {
+#if defined(__SWITCH__)
+    aoe2::platform::switch_env::SwitchPlatform::Instance().Initialize(count, arguments);
+#endif
     try {
         aoe2::platform::initialize_game_logging();
         run_game(aoe2::platform::game_path(count, arguments), aoe2::platform::disc_image_path(count, arguments));
@@ -47,5 +53,8 @@ int main(int count, char* arguments[]) {
     } catch (...) {
         std::cerr << "[main] fatal exception: unknown\n";
     }
+#if defined(__SWITCH__)
+    aoe2::platform::switch_env::SwitchPlatform::Instance().Shutdown();
+#endif
     aoe2::platform::finish_game_process(1);
 }

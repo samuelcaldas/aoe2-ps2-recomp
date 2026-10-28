@@ -7,8 +7,8 @@
 
 namespace aoe2::runtime {
 
-// Standard PS2 EE Main RAM is 32 MB
-constexpr size_t kEeRamSize = 32 * 1024 * 1024;
+// Expanded EE Main RAM (64 MB)
+constexpr size_t kEeRamSize = 64 * 1024 * 1024;
 
 class GuestMemory {
 public:

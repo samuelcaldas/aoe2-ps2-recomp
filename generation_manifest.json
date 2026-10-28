@@ -2,7 +2,7 @@
   "target_id": "SLES-50282",
   "elf_sha1": "f478e19f2059d52899b691483ef5c7522e30e17c",
   "function_map_source": "ghidra_export",
-  "ps2recomp_commit": "eb8688b2fd191129f103a39543002c005b33409c",
+  "ps2recomp_commit": "dfae1cb9d0c02d52e027fa0d3c533638b8fca988",
   "ghidra_version": "ghidra_12.1.4_PUBLIC",
   "java_version": "openjdk version \"25.0.4.1\" 2026-08-18",
   "exporter_script": "third_party/PS2Recomp/ps2xRecomp/tools/ghidra/ExportPS2Functions.java",

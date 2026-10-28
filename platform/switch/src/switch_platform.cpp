@@ -35,11 +35,25 @@ bool SwitchPlatform::Initialize(int argc, char* argv[]) {
         std::cerr << "[SwitchPlatform] Warning: fsdevMountSdmc() failed with code: " << rc << '\n';
     }
 
+    // Attempt to mount RomFS (embedded in NRO or program)
+    rc = romfsInit();
+    if (R_FAILED(rc)) {
+        std::cerr << "[SwitchPlatform] Notice: romfsInit() returned " << rc << " (using SDMC assets)\n";
+    }
+
     // Initialize default operation mode from Horizon OS
     AppletOperationMode op_mode = appletGetOperationMode();
     operation_mode_ = (op_mode == AppletOperationMode_Console) 
         ? ConsoleOperationMode::Docked 
         : ConsoleOperationMode::Handheld;
+
+    // Configure default native window display dimensions according to operation mode
+    NWindow* win = nwindowGetDefault();
+    if (win) {
+        u32 width = (operation_mode_ == ConsoleOperationMode::Docked) ? 1920 : 1280;
+        u32 height = (operation_mode_ == ConsoleOperationMode::Docked) ? 1080 : 720;
+        nwindowSetDimensions(win, width, height);
+    }
 
     // Check memory mode on boot
     SwitchMemoryStatus mem = CheckMemoryStatus();
@@ -60,6 +74,7 @@ void SwitchPlatform::Shutdown() {
     }
 
 #if defined(__SWITCH__)
+    romfsExit();
     fsdevUnmountAll();
 #endif
 

@@ -11,6 +11,9 @@
 #include <cstring>
 #include <thread>
 #include <unistd.h>
+#elif defined(__SWITCH__)
+#include <switch.h>
+#endif
 
 namespace {
 int logcat_pipe[2] = {-1, -1};
@@ -54,6 +57,9 @@ namespace aoe2::platform {
 void initialize_game_logging() {
 #if defined(__ANDROID__)
     redirect_logcat();
+#elif defined(__SWITCH__)
+    // Route stderr / debug logs to svcOutputDebugString for capture by Ryujinx / nxlink
+    consoleDebugInit(debugDevice_SVC);
 #endif
     std::set_terminate([] {
         std::cerr << "[terminate] unhandled exception\n";
