@@ -32,7 +32,7 @@ python3 tools/validate_desktop.py --docker --run-seconds 90 --interval 15
 python3 tools/validate_desktop.py --docker --jobs 8
 ```
 - **Container Name**: `aoe2-validate-desktop`
-- **Output Artifacts**: Validation logs, ctest reports, probe status in `build/docker-desktop/`.
+- **Output Artifacts**: Validation logs and ctest reports in `build/docker-desktop/` and `build/desktop-validation/`; visual screenshots in `.playwright-mcp/pc/`.
 
 ### 2. Nintendo Switch Headless Validation
 Runs the compiled Switch NRO inside the `aoe2-validate-switch` container using headless Ryujinx on a virtual X11 display:
@@ -42,7 +42,7 @@ Runs the compiled Switch NRO inside the `aoe2-validate-switch` container using h
 python3 tools/validate_switch.py --run-seconds 60 --timeout 120
 ```
 - **Container Name**: `aoe2-validate-switch`
-- **Telemetry & Logs**: Captures Ryujinx execution logs, Horizon OS service calls, and frame rates in `build/docker-switch/switch_validation.log`.
+- **Telemetry & Logs**: Captures Ryujinx execution logs, Horizon OS service calls, and frame rates in `build/switch-validation/run.log`; timed screenshots in `.playwright-mcp/switch/`.
 
 ### 3. Nintendo Switch Live Visual Inspection (noVNC)
 Starts a live visual inspection session with Ryujinx running inside the `aoe2-view-switch` container, streaming the GUI over WebSockets/noVNC to a host browser:
@@ -66,7 +66,7 @@ python3 tools/validate_android.py --apk-only
 python3 tools/validate_android.py
 ```
 - **Container Name**: `aoe2-validate-android`
-- **Output Artifacts**: `build/docker-android/aoe2-recomp-debug.apk`.
+- **Output Artifacts**: `build/docker-android/aoe2-recomp-debug.apk`, logcat in `build/android-validation/logcat.txt`, timed screenshots in `.playwright-mcp/android/`.
 
 ## Container Isolation & Cleanliness
 
