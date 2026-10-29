@@ -36,6 +36,7 @@ DEVICE_GAME_DIR = f"/storage/emulated/0/Android/data/{PACKAGE}/files"
 APK = "build/docker-android/aoe2-recomp-debug.apk"
 GAME_DIR = "game/SLES-50282"
 EVIDENCE_DIR = "build/android-validation"
+SCREENSHOT_DIR = ".playwright-mcp/android"
 SYSTEM_IMAGE = "system-images;android-34;default;x86_64"
 SCREENSHOT_INTERVAL = 15
 CONTAINER_NAME = "aoe2-validate-android"
@@ -63,10 +64,11 @@ def ensure_container_clean(name: str) -> None:
 def emulator_script(run_seconds: int, interval: int = SCREENSHOT_INTERVAL) -> str:
     """Shell script run inside the container; writes raw evidence for the host to judge."""
     evidence = f"{CONTAINER_ROOT}/{EVIDENCE_DIR}"
+    shots_dir = f"{CONTAINER_ROOT}/{SCREENSHOT_DIR}"
     shots = max(1, run_seconds // interval)
     return "\n".join([
         "set -euo pipefail",
-        f"mkdir -p {evidence}",
+        f"mkdir -p {evidence} {shots_dir}",
         f"echo no | avdmanager create avd -f -n aoe2 -k {shlex.quote(SYSTEM_IMAGE)} > /dev/null",
         "emulator -avd aoe2 -no-window -no-audio -no-boot-anim -no-snapshot -no-metrics -gpu swiftshader_indirect "
         "-memory 4096 -cores 4 > /tmp/emulator.log 2>&1 &",
@@ -81,7 +83,7 @@ def emulator_script(run_seconds: int, interval: int = SCREENSHOT_INTERVAL) -> st
         "adb logcat -c",
         f"adb shell am start -n {PACKAGE}/android.app.NativeActivity",
         f"for shot in $(seq 1 {shots}); do sleep {interval}; "
-        f"adb exec-out screencap -p > {evidence}/screen-$(printf '%03d' \"$shot\").png; done",
+        f"adb exec-out screencap -p > {shots_dir}/screen-$(printf '%03d' \"$shot\").png; done",
         f"adb logcat -d > {evidence}/logcat.txt",
         f"if adb shell pidof {PACKAGE} > /dev/null; then echo yes > {evidence}/alive.txt; "
         f"else echo no > {evidence}/alive.txt; fi",
@@ -136,11 +138,15 @@ def main(argv: list | None = None) -> int:
     ensure_container_clean(CONTAINER_NAME)
     subprocess.run(cmd)
     evidence = REPO_ROOT / EVIDENCE_DIR
+    screenshots_path = REPO_ROOT / SCREENSHOT_DIR
+    screenshots_path.mkdir(parents=True, exist_ok=True)
     alive_file = evidence / "alive.txt"
     logcat_file = evidence / "logcat.txt"
     alive = alive_file.is_file() and alive_file.read_text().strip() == "yes"
     logcat = logcat_file.read_text(errors="replace") if logcat_file.is_file() else ""
-    screenshots = sorted(str(path) for path in evidence.glob("screen-*.png"))
+    screenshots = sorted(str(path) for path in screenshots_path.glob("screen-*.png"))
+    if not screenshots:
+        screenshots = sorted(str(path) for path in evidence.glob("screen-*.png"))
     passed = evidence_passed(alive, logcat, screenshots)
     (evidence / "result.txt").write_text("PASS\n" if passed else "FAIL\n", encoding="utf-8")
     print(f"Android validation: {'PASS' if passed else 'FAIL'} (evidence in {EVIDENCE_DIR}/)")

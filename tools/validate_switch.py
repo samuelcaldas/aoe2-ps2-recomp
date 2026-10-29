@@ -38,6 +38,7 @@ DOCKER_CONTEXT = "docker-dev"
 NRO_PATH = "build/docker-switch/aoe2_game.nro"
 PROD_KEYS_DEFAULT = "game/switch/prod.keys"
 EVIDENCE_DIR = "build/switch-validation"
+SCREENSHOT_DIR = ".playwright-mcp/switch"
 SCREENSHOT_INTERVAL = 15
 DISPLAY = ":99"
 MEMORY_LIMIT = "12g"
@@ -70,13 +71,14 @@ class PreflightError(RuntimeError):
 def emulator_script(run_seconds: int, interval: int = SCREENSHOT_INTERVAL, nro: str = NRO_PATH) -> str:
     """Shell script run inside the container; writes raw evidence for the host to judge."""
     evidence = f"{CONTAINER_ROOT}/{EVIDENCE_DIR}"
+    shots_dir = f"{CONTAINER_ROOT}/{SCREENSHOT_DIR}"
     shots = max(1, run_seconds // interval)
     config_dir = f"{evidence}/ryujinx-data"
     system_dir = f"{config_dir}/system"
 
     return "\n".join([
         "set -euo pipefail",
-        f"mkdir -p {evidence} {system_dir}",
+        f"mkdir -p {evidence} {shots_dir} {system_dir}",
         f"if [ -f {CONTAINER_ROOT}/{PROD_KEYS_DEFAULT} ]; then cp -f {CONTAINER_ROOT}/{PROD_KEYS_DEFAULT} {system_dir}/prod.keys; fi",
         f"Xvfb {DISPLAY} -screen 0 1280x720x24 > /dev/null 2>&1 &",
         "XVFB_PID=$!",
@@ -94,7 +96,7 @@ def emulator_script(run_seconds: int, interval: int = SCREENSHOT_INTERVAL, nro: 
         f"\"$RYUJINX_BIN\" --root-data-dir {config_dir} {CONTAINER_ROOT}/{nro} > {evidence}/run.log 2>&1 &",
         "EMU_PID=$!",
         f"for shot in $(seq 1 {shots}); do sleep {interval}; "
-        f"xwd -root -display {DISPLAY} 2>/dev/null | convert xwd:- {evidence}/screen-$(printf '%03d' \"$shot\").png 2>/dev/null || true; done",
+        f"xwd -root -display {DISPLAY} 2>/dev/null | convert xwd:- {shots_dir}/screen-$(printf '%03d' \"$shot\").png 2>/dev/null || true; done",
         f"if kill -0 $EMU_PID 2>/dev/null; then echo yes > {evidence}/alive.txt; "
         f"else echo no > {evidence}/alive.txt; fi",
         "kill $EMU_PID 2>/dev/null || true",
@@ -169,11 +171,15 @@ def main(argv: list | None = None) -> int:
         return result.returncode
 
     evidence_path = REPO_ROOT / EVIDENCE_DIR
+    screenshots_path = REPO_ROOT / SCREENSHOT_DIR
+    screenshots_path.mkdir(parents=True, exist_ok=True)
     alive_file = evidence_path / "alive.txt"
     log_file = evidence_path / "run.log"
     alive = alive_file.read_text().strip() == "yes" if alive_file.exists() else False
     log = log_file.read_text(errors="replace") if log_file.exists() else ""
-    screenshots = sorted(str(p) for p in evidence_path.glob("screen-*.png"))
+    screenshots = sorted(str(p) for p in screenshots_path.glob("screen-*.png"))
+    if not screenshots:
+        screenshots = sorted(str(p) for p in evidence_path.glob("screen-*.png"))
 
     pass_verdict = evidence_passed(alive, log, screenshots)
     verdict_text = "PASS\n" if pass_verdict else "FAIL\n"

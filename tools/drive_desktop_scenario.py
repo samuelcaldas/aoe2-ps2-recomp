@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """Drive the desktop diagnostic build through a named UI scenario, idempotently.
 
-Every run starts from the same state: any previous game/Xvfb started by this tool is
-stopped, the memory-card root is reset (unless --keep-card), a fresh Xvfb and game are
-launched, and the scenario's steps run at fixed logical-screen points (640x448), mapped to the
+Every run starts with a fresh Xvfb and game; the memory-card root is reset unless --keep-card.
+The scenario's steps run at fixed logical-screen points (640x448), mapped to the
 window through tools/presentation_geometry.py.
-Screenshots land in .playwright-mcp/ as <scenario>-<step>.png.
+Screenshots land in .playwright-mcp/pc/ as <scenario>-<step>.png.
 """
 from __future__ import annotations
 
 import argparse
 import os
+import select
 import shutil
 import subprocess
 import sys
@@ -25,7 +25,7 @@ from tools.validate_desktop import (  # noqa: E402
     EVIDENCE_DIR, SCREENSHOT_DIR, capture_screenshot, game_command, stop_process,
 )
 
-DISPLAY = ":99"  # capture_screenshot reads this display
+DISPLAY = ""
 CARD_ROOT = REPO_ROOT / "game" / "SLES-50282" / "mc0"
 BOOT_SECONDS = 13
 WINDOW_SIZE = "640x448"
@@ -38,6 +38,12 @@ BOOT_TO_MENU = [
     ("osk-letter-a", "click", (176, 64), 4),
     ("osk-enter", "click", (470, 151), 4),
     ("card-ok", "click", (251, 312), 10),
+    ("profile-new-player", "click", (251, 350), 5),
+    ("profile-name-field", "click", (335, 237), 3),
+    ("profile-name-text", "text", "AOK", 3),
+    ("profile-submit", "click", (245, 315), 5),
+    ("profile-confirm", "click", (245, 315), 15),
+    ("profile-settle", "wait", None, 15),
 ]
 SCENARIOS = {
     "main-menu": BOOT_TO_MENU,
@@ -54,6 +60,16 @@ SCENARIOS = {
         ("brief-4", "key", "z", 25),
         ("brief-5", "key", "z", 40),
         ("mission", "key", "shift", 40),
+        ("mission-start", "key", "z", 60),
+        ("story-advance-1", "click", (320, 224), 20),
+        ("story-advance-2", "click", (320, 224), 20),
+        ("story-advance-3", "click", (320, 224), 12),
+        ("story-advance-4", "click", (320, 224), 12),
+        ("story-advance-5", "click", (320, 224), 12),
+        ("story-advance-6", "click", (320, 224), 12),
+        ("story-advance-7", "click", (320, 224), 12),
+        ("story-advance-8", "click", (320, 224), 12),
+        ("mission-live", "wait", None, 180),
     ],
 }
 # Logical points checked by tools/check_pointer_calibration.py (run with AOE2_LOG_POINTER=1).
@@ -83,10 +99,25 @@ def reset_card() -> None:
     CARD_ROOT.mkdir(parents=True)
 
 
-def kill_leftovers() -> None:
-    """Stop earlier runs of this tool only (matched by our private display)."""
-    subprocess.run(["pkill", "-f", f"Xvfb {DISPLAY}"], capture_output=True)
-    time.sleep(1)
+def start_display(width: int, height: int) -> tuple[subprocess.Popen, str]:
+    """Let Xvfb reserve a free display, without disturbing other sessions."""
+    read_fd, write_fd = os.pipe()
+    try:
+        process = subprocess.Popen(["Xvfb", "-displayfd", str(write_fd), "-screen", "0",
+                                    f"{width}x{height}x24", "-nolisten", "tcp"],
+                                   pass_fds=(write_fd,), stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL)
+    finally:
+        os.close(write_fd)
+    try:
+        ready, _, _ = select.select([read_fd], [], [], 10)
+        number = os.read(read_fd, 32).strip() if ready else b""
+        if not number.isdigit() or process.poll() is not None:
+            stop_process(process)
+            raise RuntimeError("Xvfb failed to allocate a display")
+        return process, f":{number.decode('ascii')}"
+    finally:
+        os.close(read_fd)
 
 
 def do_step(window: str, action: str, argument, settle: int) -> None:
@@ -100,6 +131,10 @@ def do_step(window: str, action: str, argument, settle: int) -> None:
         run(["xdotool", "mouseup", "1"])
     elif action == "move":
         run(["xdotool", "mousemove", "--window", window, str(argument[0]), str(argument[1])])
+    elif action == "wait":
+        pass
+    elif action == "text":
+        run(["xdotool", "type", "--clearmodifiers", "--delay", "100", argument])
     else:
         raise ValueError(f"unknown action {action!r}")
     time.sleep(settle)
@@ -125,16 +160,23 @@ def save_stacks(pid: int, scenario: str) -> None:
 
 
 def main(argv: list | None = None) -> int:
+    global DISPLAY
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("scenario", choices=sorted(SCENARIOS))
     parser.add_argument("--resolution", default="640x448", help="display/window resolution (e.g. 1920x1080, 1280x720, 640x448)")
     parser.add_argument("--stacks", action="store_true", help="save host thread backtraces (gdb) after the last step")
     parser.add_argument("--keep-card", action="store_true", help="do not reset the memory-card root")
+    parser.add_argument("--binary", type=Path, help="game executable to run instead of the diagnostic build")
+    parser.add_argument("--label", help="distinct evidence label for comparing runs")
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
+    if args.label and (not args.label.isascii() or not all(c.isalnum() or c in "-_" for c in args.label)):
+        parser.error("--label must contain only ASCII letters, digits, '-' or '_'")
+    if args.binary and not args.binary.is_file():
+        parser.error(f"game executable not found: {args.binary}")
+    evidence_name = f"{args.scenario}-{args.label}" if args.label else args.scenario
     for tool in ("Xvfb", "xdotool", "xwd", "convert"):
         if shutil.which(tool) is None:
             sys.stderr.write(f"PREFLIGHT FAILED: {tool} missing\n"); return 2
-    kill_leftovers()
     if not args.keep_card:
         reset_card()
     EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
@@ -145,9 +187,8 @@ def main(argv: list | None = None) -> int:
         parts = args.resolution.split("x")
         win_w, win_h = int(parts[0]), int(parts[1])
 
-    display = subprocess.Popen(["Xvfb", DISPLAY, "-screen", "0", f"{win_w}x{win_h}x24", "-nolisten", "tcp"],
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    log = (EVIDENCE_DIR / f"scenario-{args.scenario}.log").open("w")
+    display, DISPLAY = start_display(win_w, win_h)
+    log = (EVIDENCE_DIR / f"scenario-{evidence_name}.log").open("w")
     game = None
     try:
         time.sleep(2)
@@ -157,7 +198,10 @@ def main(argv: list | None = None) -> int:
             "AOE2_WINDOW_WIDTH": str(win_w),
             "AOE2_WINDOW_HEIGHT": str(win_h),
         }
-        game = subprocess.Popen(game_command(), stdout=log, stderr=subprocess.STDOUT,
+        command = game_command()
+        if args.binary:
+            command[0] = str(args.binary.resolve())
+        game = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
                                 env=env, preexec_fn=allow_ptrace)
         time.sleep(BOOT_SECONDS)
         window = find_game_window(args.resolution)
@@ -168,11 +212,11 @@ def main(argv: list | None = None) -> int:
                 window_x, window_y = to_window(argument, (win_w, win_h))
                 scaled_arg = (int(window_x), int(window_y))
             do_step(window, action, scaled_arg, settle)
-            print(capture_screenshot(f"{args.scenario}-{name}.png"))
+            print(capture_screenshot(f"{evidence_name}-{name}.png", DISPLAY))
             if game.poll() is not None:
                 sys.stderr.write(f"game exited during step {name}\n"); return 1
         if args.stacks:
-            save_stacks(game.pid, args.scenario)
+            save_stacks(game.pid, evidence_name)
     finally:
         if game is not None:
             stop_process(game)

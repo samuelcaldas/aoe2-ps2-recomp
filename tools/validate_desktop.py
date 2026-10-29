@@ -3,7 +3,7 @@
 
 Runs the diagnostic build (build/docker-desktop-diagnostics/aoe2_game, see
 `docker_build.py --diagnostics`) on the owned ELF under Xvfb and captures a
-screenshot every interval into .playwright-mcp/ (git-ignored). The full log goes
+screenshot every interval into .playwright-mcp/pc/ (git-ignored). The full log goes
 to build/desktop-validation/run.log.
 
 PASS needs all of these:
@@ -44,7 +44,7 @@ OWNED_ELF = REPO_ROOT / "game" / "SLES-50282" / "AOK.ELF"
 # Ignored; the game reads by real disc LBN, which only the image resolves.
 OWNED_DISC_IMAGE = REPO_ROOT / "game" / "SLES-50282" / "aoe2.iso"
 EVIDENCE_DIR = REPO_ROOT / "build" / "desktop-validation"
-SCREENSHOT_DIR = REPO_ROOT / ".playwright-mcp"
+SCREENSHOT_DIR = REPO_ROOT / ".playwright-mcp" / "pc"
 DISPLAY = ":99"
 STARTED_MARKER = "Starting execution"
 MISSING_TARGET_MARKER = "[guest-branch:missing-target]"
@@ -112,10 +112,11 @@ def passed(summary: RunSummary, still_running: bool, frames: FrameSeries) -> boo
             and frames.real_frames >= 2 and frames.changed)
 
 
-def capture_screenshot(name: str) -> Path:
+def capture_screenshot(name: str, display: str = DISPLAY) -> Path:
     destination = SCREENSHOT_DIR / name
-    xwd = subprocess.run(["xwd", "-root", "-display", DISPLAY], capture_output=True)
-    subprocess.run(["convert", "xwd:-", str(destination)], input=xwd.stdout, capture_output=True)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    xwd = subprocess.run(["xwd", "-root", "-display", display], capture_output=True, check=True)
+    subprocess.run(["convert", "xwd:-", str(destination)], input=xwd.stdout, capture_output=True, check=True)
     return destination
 
 
@@ -177,7 +178,7 @@ def main(argv: list | None = None) -> int:
         sys.stderr.write(f"PREFLIGHT FAILED: {error}\n")
         return EXIT_PREFLIGHT
     EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
-    SCREENSHOT_DIR.mkdir(exist_ok=True)
+    SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
     display = subprocess.Popen(["Xvfb", DISPLAY, "-screen", "0", "1280x720x24", "-nolisten", "tcp"],
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:

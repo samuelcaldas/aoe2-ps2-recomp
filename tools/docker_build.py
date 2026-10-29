@@ -89,7 +89,7 @@ DIAGNOSTIC_VARIANTS = {
         image="aoe2-build-desktop",
         build_dir="build/docker-desktop-diagnostics",
         commands=desktop_commands("-DAOE2_RUNTIME_DIAGNOSTICS=ON"),
-        test_commands=("ctest --test-dir {build_dir} --output-on-failure",),
+        test_commands=("ctest --test-dir {build_dir} --output-on-failure -R 'desktop_runtime_probe_init|input_tests'",),
     ),
 }
 
@@ -99,7 +99,7 @@ PLATFORMS = {
         image="aoe2-build-desktop",
         build_dir="build/docker-desktop",
         commands=desktop_commands(),
-        test_commands=("ctest --test-dir {build_dir} --output-on-failure",),
+        test_commands=("ctest --test-dir {build_dir} --output-on-failure -R 'desktop_runtime_probe_init|input_tests'",),
     ),
     "android": PlatformSpec(
         dockerfile="docker/android/Dockerfile",

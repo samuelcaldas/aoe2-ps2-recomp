@@ -69,7 +69,7 @@ def build_command(args: argparse.Namespace) -> list[str]:
     for limit in limits:
         scope += ["-p", limit]
     jobs = str(args.jobs)
-    ninja = ["ninja", "-C", str(BUILD_DIR), f"-j{jobs}", f"-l{jobs}"]
+    ninja = ["ninja", "-C", str(BUILD_DIR), "-v", f"-j{jobs}", f"-l{jobs}"]
     return scope + ["--", "nice", "-n", "10", "ionice", "-c3"] + ninja
 
 
@@ -85,7 +85,7 @@ def check_preflight(args: argparse.Namespace) -> None:
             raise PreflightError(f"required tool not found: {tool}")
     if not (BUILD_DIR / "build.ninja").is_file():
         raise PreflightError(f"{BUILD_DIR}/build.ninja missing: configure the probe with cmake first")
-    if running_build_processes():
+    if running_build_processes() and not args.allow_concurrent:
         raise PreflightError("ninja/cc1plus already running; stop them before starting")
     available_gib = read_available_bytes() / GIB
     if available_gib < args.min_available_gib:
@@ -170,6 +170,8 @@ def execute(args: argparse.Namespace) -> int:
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--jobs", type=int, default=3)
+    parser.add_argument("--allow-concurrent", action="store_true",
+                        help="allow other builds while retaining the scope, memory watchdog and probe lock")
     parser.add_argument("--memory-high-gib", type=int, default=15, help="throttle point for the build cgroup")
     parser.add_argument("--memory-max-gib", type=int, default=18, help="hard cap; OOM kills only the build")
     parser.add_argument("--min-available-gib", type=float, default=12.0, help="required free memory to start")
