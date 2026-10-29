@@ -64,7 +64,10 @@ O probe headless comprova inicialização, não gameplay nem viewport HD. Falhas
 - Principal: **370 testes Python, 4 skips, sem falhas**; **49/49 testes C++ passaram**. Regressões de overflow em `GuestMemory` e snapshots foram observadas antes das correções.
 - Bootstrap: registro direcionado de pin, verificação de HEADs e respeito a pins existentes sem descartar dependências não gerenciadas. Novas regressões reproduziram os problemas antes das correções.
 - Pipeline Ghidra e geração foram realmente reexecutados com o novo pin; **58.552 entradas, zero violações, 58.553 unidades C++**. Manifesto e lockfile verificados, sem apenas trocar o SHA da geração anterior.
-- Rebuild completo do probe iniciado pelo wrapper com `--jobs 2`; **ainda em execução**. O teste headless da nova compilação permanece pendente; não considerar o binário antigo como validação.
+- Rebuild completo do probe **concluído com sucesso** pelo wrapper, retomado com `--jobs 8` a pedido do usuário e mantendo o limite de memória de 18 GiB. Resultado: `ninja exit=0`, `BUILD OK`; novo `desktop_runtime_probe` linkado.
+- Validação headless do novo binário: `desktop_runtime_probe_init` passou, inclusive na repetição verbosa. Memória e subsistemas inicializados, ELF carregado, **58.552/58.552 entradas do mapa registradas** e entry point resolvido. Mensagem final: `runtime initialized: entry point resolved; guest code not executed`.
+- Suíte completa dessa configuração: **53/53 testes passaram** com `ctest --test-dir build/desktop-probe --no-tests=error --output-on-failure`. Bootstrap e manifesto também verificados no estado atual, com pin do fork `a0917444dec12406b86cde27b30a63715c466f99`.
+- Esta validação comprova build/link e inicialização headless; não executa guest code nem comprova boot interativo, gameplay ou viewport HD. Alterações concorrentes em outros arquivos foram preservadas.
 - Decisão de escopo: manter a API de callback de apresentação existente e não ampliar a viewport. Custo: HD continua sendo uma etapa separada; a RAM extra não é uma reserva exclusiva do mapa.
 
 ## Critérios de conclusão
