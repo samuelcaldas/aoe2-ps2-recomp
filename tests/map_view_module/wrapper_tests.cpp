@@ -1,4 +1,5 @@
 #include "map_view_module_private.hpp"
+#include <aoe2/game_hooks/map_view_session.hpp>
 #include "ps2_runtime.h"
 #include <cstdlib>
 #include <cstring>
@@ -34,7 +35,8 @@ int main() {
     std::ostringstream trace;
     auto* previous_log=std::clog.rdbuf(trace.rdbuf());
     R5900Context c;
-    Install(rt);
+    aoe2::game_hooks::MapViewSession session(rt);
+    check(rt.claims == 1 && rt.owner);
     c.pc=0x31a410; reg(c,4,panel);
     rt.lookupFunction(0x31a410)(ram.data(),&c,&rt);
     check(c.pc==0x1abb80 && getRegU32(&c,2)==0xabcdef);
@@ -105,7 +107,7 @@ int main() {
     check(rejected && owned->indices[0]==2);
     // Runtime reset invalidates ownership as well as the token.
     rt.owner=nullptr;
-    Teardown(rt); check(rt.lookupFunction(0x1abac0)==original);
+    session.Close(); check(rt.lookupFunction(0x1abac0)==original);
     Install(rt); c.pc=0x31a410; reg(c,4,panel);
     rejected=false;
     try { rt.lookupFunction(0x31a410)(ram.data(),&c,&rt); }
@@ -115,6 +117,39 @@ int main() {
     rt.lookupFunction(0x31a410)(ram.data(),&c,&rt);
     check(!Capture(rt));
     Teardown(rt); Teardown(rt);
+    const auto released = [&] {
+        check(!rt.owner && !Capture(rt));
+        for (auto address : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350})
+            check(rt.lookupFunction(address) == original);
+    };
+    released();
+    auto claims = rt.claims, releases = rt.releases;
+    {
+        aoe2::game_hooks::MapViewSession scoped(rt);
+        check(rt.claims == claims+1 && rt.owner);
+        scoped.Close(); released();
+        check(rt.releases == releases+1);
+        auto replacements = rt.replacements;
+        scoped.Close();
+        check(rt.replacements == replacements && rt.releases == releases+1);
+    }
+    check(rt.releases == releases+1); released();
+    try {
+        aoe2::game_hooks::MapViewSession scoped(rt);
+        check(rt.owner);
+        throw std::runtime_error("ordinary host exception");
+    } catch (const std::runtime_error&) {}
+    check(rt.releases == releases+2); released();
+    // A constructor failing after two wrappers were installed rolls everything back.
+    rt.fail_replacement = rt.replacements+3;
+    bool install_failed = false;
+    try { aoe2::game_hooks::MapViewSession failing(rt); }
+    catch (const std::runtime_error&) { install_failed = true; }
+    check(install_failed && rt.releases == releases+3); released();
+    rt.fail_replacement = 0;
+    setenv("AOE2_MAP_VIEW", "legacy", 1);
+    { aoe2::game_hooks::MapViewSession disabled(rt); disabled.Close(); }
+    released();
     std::clog.rdbuf(previous_log);
     std::cout << "wrapper yield, two submissions, stale lease and teardown tests passed\n";
 }

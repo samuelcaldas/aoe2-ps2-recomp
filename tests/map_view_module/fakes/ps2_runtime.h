@@ -11,15 +11,19 @@ public:
     std::unordered_map<uint32_t, RecompiledFunction> functions;
     const void* owner = nullptr;
     uint64_t generation = 1;
+    unsigned claims = 0, releases = 0, replacements = 0;
+    unsigned fail_replacement = 0;
     RecompiledFunction lookupFunction(uint32_t pc) { return functions[pc]; }
-    bool replaceFunction(uint32_t pc, RecompiledFunction fn) { functions[pc] = fn; return true; }
+    bool replaceFunction(uint32_t pc, RecompiledFunction fn) { if (++replacements == fail_replacement) return false; functions[pc] = fn; return true; }
     MapArenaLease claimMapArena(const void* who) {
+        ++claims;
         if (owner && owner != who) return {};
         owner = who; return {0x3000000, 8*1024*1024, generation};
     }
     bool validateMapArena(const void* who, uint64_t gen) const { return owner == who && generation == gen; }
     bool releaseMapArena(const void* who, uint64_t gen) {
         if (!validateMapArena(who, gen)) return false;
+        ++releases;
         owner = nullptr; ++generation; return true;
     }
 };

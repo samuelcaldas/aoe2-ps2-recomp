@@ -7,6 +7,8 @@ target_compile_features(map_view_module_tests PRIVATE cxx_std_20)
 target_include_directories(map_view_module_tests PRIVATE ${ROOT}/game_hooks/src ${ROOT}/game_hooks/include)
 add_test(NAME map_view_module_tests COMMAND map_view_module_tests)
 add_executable(map_view_wrapper_tests wrapper_tests.cpp
+    ${ROOT}/game_hooks/src/map_view_session.cpp
+    ${ROOT}/game_hooks/src/map_view_observation.cpp
     ${ROOT}/game_hooks/src/map_view_module.cpp
     ${ROOT}/game_hooks/src/map_view_config.cpp
     ${ROOT}/game_hooks/src/map_view_state.cpp)
