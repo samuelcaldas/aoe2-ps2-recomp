@@ -77,7 +77,21 @@ All containerized build and test drivers enforce unique, non-colliding container
 
 ---
 
-## 5. Switching Targets Incrementally
+## 5. Screenshot & Visual Evidence Isolation
+
+In accordance with repository guidelines (`Screenshots only in .playwright-mcp`), all visual evidence captured during automated or interactive test runs is strictly segregated into platform-specific subdirectories under `.playwright-mcp/`:
+
+| Platform / Edition | Screenshot Directory | Artifacts Captured | Driver Script |
+| :--- | :--- | :--- | :--- |
+| **Desktop / PC** | `.playwright-mcp/pc/` | `desktop-validation-*.png`, `campaign-*.png`, scenario traces | `tools/validate_desktop.py`, `tools/drive_desktop_scenario.py` |
+| **Nintendo Switch** | `.playwright-mcp/switch/` | `screen-*.png`, Ryujinx headless captures, noVNC evidence | `tools/validate_switch.py`, `tools/view_switch_novnc.py` |
+| **Android** | `.playwright-mcp/android/` | `screen-*.png`, adb screencap dumps | `tools/validate_android.py` |
+
+This directory hierarchy ensures that concurrent or sequential validation runs across different target platforms never overwrite or collide with each other's visual evidence.
+
+---
+
+## 6. Switching Targets Incrementally
 
 When switching targets, Ninja and Gradle inspect timestamps in their respective isolated build directories. Generated PS2Recomp files under `generated/SLES-50282/` are read-only inputs mounted into the containers:
 
@@ -101,7 +115,7 @@ When switching targets, Ninja and Gradle inspect timestamps in their respective 
 
 ---
 
-## 6. Local Host Development Best Practices
+## 7. Local Host Development Best Practices
 
 - **Never configure CMake directly at the repo root with default `build/` for full game targets**:
   Running `cmake -B build` is reserved for lightweight host interface tests (`aoe2_interfaces`, `aoe2_smoke_test`).
@@ -110,7 +124,7 @@ When switching targets, Ninja and Gradle inspect timestamps in their respective 
 
 ---
 
-## 7. Agent Skills Integration
+## 8. Agent Skills Integration
 
 For autonomous agent and pair-programming workflows, dedicated skills are provided under `.agents/skills/` (and mirrored in `.claude/skills/`):
 - **`docker-build`** ([`.agents/skills/docker-build/SKILL.md`](../.agents/skills/docker-build/SKILL.md)): Automated build invocation across all targets with default `-j8`, build cache preservation, diagnostics, and high-level output.
@@ -118,7 +132,7 @@ For autonomous agent and pair-programming workflows, dedicated skills are provid
 
 ---
 
-## 8. Mandatory Debug Builds & High Output Policy
+## 9. Mandatory Debug Builds & High Output Policy
 
 To accelerate bring-up, overlay analysis, and bug localization across all targets, the codebase mandates **Debug builds** with **high-level output logging**:
 

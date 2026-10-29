@@ -1,6 +1,14 @@
 # Native map view: reservation and baseline checkpoint
 
-Status: **partial implementation; native map mode is not available**. This checkpoint belongs to the [native map view plan](plans/nifty-herding-pudding.md); see the [documentation index](README.md) and [presentation strategy](sot/hd-assets-strategy.md). A reserved buffer region and a larger host window do not establish viewport expansion.
+Status: **partial implementation; native enlargement is available behind `AOE2_MAP_VIEW=native`, but mission parity and platform acceptance are unproven**. This checkpoint belongs to the [expanded viewport implementation plan](plans/expanded-viewport-native-implementation.md); see the [documentation index](README.md) and [presentation strategy](sot/hd-assets-strategy.md). The default remains legacy mode.
+
+## Current implementation and validation (2026-10-29)
+
+The root runtime now has opt-in `legacy`, `relocation`, and `native` modes. Native mode sizes the guest playfield from the output extent (`1920×708` at 1080p; `1280×534` at 720p), keeps the HUD in anchored bands, captures the indexed map surface and palette, composes the host RGBA frame, and routes pointer coordinates through the expanded map/HUD layout. Relocation mode provides a 640×262 arena-backed surface for parity investigation. Neither mode is the default.
+
+The Debug desktop build with runtime diagnostics completed successfully through `python3 tools/run_desktop_probe_build.py --jobs 8 --allow-concurrent`; both `build/desktop-probe/aoe2_game` and `desktop_runtime_probe` were generated. The root CTest suite passed **52/52** with `EGL_PLATFORM=surfaceless`; Python discovery passed **389 tests, 4 skipped**. The standalone `GlesRenderer` test initialized an EGL/GLES3 framebuffer at 1920×1080. The game executable opened a 1920×1080 raylib window, but remained at the player screen, so it did not exercise the native map compositor.
+
+The native 1080p campaign attempt did not reach a mission: the automated boot remained at the memory-card/player screen, so its screenshots do not validate map expansion. Do not count this as Gate 3 or Gate 7 evidence. Relocation parity, mission captures at 720p and 1080p, and Switch gameplay/input acceptance remain open.
 
 ## Legacy campaign replay (2026-10-29)
 
