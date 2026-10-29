@@ -48,7 +48,8 @@ Subsystem-specific behavioral specifications:
 * **[`docs/sot/multiplayer-lan-architecture.md`](sot/multiplayer-lan-architecture.md)**: i.LINK / UDP network emulation and discovery.
 * **[`docs/sot/play-emulator-sot.md`](sot/play-emulator-sot.md)**: Play! emulator hardware reference behavior for SIF/IOP handshakes.
 * **Subsystem Semantics**:
-  - `gpu-semantics.md`: GS drawing and texture uploads.
+  - [`sot/gpu-semantics.md`](sot/gpu-semantics.md): GS drawing and texture uploads.
+  - [`sot/hud-artifacts-clut-swizzle.md`](sot/hud-artifacts-clut-swizzle.md): HUD rendering artifacts, CLUT swizzling, and GLES modernization roadmap.
   - `file-cdvd-semantics.md`: CDVD streaming, sector reads, and file tables.
   - `pad-libpad-semantics.md` & `input-modules-semantics.md`: Controller polling and DualShock 2 registers.
   - `mc-semantics.md`: Memory card storage and save serialization.
