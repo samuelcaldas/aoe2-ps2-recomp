@@ -12,6 +12,15 @@
 #include <pthread.h>
 #include <sched.h>
 #include <stdbool.h>
+#include <stddef.h>
+
+// Libnx dynamic heap override:
+// By default libnx requests 512MB heap via svcSetHeapSize if __nx_heap_size is 0.
+// In homebrew Applet mode (~450MB total) or emulator environments, 512MB + binary size (173MB)
+// exceeds total memory and crashes KPageTable::SetHeapSize with fatal PAL_SEHException / OutOfMemory.
+// Explicitly define __nx_heap_size to 192MB (0x0C000000), leaving ample room for the 173MB binary,
+// 64MB guest RDRAM, stack, and Horizon OS kernel handles while fitting within emulator limits.
+size_t __nx_heap_size = 192 * 1024 * 1024;
 
 int pthread_attr_setschedpolicy(pthread_attr_t *attr, int policy) {
     (void)attr;

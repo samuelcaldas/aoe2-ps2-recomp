@@ -27,6 +27,16 @@ set(PS2X_ENABLE_IOP_RPC_TRACE ${AOE2_RUNTIME_DIAGNOSTICS} CACHE BOOL "IOP diagno
 set(PS2X_BUILD_RUNTIME ON CACHE BOOL "Enabled by aoe2_ps2_recomp" FORCE)
 add_subdirectory("${PS2X_DIR}" "${CMAKE_BINARY_DIR}/ps2recomp" EXCLUDE_FROM_ALL)
 
+if(NINTENDO_SWITCH)
+    target_include_directories(ps2_runtime PUBLIC
+        /opt/devkitpro/portlibs/switch/include
+        /opt/devkitpro/libnx/include
+    )
+    target_link_libraries(ps2_runtime PUBLIC
+        EGL GLESv2 glapi drm_nouveau nx
+    )
+endif()
+
 include("${CMAKE_CURRENT_LIST_DIR}/Aoe2Deci2.cmake")
 aoe2_install_deci2(ps2_runtime "${PS2X_RUNTIME_DIR}/src/lib/Kernel/Syscalls/Deci2.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}")

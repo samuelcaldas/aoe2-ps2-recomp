@@ -3,6 +3,7 @@
 #include <aoe2/runtime/deci2_runtime_session.hpp>
 #include "ps2_runtime.h"
 #if defined(__SWITCH__)
+#include <switch.h>
 #include <aoe2/platform/switch/switch_platform.hpp>
 #endif
 #ifdef _DEBUG
@@ -43,7 +44,12 @@ void use_disc_image(const std::filesystem::path& image) {
 
 int main(int count, char* arguments[]) {
 #if defined(__SWITCH__)
+    consoleInit(NULL);
+    std::cout << "[aoe2-switch] Entering main()...\n";
+    consoleUpdate(NULL);
     aoe2::platform::switch_env::SwitchPlatform::Instance().Initialize(count, arguments);
+    std::cout << "[aoe2-switch] SwitchPlatform initialized.\n";
+    consoleUpdate(NULL);
 #endif
     try {
         aoe2::platform::initialize_game_logging();

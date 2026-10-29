@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "generated_at": "2026-10-28T22:08:29.813070+00:00",
+  "generated_at": "2026-10-29T01:23:51.087355+00:00",
   "dependencies": {
     "PS2Recomp": {
       "url": "https://github.com/samuelcaldas/PS2Recomp.git",
-      "commit_sha": "c33899b3f0bf197ea6033941ae25c860f8f62de9",
+      "commit_sha": "d7ef7a98e2b95dc93731133f8282812850d03918",
       "license": "GPL-3.0",
       "intended_phase": "Desktop recompilation proof of concept",
       "notes": "Static recompiler for MIPS R5900/VU with native AoE2 runtime patches incorporated.",

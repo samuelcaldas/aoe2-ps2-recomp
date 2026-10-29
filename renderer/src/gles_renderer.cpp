@@ -5,7 +5,8 @@
 #if defined(__SWITCH__)
 #include <switch.h>
 #include <EGL/egl.h>
-#include <GLES3/gl3.h>
+#include <EGL/eglext.h>
+#include <GLES2/gl2.h>
 #elif defined(AOE2_HAS_GLES)
 #include <EGL/egl.h>
 #include <GLES3/gl3.h>
@@ -13,15 +14,57 @@
 
 namespace aoe2::renderer {
 
+#if defined(__SWITCH__)
+namespace {
+static EGLDisplay s_switch_display = EGL_NO_DISPLAY;
+static EGLContext s_switch_context = EGL_NO_CONTEXT;
+static EGLSurface s_switch_surface = EGL_NO_SURFACE;
+}
+#endif
+
 GlesRenderer::~GlesRenderer() {
     Shutdown();
 }
 
 void GlesRenderer::InitGlesContext() {
 #if defined(__SWITCH__)
-    // Nintendo Switch EGL initialization via libnx and switch-mesa
-    // appletGetOperationMode() can detect handheld (720p) vs docked (1080p)
-    gl_context_active_ = true;
+    NWindow* win = nwindowGetDefault();
+    if (win) {
+        AppletOperationMode op_mode = appletGetOperationMode();
+        u32 winWidth = (op_mode == AppletOperationMode_Console) ? 1920 : 1280;
+        u32 winHeight = (op_mode == AppletOperationMode_Console) ? 1080 : 720;
+        nwindowSetDimensions(win, winWidth, winHeight);
+
+        s_switch_display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+        if (s_switch_display && eglInitialize(s_switch_display, nullptr, nullptr)) {
+            eglBindAPI(EGL_OPENGL_ES_API);
+            static const EGLint configAttribs[] = {
+                EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+                EGL_RED_SIZE, 8,
+                EGL_GREEN_SIZE, 8,
+                EGL_BLUE_SIZE, 8,
+                EGL_ALPHA_SIZE, 8,
+                EGL_NONE
+            };
+            EGLConfig config;
+            EGLint numConfigs = 0;
+            if (eglChooseConfig(s_switch_display, configAttribs, &config, 1, &numConfigs) && numConfigs > 0) {
+                s_switch_surface = eglCreateWindowSurface(s_switch_display, config, win, nullptr);
+                static const EGLint ctxAttribs[] = {
+                    EGL_CONTEXT_CLIENT_VERSION, 2,
+                    EGL_NONE
+                };
+                s_switch_context = eglCreateContext(s_switch_display, config, EGL_NO_CONTEXT, ctxAttribs);
+                if (s_switch_context && s_switch_surface) {
+                    eglMakeCurrent(s_switch_display, s_switch_surface, s_switch_surface, s_switch_context);
+                    eglSwapInterval(s_switch_display, 1);
+                    gl_context_active_ = true;
+                    return;
+                }
+            }
+        }
+    }
+    gl_context_active_ = false;
 #elif defined(AOE2_HAS_GLES)
     // Desktop EGL / GLES3 context initialization
     gl_context_active_ = true;
@@ -33,6 +76,19 @@ void GlesRenderer::InitGlesContext() {
 
 void GlesRenderer::CleanupGlesContext() {
 #if defined(__SWITCH__)
+    if (s_switch_display != EGL_NO_DISPLAY) {
+        eglMakeCurrent(s_switch_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+        if (s_switch_context != EGL_NO_CONTEXT) {
+            eglDestroyContext(s_switch_display, s_switch_context);
+            s_switch_context = EGL_NO_CONTEXT;
+        }
+        if (s_switch_surface != EGL_NO_SURFACE) {
+            eglDestroySurface(s_switch_display, s_switch_surface);
+            s_switch_surface = EGL_NO_SURFACE;
+        }
+        eglTerminate(s_switch_display);
+        s_switch_display = EGL_NO_DISPLAY;
+    }
     gl_context_active_ = false;
 #elif defined(AOE2_HAS_GLES)
     gl_context_active_ = false;
@@ -72,7 +128,11 @@ void GlesRenderer::EndFrame() {
     if (!initialized_) return;
     ++frame_count_;
 
-#if defined(AOE2_HAS_GLES) || defined(__SWITCH__)
+#if defined(__SWITCH__)
+    if (gl_context_active_ && s_switch_display != EGL_NO_DISPLAY && s_switch_surface != EGL_NO_SURFACE) {
+        eglSwapBuffers(s_switch_display, s_switch_surface);
+    }
+#elif defined(AOE2_HAS_GLES)
     if (gl_context_active_) {
         // eglSwapBuffers(...)
     }
@@ -139,7 +199,7 @@ bool GlesRenderer::UploadTexture(uint32_t texture_id, uint32_t width, uint32_t h
         glBindTexture(GL_TEXTURE_2D, handle);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba_pixels);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba_pixels);
         tex.gl_handle = handle;
     }
 #endif
