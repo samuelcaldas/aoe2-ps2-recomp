@@ -8,7 +8,13 @@ The root runtime now has opt-in `legacy`, `relocation`, and `native` modes. Nati
 
 The Debug desktop build with runtime diagnostics completed successfully through `python3 tools/run_desktop_probe_build.py --jobs 8 --allow-concurrent`; both `build/desktop-probe/aoe2_game` and `desktop_runtime_probe` were generated. The root CTest suite passed **52/52** with `EGL_PLATFORM=surfaceless`; Python discovery passed **389 tests, 4 skipped**. The standalone `GlesRenderer` test initialized an EGL/GLES3 framebuffer at 1920×1080. The game executable opened a 1920×1080 raylib window, but remained at the player screen, so it did not exercise the native map compositor.
 
-The native 1080p campaign attempt did not reach a mission: the automated boot remained at the memory-card/player screen, so its screenshots do not validate map expansion. Do not count this as Gate 3 or Gate 7 evidence. Relocation parity, mission captures at 720p and 1080p, and Switch gameplay/input acceptance remain open.
+The first native 1080p campaign attempt stopped at the memory-card/player screen. A later replay fixed the profile flow and advanced the William Wallace campaign through its narrative, but did not reach the map. Do not count either attempt as Gate 3 or Gate 7 evidence. Relocation parity, mission captures at 720p and 1080p, and Switch gameplay/input acceptance remain open.
+
+## Native 1080p narrative replay (2026-10-29)
+
+The automated replay now creates the profile, opens William Wallace's first scenario, and captures the narrative transitions at 1920×1080 with `AOE2_MAP_VIEW=native`. The driver needs repeated clicks to advance the story. One run reached the “Loading game data…” card after the fourth TTY narrative entry completed, but ended without a map. A later run remained on the Scottish soldiers' parchment after a 180-second wait; its TTY trace recorded the start of entry four but no completion. The game process stayed active in both runs, and neither log contained `[map-panel-init]` or `[map-submit]`. The latest capture is `.playwright-mcp/pc/campaign-native1080-load-wait-mission-live.png`; its runtime log is `build/desktop-validation/scenario-campaign-native1080-load-wait.log`. The different narrative endpoints indicate an input/timing transition still needs investigation; neither run proves that mission data reaches gameplay or that the expanded surface is used.
+
+The scenario driver preserves the successful profile/menu coordinates and records each story step. Further debugging should inspect the cutscene's final input/state transition and the corresponding game TTY/overlay/CDVD trace before another long replay. Do not extend the wait or call this a loading success based on a parchment screenshot alone.
 
 ## Legacy campaign replay (2026-10-29)
 
