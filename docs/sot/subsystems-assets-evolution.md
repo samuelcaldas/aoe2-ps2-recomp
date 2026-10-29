@@ -87,7 +87,7 @@ Na versão PS2, a memória do GS armazena tabelas de consulta de cores (CLUT - *
 // Fórmula do swizzle de paleta 256 cores para o GS do PS2:
 int swizzled_idx = ((i >> 5) << 5) | (((i >> 4) & 1) << 3) | (((i >> 3) & 1) << 4) | (i & 7);
 ```
-**Diretriz para o Recomp**: Descartar totalmente o algoritmo de swizzle do GS. Ao carregar sprites e paletas da HD Edition (`SLP 2.0N`), o parser lê os bytes diretamente e converte os pixels para RGBA 32-bit linear no host, alimentando texturas `GL_RGBA8`.
+**Diretriz para o Recomp**: Descartar totalmente o algoritmo de swizzle do GS. Ao carregar sprites e paletas da HD Edition (`SLP 2.0N`), o parser lê os bytes diretamente e converte os pixels para RGBA 32-bit linear no host, alimentando texturas `GL_RGBA8`. Para a análise detalhada dos artefatos visuais observados nos botões do HUD e o roadmap de modernização com OpenGL ES 3, consulte [`docs/sot/hud-artifacts-clut-swizzle.md`](hud-artifacts-clut-swizzle.md).
 
 ---
 
