@@ -20,6 +20,70 @@ void original(uint8_t*, R5900Context* c, PS2Runtime*) {
     c->pc = 0x1abb80;
     reg(*c, 2, 0xabcdef);
 }
+R5900Context observer_expected;
+unsigned observer_calls = 0;
+void observer_original(uint8_t*, R5900Context* ctx, PS2Runtime*) {
+    check(std::memcmp(ctx, &observer_expected, sizeof(*ctx)) == 0);
+    ++observer_calls;
+}
+void observer_tests() {
+    PS2Runtime rt;
+    for (auto entry : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350})
+        rt.functions[entry] = observer_original;
+    unsetenv("AOE2_MAP_VIEW");
+    Install(rt);
+    check(rt.replacements == 0 && rt.claims == 0 && !Capture(rt));
+    setenv("AOE2_MAP_VIEW", "legacy", 1);
+    // An external arena owner must neither block observation nor be released.
+    int external_owner;
+    rt.owner = &external_owner;
+    std::vector<uint8_t> ram(64*1024*1024, 0x73);
+    const uint32_t panel=0x1000, area=0x4000, viewport=0x8000,
+                   palette=0x9000, target=0xa000, source=0x100000;
+    word(ram,panel,0); word(ram,panel+0x14,640); word(ram,panel+0x18,262);
+    word(ram,panel+0x1c5c,0);
+    word(ram,area,palette); word(ram,area+0x40,viewport);
+    word(ram,viewport+0x98,0x800); word(ram,target+0x98,0);
+    word(ram,viewport+0x38,640); word(ram,viewport+0x3c,262);
+    word(ram,viewport+0x54,source);
+    const auto invoke = [&](uint32_t entry, uint32_t a0, uint32_t a1) {
+        R5900Context ctx;
+        for (int i=0;i<32;++i) ctx.r[i]=_mm_set_epi64x(0x123456789abcdef, i+123);
+        ctx.pc=entry; reg(ctx,4,a0); reg(ctx,5,a1); reg(ctx,16,panel);
+        reg(ctx,31,entry==0x1ab7e0?0x31a488:0x31a4b4);
+        observer_expected=ctx;
+        const auto before=ram;
+        const auto calls_before=observer_calls;
+        rt.lookupFunction(entry)(ram.data(),&ctx,&rt);
+        check(observer_calls==calls_before+1);
+        check(std::memcmp(&ctx,&observer_expected,sizeof(ctx))==0 && ram==before);
+    };
+    Install(rt);
+    check(rt.replacements==5 && rt.claims==0 && !Capture(rt));
+    invoke(0x31a410,panel,0);
+    // Area creation happens inside the original, after Prepare has observed panel init.
+    word(ram,panel+0x1c5c,area);
+    invoke(0x1ab7e0,area,0); invoke(0x1abac0,area,0);
+    invoke(0x1ae350,area,target);
+    invoke(0x21acd0,viewport,target);
+    auto snap=Capture(rt);
+    check(snap && snap->generation==0 && snap->panel==panel && snap->area==area);
+    check(snap->source==source && snap->palette_source==palette+0x5c && snap->palette_calls==1);
+    check(snap->indices==std::vector<uint8_t>(640*264,0x73));
+    check(snap->palette[0]==0x73 && snap->indices_hash && snap->palette_hash);
+    // Capture owns actual upload bytes and survives unrelated arena generations.
+    ++rt.generation; ram[source]=0x19; ram[palette+0x5c]=0x29;
+    invoke(0x31a410,panel,0); // Existing initialized viewport is valid for observation.
+    invoke(0x21acd0,viewport,target);
+    auto next=Capture(rt);
+    check(next && next->submission==2 && next->indices[0]==0x19 && next->palette[0]==0x29);
+    check(next->indices_hash!=snap->indices_hash && next->palette_hash!=snap->palette_hash);
+    check(snap->indices[0]==0x73 && snap->palette[0]==0x73);
+    Teardown(rt); Teardown(rt);
+    check(rt.owner==&external_owner && rt.claims==0 && rt.releases==0 && !Capture(rt));
+    for (auto entry : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350})
+        check(rt.lookupFunction(entry)==observer_original);
+}
 int main() {
     setenv("AOE2_MAP_VIEW", "native", 1);
     unsetenv("AOE2_MAP_VIEW_OVERRIDE");
@@ -147,9 +211,7 @@ int main() {
     catch (const std::runtime_error&) { install_failed = true; }
     check(install_failed && rt.releases == releases+3); released();
     rt.fail_replacement = 0;
-    setenv("AOE2_MAP_VIEW", "legacy", 1);
-    { aoe2::game_hooks::MapViewSession disabled(rt); disabled.Close(); }
-    released();
+    observer_tests();
     std::clog.rdbuf(previous_log);
     std::cout << "wrapper yield, two submissions, stale lease and teardown tests passed\n";
 }

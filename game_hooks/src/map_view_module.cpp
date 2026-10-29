@@ -31,6 +31,12 @@ void Prepare(uint8_t* ram, R5900Context* ctx, PS2Runtime& runtime, State& state)
     ObservePanelInit(ram, panel);
     if (Word(ram, panel+0x14) != 640 || Word(ram, panel+0x18) != 262)
         throw std::runtime_error("STEP2 enlargement blocked: live legacy parity gate is pending");
+    if (!state.lease) {
+        // Explicit legacy observes the live objects without preparing any storage.
+        state.relocation.panel = panel;
+        state.relocation.area = Word(ram, panel+0x1c5c);
+        return;
+    }
     if (state.relocation.panel == panel) return;
     if (state.relocation.panel)
         throw std::runtime_error("map panel changed: stop guest and reinstall map view module");
@@ -54,7 +60,7 @@ void Prepare(uint8_t* ram, R5900Context* ctx, PS2Runtime& runtime, State& state)
 }
 void Redirect(uint8_t* ram, R5900Context* ctx, PS2Runtime& runtime, State& state, size_t slot) {
     // Never rewrite arguments on partial/resumed calls into shared routines.
-    if (ctx->pc != entries[slot]) return;
+    if (!state.lease || ctx->pc != entries[slot]) return;
     auto& r = state.relocation;
     const uint32_t expected = slot == 1 ? 0x31a488 : 0x31a4b4;
     if (!r.panel || getRegU32(ctx, 31) != expected || getRegU32(ctx, 16) != r.panel) return;
@@ -93,21 +99,24 @@ void Teardown(PS2Runtime& runtime) {
     for (size_t i = 0; i < entries.size(); ++i)
         if (runtime.lookupFunction(entries[i]) == wrappers[i])
             runtime.replaceFunction(entries[i], state->originals[i]);
-    runtime.releaseMapArena(state.get(), state->lease.generation);
+    if (state->lease) runtime.releaseMapArena(state.get(), state->lease.generation);
     state->relocation.clear();
 }
 void Install(PS2Runtime& runtime) {
-    const auto mode = ReadMapViewConfig(std::getenv("AOE2_MAP_VIEW"), std::getenv("AOE2_MAP_VIEW_OVERRIDE"));
+    const char* configured = std::getenv("AOE2_MAP_VIEW");
+    const auto mode = ReadMapViewConfig(configured, std::getenv("AOE2_MAP_VIEW_OVERRIDE"));
     Teardown(runtime);
-    if (mode != MapViewMode::Native) return;
+    if (!configured) return; // Default legacy has no hooks or arena overhead.
     auto state = std::make_shared<State>();
     for (size_t i = 0; i < entries.size(); ++i) {
         state->originals[i] = runtime.lookupFunction(entries[i]);
         if (!state->originals[i] || state->originals[i] == wrappers[i])
             throw std::runtime_error("map view original unavailable");
     }
-    state->lease = runtime.claimMapArena(state.get());
-    if (!state->lease) throw std::runtime_error("map arena already owned or unavailable");
+    if (mode == MapViewMode::Native) {
+        state->lease = runtime.claimMapArena(state.get());
+        if (!state->lease) throw std::runtime_error("map arena already owned or unavailable");
+    }
     bool published = false;
     try {
         { std::lock_guard lock(mutex); states.emplace(&runtime, state); }
@@ -117,14 +126,15 @@ void Install(PS2Runtime& runtime) {
                 throw std::runtime_error("cannot install map view wrapper");
     } catch (...) {
         if (published) Teardown(runtime);
-        else runtime.releaseMapArena(state.get(), state->lease.generation);
+        else if (state->lease) runtime.releaseMapArena(state.get(), state->lease.generation);
         throw;
     }
 }
 std::optional<Snapshot> Capture(PS2Runtime& runtime) {
     std::lock_guard lock(mutex);
     auto found = states.find(&runtime);
-    if (found == states.end() || !runtime.validateMapArena(found->second.get(), found->second->lease.generation))
+    if (found == states.end() || (found->second->lease &&
+        !runtime.validateMapArena(found->second.get(), found->second->lease.generation)))
         return std::nullopt;
     return found->second->snapshot;
 }

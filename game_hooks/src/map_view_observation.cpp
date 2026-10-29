@@ -22,7 +22,7 @@ uint64_t Hash(const uint8_t* bytes, size_t size) {
     return value;
 }
 void Validate(PS2Runtime& runtime, State& state) {
-    if (!runtime.validateMapArena(&state, state.lease.generation)) {
+    if (state.lease && !runtime.validateMapArena(&state, state.lease.generation)) {
         state.relocation.clear();
         { std::lock_guard lock(mutex); state.snapshot.reset(); }
         throw std::runtime_error("map view arena invalidated; reinstall at a guest safe point");
@@ -57,7 +57,11 @@ void ObservePanelInit(uint8_t* ram, uint32_t panel) {
 }
 void Observe(uint8_t* ram, R5900Context* ctx, PS2Runtime& runtime, State& state, size_t slot) {
     auto& r = state.relocation;
-    if (!r.area || ctx->pc != entries[slot]) return;
+    if (ctx->pc != entries[slot]) return;
+    // Panel initialization precedes original area allocation. Discover its live
+    // result at observation time; observer mode never enters relocation.begin().
+    if (!state.lease && r.panel) r.area = Word(ram, r.panel+0x1c5c);
+    if (!r.area) return;
     Validate(runtime, state);
     if (slot == 4) {
         if (getRegU32(ctx, 4) == r.area) {
@@ -78,7 +82,7 @@ void Observe(uint8_t* ram, R5900Context* ctx, PS2Runtime& runtime, State& state,
     Bytes(ram, viewport, 0x9c);
     Bytes(ram, getRegU32(ctx, 5), 0x9c);
     if (!(Word(ram, viewport+0x98)&0x800) || (Word(ram, getRegU32(ctx, 5)+0x98)&0x200)) return;
-    CheckCanaries(ram, state);
+    if (state.lease) CheckCanaries(ram, state);
     Snapshot snap;
     snap.generation = r.generation; snap.submission = ++state.submissions;
     snap.palette_calls = state.palettes;
@@ -90,7 +94,7 @@ void Observe(uint8_t* ram, R5900Context* ctx, PS2Runtime& runtime, State& state,
     // Keep both the source address and call number: two uploads need not be two buffers.
     // Submission ABI: +0x38 is the row width, +0x3c is rounded to four rows.
     if (Word(ram, viewport+0x38) != 640 || Word(ram, viewport+0x3c) != 262 ||
-        snap.source != r.base+r.layout.visible_offset)
+        (state.lease && snap.source != r.base+r.layout.visible_offset))
         throw std::runtime_error("map submission differs from legacy relocation contract");
     auto* indices = Bytes(ram, snap.source, 640*264);
     snap.indices.assign(indices, indices+640*264);
