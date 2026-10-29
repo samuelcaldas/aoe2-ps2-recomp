@@ -1,6 +1,28 @@
+#include <exception>
+#include <string>
+#if defined(__SWITCH__)
+#include <switch.h>
+static void switch_terminate_handler() {
+    svcOutputDebugString("[FATAL-TERMINATE] std::terminate called!\n", 44);
+    std::exception_ptr p = std::current_exception();
+    if (p) {
+        try {
+            std::rethrow_exception(p);
+        } catch (const std::exception& e) {
+            std::string msg = std::string("[FATAL-TERMINATE] Exception: ") + e.what() + "\n";
+            svcOutputDebugString(msg.c_str(), msg.length());
+        } catch (...) {
+            svcOutputDebugString("[FATAL-TERMINATE] Unknown exception\n", 37);
+        }
+    } else {
+        svcOutputDebugString("[FATAL-TERMINATE] No active exception\n", 39);
+    }
+}
+#endif
 // Runner behavior adapted from the pinned PS2Recomp runner (GPL-3.0).
 #include "game_entry.hpp"
 #include <aoe2/runtime/deci2_runtime_session.hpp>
+#include <aoe2/game_hooks/map_view_session.hpp>
 #include "ps2_runtime.h"
 #if defined(__SWITCH__)
 #include <switch.h>
@@ -25,14 +47,31 @@ void use_disc_image(const std::filesystem::path& image) {
 }
 
 [[noreturn]] void run_game(const std::filesystem::path& path, const std::filesystem::path& disc_image) {
+#if defined(__SWITCH__)
+    svcOutputDebugString("[aoe2-switch] run_game START\n", 29);
+#endif
     PS2Runtime runtime;
+#if defined(__SWITCH__)
+    svcOutputDebugString("[aoe2-switch] PS2Runtime constructed\n", 37);
+#endif
     aoe2::runtime::Deci2RuntimeSession tty(runtime);
     if (!runtime.initialize(aoe2::platform::game_window_title(path).c_str()))
         throw std::runtime_error("Failed to initialize PS2 runtime");
+#if defined(__SWITCH__)
+    svcOutputDebugString("[aoe2-switch] PS2Runtime initialized\n", 37);
+#endif
     tty.reset();
     if (!runtime.loadELF(path.string())) throw std::runtime_error("Failed to load ELF: " + path.string());
+#if defined(__SWITCH__)
+    svcOutputDebugString("[aoe2-switch] PS2Runtime ELF loaded\n", 36);
+#endif
+    aoe2::game_hooks::MapViewSession map_view_session(runtime);
     use_disc_image(disc_image);
+#if defined(__SWITCH__)
+    svcOutputDebugString("[aoe2-switch] calling runtime.run()\n", 36);
+#endif
     runtime.run();
+    map_view_session.Close();
     tty.verify_output();
     tty.close();
 #ifdef _DEBUG
@@ -44,12 +83,10 @@ void use_disc_image(const std::filesystem::path& image) {
 
 int main(int count, char* arguments[]) {
 #if defined(__SWITCH__)
-    consoleInit(NULL);
-    std::cout << "[aoe2-switch] Entering main()...\n";
-    consoleUpdate(NULL);
+    svcOutputDebugString("[aoe2-switch] Entering main() BEFORE EVERYTHING\n", 48);
+    std::set_terminate(switch_terminate_handler);
     aoe2::platform::switch_env::SwitchPlatform::Instance().Initialize(count, arguments);
-    std::cout << "[aoe2-switch] SwitchPlatform initialized.\n";
-    consoleUpdate(NULL);
+    svcOutputDebugString("[aoe2-switch] SwitchPlatform initialized.\n", 42);
 #endif
     try {
         aoe2::platform::initialize_game_logging();

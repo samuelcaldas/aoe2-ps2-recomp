@@ -47,14 +47,6 @@ bool SwitchPlatform::Initialize(int argc, char* argv[]) {
         ? ConsoleOperationMode::Docked 
         : ConsoleOperationMode::Handheld;
 
-    // Configure default native window display dimensions according to operation mode
-    NWindow* win = nwindowGetDefault();
-    if (win) {
-        u32 width = (operation_mode_ == ConsoleOperationMode::Docked) ? 1920 : 1280;
-        u32 height = (operation_mode_ == ConsoleOperationMode::Docked) ? 1080 : 720;
-        nwindowSetDimensions(win, width, height);
-    }
-
     // Check memory mode on boot
     SwitchMemoryStatus mem = CheckMemoryStatus();
     if (!mem.is_title_takeover) {

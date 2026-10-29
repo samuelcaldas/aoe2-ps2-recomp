@@ -54,7 +54,12 @@ add_library(aoe2_interfaces STATIC
     renderer/src/null_renderer.cpp
     renderer/src/gles_renderer.cpp
     renderer/src/hud_layout.cpp
+    renderer/src/map_view_layout.cpp
+    renderer/src/map_view_compositor.cpp
+    game_hooks/src/map_view_config.cpp
+    game_hooks/src/map_view_state.cpp
     input/src/hud_inverse_mapper.cpp
+    input/src/map_input_router.cpp
     platform/switch/src/switch_platform.cpp
     platform/switch/src/switch_input.cpp
     runtime/src/guest_memory.cpp
@@ -349,6 +354,18 @@ add_test(NAME kt_gpu_model COMMAND aoe2_kt_gpu_model_tests)
 add_executable(aoe2_hud_layout_tests tests/cpp/hud_layout_tests.cpp)
 target_link_libraries(aoe2_hud_layout_tests PRIVATE aoe2_interfaces)
 add_test(NAME hud_layout COMMAND aoe2_hud_layout_tests)
+
+add_executable(aoe2_map_view_tests tests/cpp/map_view_tests.cpp)
+target_link_libraries(aoe2_map_view_tests PRIVATE aoe2_interfaces)
+add_test(NAME map_view COMMAND aoe2_map_view_tests)
+
+add_executable(aoe2_map_view_compositor_tests tests/cpp/map_view_compositor_tests.cpp)
+target_link_libraries(aoe2_map_view_compositor_tests PRIVATE aoe2_interfaces)
+add_test(NAME map_view_compositor COMMAND aoe2_map_view_compositor_tests)
+
+add_executable(aoe2_map_input_router_tests tests/cpp/map_input_router_tests.cpp)
+target_link_libraries(aoe2_map_input_router_tests PRIVATE aoe2_interfaces)
+add_test(NAME map_input_router COMMAND aoe2_map_input_router_tests)
 
 add_executable(aoe2_jasc_palette_tests tests/cpp/jasc_palette_tests.cpp)
 target_link_libraries(aoe2_jasc_palette_tests PRIVATE aoe2_interfaces)

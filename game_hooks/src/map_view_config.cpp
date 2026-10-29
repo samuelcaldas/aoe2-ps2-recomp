@@ -1,0 +1,15 @@
+#include <aoe2/game_hooks/map_view_config.hpp>
+#include <stdexcept>
+#include <string_view>
+
+namespace aoe2::game_hooks {
+MapViewMode ReadMapViewConfig(const char* mode, const char* diagnostic_override) {
+    if (diagnostic_override && *diagnostic_override)
+        throw std::invalid_argument("AOE2_MAP_VIEW_OVERRIDE is retired; use AOE2_MAP_VIEW=legacy|native");
+    if (!mode) return MapViewMode::Legacy;
+    const std::string_view value(mode);
+    if (value == "legacy") return MapViewMode::Legacy;
+    if (value == "native") return MapViewMode::Native;
+    throw std::invalid_argument("AOE2_MAP_VIEW must be legacy or native");
+}
+}

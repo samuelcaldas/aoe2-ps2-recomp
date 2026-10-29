@@ -10,6 +10,7 @@ using namespace aoe2::game_hooks::map_view;
 void check(bool ok) { if (!ok) throw std::runtime_error("wrapper assertion failed"); }
 void reg(R5900Context& c, int r, uint32_t v) { c.r[r] = _mm_set_epi64x(0, v); }
 void word(std::vector<uint8_t>& ram, uint32_t a, uint32_t v) { std::memcpy(ram.data()+a, &v, 4); }
+uint32_t read_word(const std::vector<uint8_t>& ram, uint32_t a) { uint32_t v; std::memcpy(&v, ram.data()+a, 4); return v; }
 unsigned calls = 0;
 uint32_t expected = 0;
 int buffer_reg = 0;
@@ -28,7 +29,7 @@ void observer_original(uint8_t*, R5900Context* ctx, PS2Runtime*) {
 }
 void observer_tests() {
     PS2Runtime rt;
-    for (auto entry : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350})
+    for (auto entry : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0})
         rt.functions[entry] = observer_original;
     unsetenv("AOE2_MAP_VIEW");
     Install(rt);
@@ -59,7 +60,7 @@ void observer_tests() {
         check(std::memcmp(&ctx,&observer_expected,sizeof(ctx))==0 && ram==before);
     };
     Install(rt);
-    check(rt.replacements==5 && rt.claims==0 && !Capture(rt));
+    check(rt.replacements==6 && rt.claims==0 && !Capture(rt));
     invoke(0x31a410,panel,0);
     // Area creation happens inside the original, after Prepare has observed panel init.
     word(ram,panel+0x1c5c,area);
@@ -81,14 +82,88 @@ void observer_tests() {
     check(snap->indices[0]==0x73 && snap->palette[0]==0x73);
     Teardown(rt); Teardown(rt);
     check(rt.owner==&external_owner && rt.claims==0 && rt.releases==0 && !Capture(rt));
-    for (auto entry : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350})
+    for (auto entry : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0})
         check(rt.lookupFunction(entry)==observer_original);
+}
+void enlarged_720p_tests() {
+    setenv("AOE2_MAP_VIEW", "native", 1);
+    setenv("AOE2_WINDOW_WIDTH", "1280", 1);
+    setenv("AOE2_WINDOW_HEIGHT", "720", 1);
+    PS2Runtime rt;
+    for (auto address : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0}) rt.functions[address] = original;
+    std::vector<uint8_t> ram(64*1024*1024);
+    const uint32_t panel=0x1000, area=0x4000, viewport=0x8000, manager=0x9000, target=0xa000;
+    word(ram,panel+0x14,640); word(ram,panel+0x18,262); word(ram,panel+0x1c5c,area);
+    word(ram,area,manager);
+    const uint32_t vtable=0xc000;
+    word(ram,panel,vtable);
+    for (auto offset : {0x50,0xb0,0xb4,0xf0}) word(ram,vtable+offset,0x100000+offset);
+
+    R5900Context c;
+    aoe2::game_hooks::MapViewSession session(rt);
+    check(rt.claims == 1 && rt.owner);
+    c.pc=0x31a410; reg(c,4,panel);
+    rt.lookupFunction(0x31a410)(ram.data(),&c,&rt);
+    check(read_word(ram, panel+0x14) == 1280 && read_word(ram, panel+0x18) == 534);
+
+    for (auto entry : {0x1ab7e0,0x1abac0}) {
+        const bool first = (entry == 0x1ab7e0);
+        c.pc=entry; reg(c,4,area); reg(c,16,panel); reg(c,31, first?0x31a488:0x31a4b4);
+        reg(c,first?6:5,1280); reg(c,first?7:6,534);
+        buffer_reg=first?10:8; expected=0x3000010; reg(c,buffer_reg,0x1f98000);
+        rt.lookupFunction(entry)(ram.data(),&c,&rt);
+        check(c.pc==0x1abb80);
+    }
+    buffer_reg=0;
+
+    // Simulate TPanel::set_rect resetting panel bounds to legacy dimensions:
+    word(ram, panel+0x14, 640); word(ram, panel+0x18, 262);
+    c.pc=0x31a410; reg(c,4,panel);
+    rt.lookupFunction(0x31a410)(ram.data(),&c,&rt);
+    check(read_word(ram, panel+0x14) == 1280 && read_word(ram, panel+0x18) == 534);
+
+    // Simulate subsequent 0x1abac0 call where registers might have stale 640x262:
+    word(ram, panel+0x14, 640); word(ram, panel+0x18, 262);
+    c.pc=0x1abac0; reg(c,4,area); reg(c,16,panel); reg(c,31,0x31a4b4);
+    reg(c,5,640); reg(c,6,262);
+    buffer_reg=8; expected=0x3000010; reg(c,buffer_reg,0x1f98000);
+    rt.lookupFunction(0x1abac0)(ram.data(),&c,&rt);
+    check(c.pc==0x1abb80);
+    check(read_word(ram, panel+0x14) == 1280 && read_word(ram, panel+0x18) == 534);
+    buffer_reg=0;
+
+    word(ram,area+0x40,viewport);
+    word(ram,viewport+0x98,0x800); word(ram,viewport+0x38,1280); word(ram,viewport+0x3c,534);
+    word(ram,viewport+0x54,0x3000010+1280*5);
+    ram[0x3000010+1280*5]=42;
+
+    c.pc=0x21acd0; reg(c,4,viewport); reg(c,5,target);
+    rt.lookupFunction(0x21acd0)(ram.data(),&c,&rt);
+    auto snap = Capture(rt);
+    check(snap && snap->width == 1280 && snap->height == 534 && snap->indices[0] == 42);
+    check(snap->indices.size() == 1280 * 536);
+
+    // Test cursor clamp at 0x2257C0 with 1280x720:
+    c.pc=0x2257c0; reg(c,4,1500); reg(c,5,800);
+    rt.lookupFunction(0x2257c0)(ram.data(),&c,&rt);
+    check(getRegU32(&c,2)==1 && read_word(ram,0xC5E840)==1279 && read_word(ram,0xC5E844)==719);
+
+    // Test frame compositor:
+    check(bool(rt.compositor));
+    std::vector<uint8_t> legacy_dummy(640*448*4, 128);
+    PS2PresentationFrameView legacy_view{legacy_dummy.data(), 640, 448, 640*4};
+    auto composed = rt.compositor(legacy_view);
+    check(composed && composed->width == 1280 && composed->height == 720);
+
+    session.Close();
 }
 int main() {
     setenv("AOE2_MAP_VIEW", "native", 1);
+    setenv("AOE2_WINDOW_WIDTH", "640", 1);
+    setenv("AOE2_WINDOW_HEIGHT", "448", 1);
     unsetenv("AOE2_MAP_VIEW_OVERRIDE");
     PS2Runtime rt;
-    for (auto address : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350}) rt.functions[address] = original;
+    for (auto address : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0}) rt.functions[address] = original;
     std::vector<uint8_t> ram(64*1024*1024);
     const uint32_t panel=0x1000, area=0x4000, viewport=0x8000, manager=0x9000, target=0xa000;
     word(ram,panel+0x14,640); word(ram,panel+0x18,262); word(ram,panel+0x1c5c,area);
@@ -150,6 +225,16 @@ int main() {
     c.pc=0x21acd0; reg(c,4,viewport); reg(c,5,target);
     rt.lookupFunction(0x21acd0)(ram.data(),&c,&rt);
     check(Capture(rt)->palette_calls==1 && Capture(rt)->palette_source==manager+0x5c);
+    // Cursor clamping respects active output layout (640x448)
+    c.pc=0x2257c0; reg(c,4,700); reg(c,5,500);
+    rt.lookupFunction(0x2257c0)(ram.data(),&c,&rt);
+    check(getRegU32(&c,2)==1 && read_word(ram,0xC5E840)==639 && read_word(ram,0xC5E844)==447);
+    // Compositor delivers composed frame matching layout
+    check(bool(rt.compositor));
+    std::vector<uint8_t> legacy_dummy(640*448*4, 128);
+    PS2PresentationFrameView legacy_view{legacy_dummy.data(), 640, 448, 640*4};
+    auto composed = rt.compositor(legacy_view);
+    check(composed && composed->width == 640 && composed->height == 448);
     // Unrelated callers of the shared routine retain their buffer argument.
     c.pc=0x1abac0; reg(c,31,0x123456); reg(c,8,0x1234);
     buffer_reg=8; expected=0x1234;
@@ -183,7 +268,7 @@ int main() {
     Teardown(rt); Teardown(rt);
     const auto released = [&] {
         check(!rt.owner && !Capture(rt));
-        for (auto address : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350})
+        for (auto address : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0})
             check(rt.lookupFunction(address) == original);
     };
     released();
@@ -212,6 +297,7 @@ int main() {
     check(install_failed && rt.releases == releases+3); released();
     rt.fail_replacement = 0;
     observer_tests();
+    enlarged_720p_tests();
     std::clog.rdbuf(previous_log);
-    std::cout << "wrapper yield, two submissions, stale lease and teardown tests passed\n";
+    std::cout << "wrapper yield, two submissions, stale lease, 720p enlarged and teardown tests passed\n";
 }

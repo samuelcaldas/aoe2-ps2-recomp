@@ -4,11 +4,11 @@
 #include <mutex>
 
 namespace aoe2::game_hooks::map_view::detail {
-constexpr std::array<uint32_t, 5> entries{0x31a410, 0x1ab7e0, 0x1abac0, 0x21acd0, 0x1ae350};
+constexpr std::array<uint32_t, 6> entries{0x31a410, 0x1ab7e0, 0x1abac0, 0x21acd0, 0x1ae350, 0x2257c0};
 struct State {
     Relocation relocation;
     MapArenaLease lease;
-    std::array<PS2Runtime::RecompiledFunction, 5> originals{};
+    std::array<PS2Runtime::RecompiledFunction, 6> originals{};
     uint64_t submissions = 0, palettes = 0;
     std::optional<Snapshot> snapshot;
 };

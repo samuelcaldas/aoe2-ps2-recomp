@@ -16,6 +16,9 @@
 #include <iostream>
 #include <memory>
 #include <stdexcept>
+#if defined(__SWITCH__)
+#include <switch.h>
+#endif
 #include <string>
 
 namespace {
@@ -106,19 +109,43 @@ constexpr std::array<DeviceRole, 4> kDeviceRoles{{
 }};
 
 void InstallNativeMouse(PS2Runtime& runtime) {
-    const auto switches = aoe2::game_hooks::native_input::ReadSwitches();
-    if (!switches.Enabled("mouse")) {
-        std::cout << "[aoe2] native kt_mouse: off\n";
-        return;
+#if defined(__SWITCH__)
+    svcOutputDebugString("[aoe2-switch] InstallNativeMouse ENTER\n", 39);
+#endif
+    try {
+        const auto switches = aoe2::game_hooks::native_input::ReadSwitches();
+        if (!switches.Enabled("mouse")) {
+            std::cout << "[aoe2] native kt_mouse: off\n";
+#if defined(__SWITCH__)
+            svcOutputDebugString("[aoe2-switch] native kt_mouse: off\n", 35);
+#endif
+            return;
+        }
+#if defined(__SWITCH__)
+        svcOutputDebugString("[aoe2-switch] native kt_mouse: Validating module\n", 49);
+#endif
+        aoe2::game_hooks::native_input::ValidateModule(runtime, "mouse", kEntries, kDeviceRoles);
+#if defined(__SWITCH__)
+        svcOutputDebugString("[aoe2-switch] native kt_mouse: Validated module\n", 48);
+#endif
+        g_mouse = std::make_unique<NativeMouse>(aoe2::game_hooks::EnsureMouseRpc());
+        for (const FunctionEntry& entry : kEntries) {
+            if (!runtime.replaceFunction(entry.address, entry.handler))
+                throw std::runtime_error(std::string("Native kt_mouse: cannot replace ") + entry.name);
+        }
+        aoe2::game_hooks::SetNativeMouseModuleInstalled(true);
+        std::cout << "[aoe2] native kt_mouse: " << kEntries.size() << " functions replaced\n";
+#if defined(__SWITCH__)
+        svcOutputDebugString("[aoe2-switch] native kt_mouse: installed SUCCESS\n", 49);
+#endif
+    } catch (const std::exception& e) {
+#if defined(__SWITCH__)
+        std::string err = std::string("[FATAL-MOUSE] Exception: ") + e.what() + "\n";
+        svcOutputDebugString(err.c_str(), err.length());
+#endif
+        std::cerr << "[aoe2] InstallNativeMouse exception: " << e.what() << '\n';
+        throw;
     }
-    aoe2::game_hooks::native_input::ValidateModule(runtime, "mouse", kEntries, kDeviceRoles);
-    g_mouse = std::make_unique<NativeMouse>(aoe2::game_hooks::EnsureMouseRpc());
-    for (const FunctionEntry& entry : kEntries) {
-        if (!runtime.replaceFunction(entry.address, entry.handler))
-            throw std::runtime_error(std::string("Native kt_mouse: cannot replace ") + entry.name);
-    }
-    aoe2::game_hooks::SetNativeMouseModuleInstalled(true);
-    std::cout << "[aoe2] native kt_mouse: " << kEntries.size() << " functions replaced\n";
 }
 
 }  // namespace

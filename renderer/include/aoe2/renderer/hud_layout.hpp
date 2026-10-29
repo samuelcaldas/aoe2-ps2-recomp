@@ -48,6 +48,8 @@ struct HudRegion {
 
 class HudLayout {
 public:
+    HudLayout() = default;
+
     static HudLayout ForExtent(
         aoe2::input::Extent display_extent,
         const std::vector<HudRegionSpec>& specifications);
