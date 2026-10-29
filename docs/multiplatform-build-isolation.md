@@ -113,5 +113,32 @@ When switching targets, Ninja and Gradle inspect timestamps in their respective 
 ## 7. Agent Skills Integration
 
 For autonomous agent and pair-programming workflows, dedicated skills are provided under `.agents/skills/` (and mirrored in `.claude/skills/`):
-- **`docker-build`** ([`.agents/skills/docker-build/SKILL.md`](../.agents/skills/docker-build/SKILL.md)): Automated build invocation across all targets with default `-j8`, build cache preservation, and diagnostics.
-- **`docker-validate`** ([`.agents/skills/docker-validate/SKILL.md`](../.agents/skills/docker-validate/SKILL.md)): Automated runtime validation, probe execution, and live noVNC inspection inside containers.
+- **`docker-build`** ([`.agents/skills/docker-build/SKILL.md`](../.agents/skills/docker-build/SKILL.md)): Automated build invocation across all targets with default `-j8`, build cache preservation, diagnostics, and high-level output.
+- **`docker-validate`** ([`.agents/skills/docker-validate/SKILL.md`](../.agents/skills/docker-validate/SKILL.md)): Automated runtime validation, probe execution, high-output log capture, and live noVNC inspection inside containers.
+
+---
+
+## 8. Mandatory Debug Builds & High Output Policy
+
+To accelerate bring-up, overlay analysis, and bug localization across all targets, the codebase mandates **Debug builds** with **high-level output logging**:
+
+### 1. Rationale
+Recompiling ~17,000 to ~58,000 guest functions alongside native KCET shims requires maximum transparency:
+- **Fast Failure & Stack Traces**: Release builds optimize away call stacks, inline crucial boundaries, and strip assertions (`NDEBUG`), hiding silent memory corruptions and infinite loops. Debug builds preserve line-level symbol resolution and halt at the exact site of failure.
+- **Missing Function Trapping**: In diagnostic builds (`-DAOE2_RUNTIME_DIAGNOSTICS=ON`), unmapped guest branches trigger `[guest-branch:missing-target]` and halt immediately via `StopOnMissingFunction`, preventing silent spin-locks.
+- **RPC & Protocol Observability**: Aggressive logging exposes every SIF/IOP RPC transaction, DECI2 packet, and DMA buffer exchange.
+
+### 2. Configuration Matrix by Platform
+
+| Target | Build Configuration | Verbosity & Output Flags | Artifacts / Logs |
+| :--- | :--- | :--- | :--- |
+| **Desktop / PC** | `-DCMAKE_BUILD_TYPE=Debug`<br/>`-DAOE2_RUNTIME_DIAGNOSTICS=ON` | `cmake --build ... -v`<br/>`ctest --output-on-failure -V` | `build/docker-desktop-diagnostics/`<br/>`desktop_validation.log` |
+| **Nintendo Switch**| `-DCMAKE_BUILD_TYPE=Debug` (devkitA64) | Full symbols (`-g`), assertions active | `build/docker-switch/`<br/>`switch_validation.log` |
+| **Android** | `assembleDebug` (Gradle) | RelWithDebInfo / Debug symbols, JNI logs | `build/docker-android/aoe2-recomp-debug.apk` |
+
+### 3. High-Output Runtime Environment Variables
+When executing or validating binaries, enable rich trace logging:
+- `AOE2_CALL_TRACE_FIRST=N`: Sets how many initial calls per guest function are logged to stderr (default 3).
+- `AOE2_CALL_TRACE_MEM=1`: Prints a 16-byte hex memory dump of the block pointed to by register `$a0`.
+- `AOE2_SHAPE_TRACE=1`: Reports every SLP shape load and frame rasterization call.
+- `AOE2_GAME_TTY=ON`: Captures EE kernel `printf` via DECI2 `[game-tty]`.

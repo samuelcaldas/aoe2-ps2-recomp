@@ -68,6 +68,10 @@ class TestSkillsIntegrity(unittest.TestCase):
         self.assertIn("-j8", build_skill)
         self.assertIn("--build-cache", build_skill)
         self.assertIn(".staging.lock", build_skill)
+        self.assertIn("--diagnostics", build_skill)
+        self.assertIn("-DAOE2_RUNTIME_DIAGNOSTICS=ON", build_skill)
+        self.assertIn("-DCMAKE_BUILD_TYPE=Debug", build_skill)
+        self.assertIn("AOE2_CALL_TRACE_FIRST", build_skill)
 
     def test_docker_validate_skill_contents(self) -> None:
         val_skill = (self.agents_skills_dir / "docker-validate" / "SKILL.md").read_text(encoding="utf-8")
@@ -80,6 +84,8 @@ class TestSkillsIntegrity(unittest.TestCase):
         self.assertIn("aoe2-view-switch", val_skill)
         self.assertIn("aoe2-validate-android", val_skill)
         self.assertIn("-j8", val_skill)
+        self.assertIn("AOE2_CALL_TRACE_MEM", val_skill)
+        self.assertIn("AOE2_SHAPE_TRACE", val_skill)
 
 
 if __name__ == "__main__":

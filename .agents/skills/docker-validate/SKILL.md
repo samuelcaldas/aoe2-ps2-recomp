@@ -9,6 +9,16 @@ Validates execution, probes headless initialization, and performs live visual in
 
 Read [docs/multiplatform-build-isolation.md](../../../docs/multiplatform-build-isolation.md) and [docs/desktop-runtime-probe.md](../../../docs/desktop-runtime-probe.md) for background.
 
+## High Output & Observability Requirements
+
+All validations must be executed with **maximum diagnostic verbosity**:
+- **Log Archival**: Validation logs (`desktop_validation.log`, `switch_validation.log`) capture all stdout/stderr, guest branch warnings, and RPC transactions.
+- **Trace Variables**: When investigating stalls or testing new modules, export rich tracing variables:
+  - `AOE2_CALL_TRACE_FIRST=N`: Log first N calls per function.
+  - `AOE2_CALL_TRACE_MEM=1`: Hex-dump 16 bytes at `$a0`.
+  - `AOE2_SHAPE_TRACE=1`: Log SLP shape rendering calls.
+- **Diagnostics Classification**: Triage any runtime failure or loop stall using `python3 tools/classify_diagnostics.py --log <logfile>`.
+
 ## Validation Workflows
 
 ### 1. Desktop Containerized Runtime Validation
