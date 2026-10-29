@@ -58,4 +58,13 @@ At preflight the installed fork/lockfile named `d7ef7a98e2b95dc93731133f82828128
 
 `GHIDRA_HOME` was initially unset; an installed Ghidra was found at `/home/samuelcaldas/tools/ghidra_12.1.4_PUBLIC`. Finding it does not itself rerun the guarded pipeline or refresh generation provenance. A full pipeline invocation resets generated output, so it must account for the current overlay-generated units before replacing that output.
 
+### Final verification
+
+- Fork direct runner: **489/489 passed**, including RED→GREEN heap, ELF and syscall regressions. Independent review found the syscall fallback inconsistency; its reproducer failed before the fix and the complete suite then passed.
+- Standalone fork GS texture/CLUT/memory cache CTest: **45/45 passed**. The existing fork runtime build had no CTest registrations, so its initial `ctest --no-tests=error` invocation failed with “No tests were found”; the separate GS cache project was then configured, built and tested instead of treating an empty test run as success.
+- Root Python discovery: **370 tests OK, four skipped**. Two require optional real HD asset paths; two cover the retired separate runtime patch series.
+- Lightweight host build and CTest: **49/49 passed**.
+- Installed dependency pins, changed-document local file links, both repositories' whitespace checks, and the current function-map guard passed. The generation-manifest verifier still fails the recorded pin mismatch above.
+- The protected `python3 tools/run_desktop_probe_build.py --jobs 8` rebuild did **not** finish. A separate Docker Switch rebuild was concurrently compiling eight jobs; Ninja's load limit left the desktop scope with only one active compiler. After inspecting the exact scope/PIDs, only this checkpoint's `aoe2-probe-build.scope` was stopped to avoid competing with that work. Ninja exited 130 after 322/4,720 steps; the wrapper returned 4. Completed incremental objects were preserved. The concurrent Switch build was not stopped or modified. `desktop_runtime_probe_init` was **not run**, because it was chained after successful compilation. A stale probe executable is not substituted for a rebuilt one.
+
 No native-mode mission capture, relocation parity comparison, 720p gameplay validation, performance/memory-growth measurement, or Switch visual/input validation has been performed in this checkpoint. No completion criterion for the native viewport is claimed.
