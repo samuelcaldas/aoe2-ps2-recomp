@@ -21,6 +21,12 @@ REAL_AND_CHANGED = FrameSeries(kinds=(FrameKind.REAL_FRAME, FrameKind.REAL_FRAME
 ONLY_FALLBACK = FrameSeries(kinds=(FrameKind.SOLID_FALLBACK,) * 3, real_frames=0, changed=False)
 
 
+class TestDesktopValidationPaths(unittest.TestCase):
+    def test_screenshot_dir_points_to_pc_subfolder(self):
+        self.assertEqual(validation.SCREENSHOT_DIR.name, "pc")
+        self.assertEqual(validation.SCREENSHOT_DIR.parent.name, ".playwright-mcp")
+
+
 class TestDesktopValidation(unittest.TestCase):
     def setUp(self):
         self.stack = ExitStack()

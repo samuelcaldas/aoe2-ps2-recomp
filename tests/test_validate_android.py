@@ -48,9 +48,13 @@ class TestAndroidValidationScript(unittest.TestCase):
     def test_collects_timed_screenshots_logcat_and_liveness(self):
         self.assertIn("for shot in", self.script)
         self.assertIn("sleep 15", self.script)
+        self.assertIn(".playwright-mcp/android", self.script)
         self.assertIn("screencap", self.script)
         self.assertIn("pidof", self.script)
         self.assertIn("logcat -d", self.script)
+
+    def test_screenshot_dir_points_to_android_subfolder(self):
+        self.assertEqual(validation.SCREENSHOT_DIR, ".playwright-mcp/android")
 
     def test_container_gets_kvm_device_and_group(self):
         command = validation.container_command(run_seconds=45)

@@ -138,6 +138,8 @@ class TestGpuPresentationFallback(unittest.TestCase):
             "assets/src/asset_path_resolver.cpp", "assets/src/asset_resolver.cpp",
             "assets/src/loose_hd_asset_provider.cpp", "assets/src/jasc_palette.cpp",
             "assets/src/slp_decoder.cpp", "renderer/src/gles_renderer.cpp",
+            "renderer/src/gles_context.cpp", "renderer/src/gles_shader.cpp",
+            "renderer/src/gles_batch.cpp", "renderer/src/gles_font.cpp",
             "renderer/src/hud_layout.cpp", "input/src/hud_inverse_mapper.cpp",
         ]
         command = ["g++", "-std=c++20", f"-I{cls.staging}"]

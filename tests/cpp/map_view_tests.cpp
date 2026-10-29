@@ -23,6 +23,7 @@ void configuration() {
     using namespace aoe2::game_hooks;
     check(ReadMapViewConfig(nullptr, nullptr) == MapViewMode::Legacy);
     check(ReadMapViewConfig("legacy", nullptr) == MapViewMode::Legacy);
+    check(ReadMapViewConfig("relocation", nullptr) == MapViewMode::Relocation);
     check(ReadMapViewConfig("native", nullptr) == MapViewMode::Native);
     rejects([] { ReadMapViewConfig("", nullptr); });
     rejects([] { ReadMapViewConfig("NATIVE", nullptr); });

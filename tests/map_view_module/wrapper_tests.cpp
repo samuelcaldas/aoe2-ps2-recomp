@@ -6,8 +6,12 @@
 #include <iostream>
 #include <stdexcept>
 #include <sstream>
+#include <source_location>
+#include <string>
 using namespace aoe2::game_hooks::map_view;
-void check(bool ok) { if (!ok) throw std::runtime_error("wrapper assertion failed"); }
+void check(bool ok, const std::source_location where = std::source_location::current()) {
+    if (!ok) throw std::runtime_error("wrapper assertion failed at line " + std::to_string(where.line()));
+}
 void reg(R5900Context& c, int r, uint32_t v) { c.r[r] = _mm_set_epi64x(0, v); }
 void word(std::vector<uint8_t>& ram, uint32_t a, uint32_t v) { std::memcpy(ram.data()+a, &v, 4); }
 uint32_t read_word(const std::vector<uint8_t>& ram, uint32_t a) { uint32_t v; std::memcpy(&v, ram.data()+a, 4); return v; }
@@ -157,6 +161,71 @@ void enlarged_720p_tests() {
 
     session.Close();
 }
+void relocation_tests() {
+    setenv("AOE2_MAP_VIEW", "relocation", 1);
+    setenv("AOE2_WINDOW_WIDTH", "1920", 1);
+    setenv("AOE2_WINDOW_HEIGHT", "1080", 1);
+    PS2Runtime rt;
+    for (auto address : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0})
+        rt.functions[address] = original;
+    std::vector<uint8_t> ram(64*1024*1024);
+    const uint32_t panel=0x1000, area=0x4000;
+    word(ram,panel+0x14,640); word(ram,panel+0x18,262); word(ram,panel+0x1c5c,area);
+    R5900Context c;
+    aoe2::game_hooks::MapViewSession session(rt);
+    c.pc=0x31a410; reg(c,4,panel);
+    rt.lookupFunction(0x31a410)(ram.data(),&c,&rt);
+    check(rt.claims == 1 && read_word(ram,panel+0x14) == 640 && read_word(ram,panel+0x18) == 262);
+    check(!ActiveLayout(rt));
+    std::vector<uint8_t> legacy(640*448*4);
+    check(!rt.compositor({legacy.data(),640,448,640*4}));
+    c.pc=0x2257c0; reg(c,4,700); reg(c,5,500);
+    rt.lookupFunction(0x2257c0)(ram.data(),&c,&rt);
+    check(c.pc == 0x1abb80);
+    session.Close();
+}
+void enlarged_1080p_tests() {
+    setenv("AOE2_MAP_VIEW", "native", 1);
+    setenv("AOE2_WINDOW_WIDTH", "1920", 1);
+    setenv("AOE2_WINDOW_HEIGHT", "1080", 1);
+    PS2Runtime rt;
+    for (auto address : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0})
+        rt.functions[address] = original;
+    std::vector<uint8_t> ram(64*1024*1024);
+    const uint32_t panel=0x1000, area=0x4000, viewport=0x8000, manager=0x9000, target=0xa000;
+    word(ram,panel+0x14,640); word(ram,panel+0x18,262); word(ram,panel+0x1c5c,area);
+    word(ram,area,manager);
+    R5900Context c;
+    aoe2::game_hooks::MapViewSession session(rt);
+    c.pc=0x31a410; reg(c,4,panel);
+    rt.lookupFunction(0x31a410)(ram.data(),&c,&rt);
+    check(read_word(ram,panel+0x14)==1920 && read_word(ram,panel+0x18)==708);
+    for (auto entry : {0x1ab7e0,0x1abac0}) {
+        const bool first=entry==0x1ab7e0;
+        c.pc=entry; reg(c,4,area); reg(c,16,panel); reg(c,31,first?0x31a488:0x31a4b4);
+        reg(c,first?6:5,1920); reg(c,first?7:6,708);
+        buffer_reg=first?10:8; expected=0x3000010; reg(c,buffer_reg,0x1f98000);
+        rt.lookupFunction(entry)(ram.data(),&c,&rt);
+    }
+    buffer_reg=0;
+    word(ram,area+0x40,viewport);
+    word(ram,viewport+0x98,0x800); word(ram,viewport+0x38,1920); word(ram,viewport+0x3c,708);
+    word(ram,viewport+0x54,0x3000010+5*1920);
+    ram[0x3000010+5*1920]=42;
+    c.pc=0x21acd0; reg(c,4,viewport); reg(c,5,target);
+    rt.lookupFunction(0x21acd0)(ram.data(),&c,&rt);
+    auto snap=Capture(rt);
+    check(snap && snap->width==1920 && snap->height==708 && snap->pitch==1920 && snap->indices[0]==42);
+    auto layout=ActiveLayout(rt);
+    check(layout && layout->output.width==1920 && layout->output.height==1080 && layout->map.y==80 && layout->map.height==708);
+    c.pc=0x2257c0; reg(c,4,2200); reg(c,5,1200);
+    rt.lookupFunction(0x2257c0)(ram.data(),&c,&rt);
+    check(read_word(ram,0xC5E840)==1919 && read_word(ram,0xC5E844)==1079);
+    std::vector<uint8_t> legacy(640*448*4,128);
+    auto composed=rt.compositor({legacy.data(),640,448,640*4});
+    check(composed && composed->width==1920 && composed->height==1080);
+    session.Close();
+}
 int main() {
     setenv("AOE2_MAP_VIEW", "native", 1);
     setenv("AOE2_WINDOW_WIDTH", "640", 1);
@@ -298,6 +367,8 @@ int main() {
     rt.fail_replacement = 0;
     observer_tests();
     enlarged_720p_tests();
+    relocation_tests();
+    enlarged_1080p_tests();
     std::clog.rdbuf(previous_log);
-    std::cout << "wrapper yield, two submissions, stale lease, 720p enlarged and teardown tests passed\n";
+    std::cout << "wrapper yield, two submissions, stale lease, 720p/1080p enlargement and teardown tests passed\n";
 }

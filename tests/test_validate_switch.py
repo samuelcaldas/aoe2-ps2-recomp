@@ -45,8 +45,12 @@ class TestSwitchValidationScript(unittest.TestCase):
 
     def test_collects_screenshots_and_checks_liveness(self):
         self.assertIn("xwd -root", self.script)
+        self.assertIn(".playwright-mcp/switch", self.script)
         self.assertIn("alive.txt", self.script)
         self.assertIn("run.log", self.script)
+
+    def test_screenshot_dir_points_to_switch_subfolder(self):
+        self.assertEqual(validation.SCREENSHOT_DIR, ".playwright-mcp/switch")
 
     def test_container_command_options(self):
         command = validation.container_command(run_seconds=60, jobs=4)
