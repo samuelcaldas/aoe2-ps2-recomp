@@ -30,6 +30,23 @@ class TestOverlayRegistration(unittest.TestCase):
             (0x1D98630, "FUN_01d98630_0x1d98630"),
             (0x1D98634, "FUN_01d98630_0x1d98630")])
 
+    def test_parses_slot_entry_array_format(self):
+        table_code = """
+        struct SlotEntry {
+            uint32_t slot;
+            PS2Runtime::RecompiledFunction func;
+        };
+        static const SlotEntry s_functionTableEntries[] = {
+            { 0u, FUN_01d984b0_0x1d984b0 }, // 0x1d984b0
+            { 96u, FUN_01d98630_0x1d98630 }, // 0x1d98630
+            { 97u, FUN_01d98630_0x1d98630 }, // 0x1d98634
+        };
+        """
+        self.assertEqual(parse_register_file(table_code), [
+            (0x1D984B0, "FUN_01d984b0_0x1d984b0"),
+            (0x1D98630, "FUN_01d98630_0x1d98630"),
+            (0x1D98634, "FUN_01d98630_0x1d98630")])
+
     def test_empty_or_unrecognized_register_file_fails(self):
         with self.assertRaises(OverlayRegistrationError):
             parse_register_file("int main() {}")
