@@ -4,6 +4,7 @@
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
+#include <sstream>
 using namespace aoe2::game_hooks::map_view;
 void check(bool ok) { if (!ok) throw std::runtime_error("wrapper assertion failed"); }
 void reg(R5900Context& c, int r, uint32_t v) { c.r[r] = _mm_set_epi64x(0, v); }
@@ -27,11 +28,34 @@ int main() {
     const uint32_t panel=0x1000, area=0x4000, viewport=0x8000, manager=0x9000, target=0xa000;
     word(ram,panel+0x14,640); word(ram,panel+0x18,262); word(ram,panel+0x1c5c,area);
     word(ram,area,manager);
+    const uint32_t vtable=0xc000;
+    word(ram,panel,vtable);
+    for (auto offset : {0x50,0xb0,0xb4,0xf0}) word(ram,vtable+offset,0x100000+offset);
+    std::ostringstream trace;
+    auto* previous_log=std::clog.rdbuf(trace.rdbuf());
     R5900Context c;
     Install(rt);
     c.pc=0x31a410; reg(c,4,panel);
     rt.lookupFunction(0x31a410)(ram.data(),&c,&rt);
     check(c.pc==0x1abb80 && getRegU32(&c,2)==0xabcdef);
+    const auto diagnostic=trace.str();
+    check(diagnostic.find("[map-panel-init] panel=4096 vtable=49152")!=std::string::npos);
+    check(diagnostic.find(" slot_50=1048656 slot_b0=1048752 slot_b4=1048756 slot_f0=1048816")!=std::string::npos);
+    // A resumed panel wrapper cannot interpret its current a0 as a fresh panel.
+    reg(c,4,0xffffffff);
+    rt.lookupFunction(0x31a410)(ram.data(),&c,&rt);
+    check(trace.str()==diagnostic);
+    // Reentry logs the actual current instance without resetting live arena bytes.
+    ram[0x3000010]=0x73;
+    c.pc=0x31a410; reg(c,4,panel);
+    rt.lookupFunction(0x31a410)(ram.data(),&c,&rt);
+    check(ram[0x3000010]==0x73);
+    check(trace.str().size()==2*diagnostic.size());
+    // Invalid vtables remain diagnostic-only, with no out-of-range guest read.
+    word(ram,panel,0xfffffffc); c.pc=0x31a410; reg(c,4,panel);
+    rt.lookupFunction(0x31a410)(ram.data(),&c,&rt);
+    check(trace.str().find("vtable=4294967292 slots=unreadable")!=std::string::npos);
+    word(ram,panel,vtable);
     for (auto entry : {0x1ab7e0,0x1abac0}) {
         const bool first=entry==0x1ab7e0;
         c.pc=entry; reg(c,4,area); reg(c,16,panel); reg(c,31, first?0x31a488:0x31a4b4);
@@ -91,5 +115,6 @@ int main() {
     rt.lookupFunction(0x31a410)(ram.data(),&c,&rt);
     check(!Capture(rt));
     Teardown(rt); Teardown(rt);
+    std::clog.rdbuf(previous_log);
     std::cout << "wrapper yield, two submissions, stale lease and teardown tests passed\n";
 }

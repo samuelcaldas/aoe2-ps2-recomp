@@ -65,12 +65,30 @@ void CheckCanaries(uint8_t* ram, const State& state) {
                 throw std::runtime_error("map view arena canary damaged");
     }
 }
+void ObservePanelInit(uint8_t* ram, uint32_t panel) {
+    // Generated 1861D0 loads the vtable from object+0 before Method50.
+    // Observe the actual map instance; input-dispatch object fields have not
+    // been verified for this panel, so no parent/root interpretation is made.
+    const uint32_t table = Word(ram, panel);
+    std::clog << "[map-panel-init] panel=" << panel << " vtable=" << table;
+    if (table && uint64_t(table) + 0xf4 <= 0x4000000) {
+        std::clog << " slot_50=" << Word(ram, table+0x50)
+                  << " slot_b0=" << Word(ram, table+0xb0)
+                  << " slot_b4=" << Word(ram, table+0xb4)
+                  << " slot_f0=" << Word(ram, table+0xf0);
+    } else {
+        // Diagnostics must not dereference an invalid guest vtable.
+        std::clog << " slots=unreadable";
+    }
+    std::clog << '\n';
+}
 void Prepare(uint8_t* ram, R5900Context* ctx, PS2Runtime& runtime, State& state) {
     // Only entry is initialization. Resume PCs must keep s0 and all original state.
     if (ctx->pc != entries[0]) return;
     Validate(runtime, state);
     uint32_t panel = getRegU32(ctx, 4);
     Bytes(ram, panel, 0x1c60);
+    ObservePanelInit(ram, panel);
     if (Word(ram, panel+0x14) != 640 || Word(ram, panel+0x18) != 262)
         throw std::runtime_error("STEP2 enlargement blocked: live legacy parity gate is pending");
     if (state.relocation.panel == panel) return;
