@@ -60,4 +60,20 @@ void MapInputRouter::BeginDrag(float x, float y, Extent window) {
     }
 }
 void MapInputRouter::EndDrag() { capture_.reset(); }
+RoutedMapMouse MapInputRouter::RouteMouse(float x, float y, Extent window, uint32_t buttons) {
+    if ((buttons & kMouseButtonLeft) && !(last_buttons_ & kMouseButtonLeft))
+        BeginDrag(x, y, window);
+    else if (!(buttons & kMouseButtonLeft) && (last_buttons_ & kMouseButtonLeft))
+        EndDrag();
+    last_buttons_ = buttons;
+    suppressed_buttons_ &= buttons;
+    auto point = Route(x, y, window);
+    if (!point) suppressed_buttons_ |= buttons;
+    return {point, point ? buttons & ~suppressed_buttons_ : 0u};
+}
+void MapInputRouter::ResetMouse(uint32_t buttons) {
+    EndDrag();
+    last_buttons_ = buttons;
+    suppressed_buttons_ = buttons;
+}
 }
