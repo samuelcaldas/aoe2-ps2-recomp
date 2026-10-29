@@ -134,12 +134,24 @@ void CursorClamp(uint8_t* ram, R5900Context* ctx, const renderer::MapViewLayout&
     ctx->r[2] = _mm_set_epi64x(0, 1);
     ctx->pc = getRegU32(ctx, 31);
 }
+void RetirePanel(R5900Context* ctx, State& state) {
+    // The original routine returns the area's pool entry and clears panel+0x1c5c.
+    // Invalidate host presentation before it can show a released panel again.
+    if (ctx->pc != entries[6] || !state.relocation.panel ||
+        getRegU32(ctx, 4) != state.relocation.panel) return;
+    state.relocation.clear();
+    std::lock_guard lock(mutex);
+    ++state.lifecycle;
+    state.snapshot.reset();
+    state.composed_layout.reset();
+}
 template<size_t Slot>
 void Wrapper(uint8_t* ram, R5900Context* ctx, PS2Runtime* runtime) {
     auto state = Find(runtime);
     if constexpr (Slot == 0) Prepare(ram, ctx, *runtime, *state);
     if constexpr (Slot == 1 || Slot == 2) Redirect(ram, ctx, *runtime, *state, Slot);
     if constexpr (Slot == 3 || Slot == 4) Observe(ram, ctx, *runtime, *state, Slot);
+    if constexpr (Slot == 6) RetirePanel(ctx, *state);
     if constexpr (Slot == 5) {
         if (auto layout = ActiveLayout(*runtime)) {
             CursorClamp(ram, ctx, *layout);
@@ -149,8 +161,8 @@ void Wrapper(uint8_t* ram, R5900Context* ctx, PS2Runtime* runtime) {
     state->originals[Slot](ram, ctx, runtime);
     // Return may mean yield or tail dispatch. No completion cleanup or register restoration.
 }
-constexpr std::array<PS2Runtime::RecompiledFunction, 6> wrappers{
-    Wrapper<0>, Wrapper<1>, Wrapper<2>, Wrapper<3>, Wrapper<4>, Wrapper<5>};
+constexpr std::array<PS2Runtime::RecompiledFunction, entries.size()> wrappers{
+    Wrapper<0>, Wrapper<1>, Wrapper<2>, Wrapper<3>, Wrapper<4>, Wrapper<5>, Wrapper<6>};
 }
 void Teardown(PS2Runtime& runtime) {
     std::shared_ptr<State> state;
@@ -211,19 +223,22 @@ std::optional<Snapshot> CaptureNative(PS2Runtime& runtime) {
         return std::nullopt;
     return found->second->snapshot;
 }
-void PublishComposedLayout(PS2Runtime& runtime, const Snapshot* snapshot) {
+bool PublishComposedLayout(PS2Runtime& runtime, const Snapshot* snapshot) {
     std::lock_guard lock(mutex);
     auto found = states.find(&runtime);
-    if (found == states.end()) return;
+    if (found == states.end()) return false;
     auto& state = *found->second;
-    if (!snapshot || state.mode != MapViewMode::Native || !state.lease ||
+    if (!snapshot) {
+        state.composed_layout.reset();
+        return false;
+    }
+    if (state.mode != MapViewMode::Native || !state.lease ||
         !runtime.validateMapArena(&state, state.lease.generation) || !state.snapshot ||
         state.snapshot->generation != snapshot->generation ||
-        state.snapshot->panel != snapshot->panel) {
-        state.composed_layout.reset();
-        return;
-    }
+        state.snapshot->panel != snapshot->panel ||
+        state.snapshot->lifecycle != snapshot->lifecycle) return false;
     state.composed_layout = snapshot->layout;
+    return true;
 }
 std::optional<renderer::MapViewLayout> ActiveLayout(PS2Runtime& runtime) {
     std::lock_guard lock(mutex);

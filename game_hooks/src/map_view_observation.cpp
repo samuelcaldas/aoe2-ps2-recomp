@@ -121,6 +121,7 @@ void RecordSubmission(uint8_t* ram, State& state, const Relocation& r, uint32_t 
     if (state.lease) CheckCanaries(ram, state);
     Snapshot snap;
     snap.generation = r.generation; snap.submission = ++state.submissions;
+    snap.lifecycle = state.lifecycle;
     snap.palette_calls = state.palettes;
     snap.panel = r.panel; snap.area = r.area; snap.viewport = viewport;
     snap.source = Word(ram, viewport+0x54);

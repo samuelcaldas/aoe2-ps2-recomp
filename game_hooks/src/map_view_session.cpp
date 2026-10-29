@@ -34,7 +34,7 @@ MapViewSession::MapViewSession(PS2Runtime& runtime) {
         };
         try {
             auto composed = renderer::MapViewCompositor::Compose(legacy_view, frame_snap);
-            map_view::PublishComposedLayout(runtime, &*snap);
+            if (!map_view::PublishComposedLayout(runtime, &*snap)) return std::nullopt;
             return PS2OwnedPresentationFrame{
                 composed.pixels,
                 composed.width,

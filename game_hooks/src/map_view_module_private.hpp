@@ -52,7 +52,7 @@ struct Relocation {
 };
 
 struct Snapshot {
-    uint64_t generation = 0, submission = 0, palette_calls = 0;
+    uint64_t generation = 0, submission = 0, palette_calls = 0, lifecycle = 0;
     uint32_t panel = 0, area = 0, viewport = 0, source = 0;
     uint32_t palette_slot = 0, palette_source = 0;
     uint64_t indices_hash = 0, palette_hash = 0;
@@ -68,7 +68,7 @@ void Install(PS2Runtime&);
 void Teardown(PS2Runtime&);
 std::optional<Snapshot> Capture(PS2Runtime&);
 std::optional<Snapshot> CaptureNative(PS2Runtime&);
-void PublishComposedLayout(PS2Runtime&, const Snapshot*);
+bool PublishComposedLayout(PS2Runtime&, const Snapshot*);
 std::optional<renderer::MapViewLayout> ActiveLayout(PS2Runtime&);
 std::optional<renderer::MapViewLayout> ActiveLayout();
 
