@@ -24,7 +24,7 @@ uint64_t Hash(const uint8_t* bytes, size_t size) {
 void Validate(PS2Runtime& runtime, State& state) {
     if (state.lease && !runtime.validateMapArena(&state, state.lease.generation)) {
         state.relocation.clear();
-        { std::lock_guard lock(mutex); state.snapshot.reset(); }
+        { std::lock_guard lock(mutex); state.snapshot.reset(); state.composed_layout.reset(); }
         throw std::runtime_error("map view arena invalidated; reinstall at a guest safe point");
     }
 }

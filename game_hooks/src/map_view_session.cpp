@@ -9,9 +9,11 @@ MapViewSession::MapViewSession(PS2Runtime& runtime) {
     map_view::Install(runtime);
     runtime_ = &runtime;
     runtime.setFrameCompositor([&runtime](PS2PresentationFrameView legacy) -> std::optional<PS2OwnedPresentationFrame> {
-        if (!map_view::ActiveLayout(runtime)) return std::nullopt;
-        auto snap = map_view::Capture(runtime);
-        if (!snap || snap->indices.empty() || snap->layout.output.width == 0) return std::nullopt;
+        auto snap = map_view::CaptureNative(runtime);
+        if (!snap || snap->indices.empty() || snap->layout.output.width == 0) {
+            map_view::PublishComposedLayout(runtime, nullptr);
+            return std::nullopt;
+        }
         renderer::MapFrameSnapshot frame_snap;
         frame_snap.width = snap->width;
         frame_snap.height = snap->height;
@@ -32,6 +34,7 @@ MapViewSession::MapViewSession(PS2Runtime& runtime) {
         };
         try {
             auto composed = renderer::MapViewCompositor::Compose(legacy_view, frame_snap);
+            map_view::PublishComposedLayout(runtime, &*snap);
             return PS2OwnedPresentationFrame{
                 composed.pixels,
                 composed.width,
@@ -39,6 +42,7 @@ MapViewSession::MapViewSession(PS2Runtime& runtime) {
                 composed.strideBytes
             };
         } catch (...) {
+            map_view::PublishComposedLayout(runtime, nullptr);
             return std::nullopt;
         }
     });

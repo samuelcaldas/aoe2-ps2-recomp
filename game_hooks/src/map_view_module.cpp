@@ -123,14 +123,10 @@ void Redirect(uint8_t* ram, R5900Context* ctx, PS2Runtime& runtime, State& state
     const int reg = slot == 1 ? 10 : 8;
     ctx->r[reg] = _mm_insert_epi64(ctx->r[reg], static_cast<int64_t>(base), 0);
 }
-void CursorClamp(uint8_t* ram, R5900Context* ctx, PS2Runtime&, State& state) {
+void CursorClamp(uint8_t* ram, R5900Context* ctx, const renderer::MapViewLayout& layout) {
     if (ctx->pc != entries[5]) return;
-    int32_t max_x = 628;
-    int32_t max_y = 431;
-    if (state.lease && state.relocation.active_layout.output.width > 0) {
-        max_x = static_cast<int32_t>(state.relocation.active_layout.output.width) - 1;
-        max_y = static_cast<int32_t>(state.relocation.active_layout.output.height) - 1;
-    }
+    const int32_t max_x = static_cast<int32_t>(layout.output.width) - 1;
+    const int32_t max_y = static_cast<int32_t>(layout.output.height) - 1;
     int32_t x = std::clamp(static_cast<int32_t>(getRegU32(ctx, 4)), 0, max_x);
     int32_t y = std::clamp(static_cast<int32_t>(getRegU32(ctx, 5)), 0, max_y);
     std::memcpy(Bytes(ram, 0x00C5E840, 4), &x, 4);
@@ -145,8 +141,8 @@ void Wrapper(uint8_t* ram, R5900Context* ctx, PS2Runtime* runtime) {
     if constexpr (Slot == 1 || Slot == 2) Redirect(ram, ctx, *runtime, *state, Slot);
     if constexpr (Slot == 3 || Slot == 4) Observe(ram, ctx, *runtime, *state, Slot);
     if constexpr (Slot == 5) {
-        if (state->lease && state->relocation.active_layout.output.width > 0) {
-            CursorClamp(ram, ctx, *runtime, *state);
+        if (auto layout = ActiveLayout(*runtime)) {
+            CursorClamp(ram, ctx, *layout);
             return;
         }
     }
@@ -206,18 +202,43 @@ std::optional<Snapshot> Capture(PS2Runtime& runtime) {
         return std::nullopt;
     return found->second->snapshot;
 }
+std::optional<Snapshot> CaptureNative(PS2Runtime& runtime) {
+    std::lock_guard lock(mutex);
+    auto found = states.find(&runtime);
+    if (found == states.end() || found->second->mode != MapViewMode::Native ||
+        !found->second->lease ||
+        !runtime.validateMapArena(found->second.get(), found->second->lease.generation))
+        return std::nullopt;
+    return found->second->snapshot;
+}
+void PublishComposedLayout(PS2Runtime& runtime, const Snapshot* snapshot) {
+    std::lock_guard lock(mutex);
+    auto found = states.find(&runtime);
+    if (found == states.end()) return;
+    auto& state = *found->second;
+    if (!snapshot || state.mode != MapViewMode::Native || !state.lease ||
+        !runtime.validateMapArena(&state, state.lease.generation) || !state.snapshot ||
+        state.snapshot->generation != snapshot->generation ||
+        state.snapshot->panel != snapshot->panel) {
+        state.composed_layout.reset();
+        return;
+    }
+    state.composed_layout = snapshot->layout;
+}
 std::optional<renderer::MapViewLayout> ActiveLayout(PS2Runtime& runtime) {
     std::lock_guard lock(mutex);
     auto found = states.find(&runtime);
-    if (found == states.end() || !found->second->lease) return std::nullopt;
-    if (found->second->relocation.active_layout.output.width == 0) return std::nullopt;
-    return found->second->relocation.active_layout;
+    if (found == states.end() || !found->second->lease ||
+        !runtime.validateMapArena(found->second.get(), found->second->lease.generation))
+        return std::nullopt;
+    return found->second->composed_layout;
 }
 std::optional<renderer::MapViewLayout> ActiveLayout() {
     std::lock_guard lock(mutex);
     for (const auto& [rt, state] : states) {
-        if (state->lease && state->relocation.active_layout.output.width > 0)
-            return state->relocation.active_layout;
+        if (state->lease && rt->validateMapArena(state.get(), state->lease.generation) &&
+            state->composed_layout)
+            return state->composed_layout;
     }
     return std::nullopt;
 }

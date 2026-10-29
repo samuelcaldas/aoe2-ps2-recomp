@@ -67,6 +67,8 @@ struct Snapshot {
 void Install(PS2Runtime&);
 void Teardown(PS2Runtime&);
 std::optional<Snapshot> Capture(PS2Runtime&);
+std::optional<Snapshot> CaptureNative(PS2Runtime&);
+void PublishComposedLayout(PS2Runtime&, const Snapshot*);
 std::optional<renderer::MapViewLayout> ActiveLayout(PS2Runtime&);
 std::optional<renderer::MapViewLayout> ActiveLayout();
 

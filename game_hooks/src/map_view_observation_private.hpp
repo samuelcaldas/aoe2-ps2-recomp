@@ -13,6 +13,8 @@ struct State {
     std::array<PS2Runtime::RecompiledFunction, 6> originals{};
     uint64_t submissions = 0, palettes = 0;
     std::optional<Snapshot> snapshot;
+    // Published by the presentation thread only after a native frame composes.
+    std::optional<renderer::MapViewLayout> composed_layout;
 };
 extern std::mutex mutex;
 uint8_t* Bytes(uint8_t*, uint32_t, uint32_t);
