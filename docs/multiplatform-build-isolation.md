@@ -107,3 +107,11 @@ When switching targets, Ninja and Gradle inspect timestamps in their respective 
   Running `cmake -B build` is reserved for lightweight host interface tests (`aoe2_interfaces`, `aoe2_smoke_test`).
 - **Use the dedicated tool wrappers**:
   Always invoke `python3 tools/docker_build.py --platform <desktop|pc|switch|android>` or `python3 tools/run_desktop_probe_build.py` to prevent memory exhaustion and preserve directory isolation.
+
+---
+
+## 7. Agent Skills Integration
+
+For autonomous agent and pair-programming workflows, dedicated skills are provided under `.agents/skills/` (and mirrored in `.claude/skills/`):
+- **`docker-build`** ([`.agents/skills/docker-build/SKILL.md`](../.agents/skills/docker-build/SKILL.md)): Automated build invocation across all targets with default `-j8`, build cache preservation, and diagnostics.
+- **`docker-validate`** ([`.agents/skills/docker-validate/SKILL.md`](../.agents/skills/docker-validate/SKILL.md)): Automated runtime validation, probe execution, and live noVNC inspection inside containers.
