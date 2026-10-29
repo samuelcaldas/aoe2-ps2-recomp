@@ -51,33 +51,59 @@ Because each Docker container runs with `-B {build_dir}` pointing to its dedicat
 
 ---
 
-## 4. Switching Targets Incrementally
+## 4. Concurrent Execution & Container Identification
+
+All containerized build and test drivers enforce unique, non-colliding container names, hostnames, and metadata labels. Builds and tests for different platforms (`desktop` / `pc`, `android`, `switch`) can run concurrently without collision:
+
+| Role | Platform / Target | Container Name | Hostname | Labels | Default Jobs |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Build** | Desktop (Release) | `aoe2-build-desktop` | `aoe2-build-desktop` | `aoe2.platform=desktop`, `aoe2.role=build` | `-j8` |
+| **Build** | Desktop (Diagnostics) | `aoe2-build-desktop-diagnostics` | `aoe2-build-desktop-diagnostics` | `aoe2.platform=desktop`, `aoe2.role=build` | `-j8` |
+| **Build** | Nintendo Switch | `aoe2-build-switch` | `aoe2-build-switch` | `aoe2.platform=switch`, `aoe2.role=build` | `-j8` |
+| **Build** | Android | `aoe2-build-android` | `aoe2-build-android` | `aoe2.platform=android`, `aoe2.role=build` | `-j8` |
+| **Test** | Desktop Validation | `aoe2-validate-desktop` | `aoe2-validate-desktop` | `aoe2.platform=desktop`, `aoe2.role=validate` | `-j8` |
+| **Test** | Switch Validation | `aoe2-validate-switch` | `aoe2-validate-switch` | `aoe2.platform=switch`, `aoe2.role=validate` | `-j8` |
+| **View** | Switch noVNC View | `aoe2-view-switch` | `aoe2-view-switch` | `aoe2.platform=switch`, `aoe2.role=view` | `-j8` |
+| **Test** | Android Validation | `aoe2-validate-android` | `aoe2-validate-android` | `aoe2.platform=android`, `aoe2.role=validate` | `-j8` |
+
+### Concurrency & Cache Guarantees:
+1. **Container Name Isolation**: Running `docker_build.py --platform desktop`, `docker_build.py --platform android`, and `docker_build.py --platform switch` simultaneously spins up containers with completely distinct IDs (`aoe2-build-desktop`, `aoe2-build-android`, `aoe2-build-switch`), avoiding Docker daemon name conflicts.
+2. **Build Cache Preservation**:
+   - Desktop and Switch preserve intermediate CMake/Ninja `.o` and `.ninja_deps` files under `build/docker-desktop/` and `build/docker-switch/`.
+   - Android utilizes Gradle's `--build-cache` and isolates Gradle home cache in `build/docker-android/gradle-home` and native C++ in `build/android-cxx`.
+   - HD asset staging acquires an exclusive file lock (`.staging.lock`) during preparation so concurrent builds never corrupt staged assets or manifests.
+3. **Default Parallelism**: All containerized commands default to `-j8` / `--cpus=8`.
+4. **Platform Aliases**: `--platform pc` is supported as an alias for `--platform desktop`.
+
+---
+
+## 5. Switching Targets Incrementally
 
 When switching targets, Ninja and Gradle inspect timestamps in their respective isolated build directories. Generated PS2Recomp files under `generated/SLES-50282/` are read-only inputs mounted into the containers:
 
 1. **Compiling Switch after Desktop**:
    ```bash
-   python3 tools/docker_build.py --platform switch --jobs 4
+   python3 tools/docker_build.py --platform switch --jobs 8
    ```
    *Reads* the generated sources and writes objects to `build/docker-switch/`. `build/docker-desktop/` remains untouched.
 
 2. **Switching back to Desktop**:
    ```bash
-   python3 tools/docker_build.py --platform desktop --jobs 4
+   python3 tools/docker_build.py --platform desktop --jobs 8
    ```
    Ninja immediately inspects `build/docker-desktop/build.ninja`. If no source or header files were changed, it exits with `ninja: no work to do`. If only a few host-layer files (e.g., `game_hooks/` or `input/`) changed, **only those specific files are recompiled**. The thousands of unchanged generated game logic files are **not recompiled**.
 
 3. **Building Android APK**:
    ```bash
-   python3 tools/docker_build.py --platform android --jobs 4
+   python3 tools/docker_build.py --platform android --jobs 8
    ```
    Gradle compiles native C++ libraries for `arm64-v8a` and `x86_64` using `platform/android/build.gradle`, producing `build/docker-android/aoe2-recomp-debug.apk`.
 
 ---
 
-## 5. Local Host Development Best Practices
+## 6. Local Host Development Best Practices
 
 - **Never configure CMake directly at the repo root with default `build/` for full game targets**:
   Running `cmake -B build` is reserved for lightweight host interface tests (`aoe2_interfaces`, `aoe2_smoke_test`).
 - **Use the dedicated tool wrappers**:
-  Always invoke `python3 tools/docker_build.py --platform <desktop|switch|android>` or `python3 tools/run_desktop_probe_build.py` to prevent memory exhaustion and preserve directory isolation.
+  Always invoke `python3 tools/docker_build.py --platform <desktop|pc|switch|android>` or `python3 tools/run_desktop_probe_build.py` to prevent memory exhaustion and preserve directory isolation.

@@ -44,7 +44,7 @@ python3 tools/verify_function_map.py               # reject map entries that spa
 python3 tools/install_ghidra_ee_extension.py       # pinned Emotion Engine (R5900) language; the pipeline requires it
 python3 tools/import_owned_disc.py --iso /path/to/aoe2.iso  # extract the owned disc next to AOK.ELF (CD root)
 python3 tools/resolve_kcet_hooks.py                # KCET hook addresses from ../aoe decomp -> ignored game/SLES-50282/kcet_hooks.ini
-python3 tools/docker_build.py --platform desktop|android|switch [--jobs N]  # containerized builds (docker-dev)
+python3 tools/docker_build.py --platform desktop|android|switch|pc [--jobs N] [--test]  # containerized builds (docker-dev, default -j8)
 python3 tools/classify_diagnostics.py --log build.log [--out report.json]
 ```
 

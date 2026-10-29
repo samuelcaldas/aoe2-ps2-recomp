@@ -58,6 +58,14 @@ class TestAndroidValidationScript(unittest.TestCase):
         self.assertIn("/dev/kvm", command)
         group_index = command.index("--group-add") + 1
         self.assertEqual(command[group_index], str(validation.os.stat("/dev/kvm").st_gid))
+        self.assertIn("--name=aoe2-validate-android", command)
+        self.assertIn("--hostname=aoe2-validate-android", command)
+        self.assertIn("--label=aoe2.platform=android", command)
+        self.assertIn("--label=aoe2.role=validate", command)
+        self.assertIn("--cpus=8", command)
+
+    def test_default_jobs_is_eight(self):
+        self.assertEqual(validation.DEFAULT_JOBS, 8)
 
     def test_verdict_passes_only_with_progress_and_changing_real_frames(self):
         with tempfile.TemporaryDirectory() as directory:

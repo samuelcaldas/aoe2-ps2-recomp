@@ -41,7 +41,26 @@ EVIDENCE_DIR = "build/switch-validation"
 SCREENSHOT_INTERVAL = 15
 DISPLAY = ":99"
 MEMORY_LIMIT = "12g"
+CONTAINER_NAME = "aoe2-validate-switch"
+DEFAULT_JOBS = 8
 EXIT_PASS, EXIT_FAIL, EXIT_PREFLIGHT = 0, 1, 2
+
+
+def ensure_container_clean(name: str) -> None:
+    """Ensure no stale stopped container with `name` blocks docker run --name."""
+    inspect = subprocess.run(
+        ["docker", "--context", DOCKER_CONTEXT, "container", "inspect", "-f", "{{.State.Running}}", name],
+        capture_output=True,
+        text=True,
+    )
+    if inspect.returncode == 0:
+        if inspect.stdout.strip() == "false":
+            subprocess.run(
+                ["docker", "--context", DOCKER_CONTEXT, "rm", "-f", name],
+                capture_output=True,
+            )
+        else:
+            raise PreflightError(f"container '{name}' is already running")
 
 
 class PreflightError(RuntimeError):
@@ -92,9 +111,14 @@ def evidence_passed(alive: bool, log: str, screenshots: list, executor=run_comma
     return alive and progressing and frames.real_frames >= 2 and frames.changed
 
 
-def container_command(run_seconds: int, jobs: int = 4, nro: str = NRO_PATH, port: int = 6080) -> list:
+def container_command(run_seconds: int, jobs: int = DEFAULT_JOBS, nro: str = NRO_PATH, port: int = 6080) -> list:
     return [
         "docker", "--context", DOCKER_CONTEXT, "run", "--rm",
+        f"--name={CONTAINER_NAME}",
+        f"--hostname={CONTAINER_NAME}",
+        "--label=aoe2.platform=switch",
+        "--label=aoe2.role=validate",
+        f"--label=aoe2.container={CONTAINER_NAME}",
         f"--memory={MEMORY_LIMIT}", f"--memory-swap={MEMORY_LIMIT}", f"--cpus={jobs}",
         "-p", f"{port}:6080",
         "-e", "LC_ALL=C.UTF-8", "-e", "TZ=America/Sao_Paulo",
@@ -119,7 +143,7 @@ def check_preflight(keys_path: Path = REPO_ROOT / PROD_KEYS_DEFAULT) -> None:
 def main(argv: list | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--run-seconds", type=int, default=60, help="how long to run the emulator under test (seconds)")
-    parser.add_argument("--jobs", type=int, default=4, help="CPU quota allocated to emulator container")
+    parser.add_argument("--jobs", type=int, default=DEFAULT_JOBS, help="CPU quota allocated to emulator container (default: 8)")
     parser.add_argument("--port", type=int, default=6080, help="host port for noVNC web view (default: 6080)")
     parser.add_argument("--keys", type=Path, default=REPO_ROOT / PROD_KEYS_DEFAULT, help="path to Switch prod.keys")
     parser.add_argument("--dry-run", action="store_true", help="print commands without executing them")
@@ -130,6 +154,9 @@ def main(argv: list | None = None) -> int:
     except PreflightError as error:
         sys.stderr.write(f"PREFLIGHT FAILED: {error}\n")
         return EXIT_PREFLIGHT
+
+    if not args.dry_run:
+        ensure_container_clean(CONTAINER_NAME)
 
     cmd = container_command(args.run_seconds, jobs=args.jobs, port=args.port)
     print("+ " + shlex.join(cmd[:10]) + " ...", flush=True)

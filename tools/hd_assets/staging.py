@@ -1,5 +1,6 @@
 """Copies raw catalog assets to an ignored platform data/package tree."""
 
+import fcntl
 import json
 import os
 import shutil
@@ -13,6 +14,7 @@ from tools.hd_assets.stage_plan import StageEntry, plan_stage, stage_root_for
 MANIFEST_NAME = "hd_stage.json"
 MANIFEST_SCHEMA = 1
 PARTIAL_SUFFIX = ".partial"
+LOCK_NAME = ".staging.lock"
 
 
 @dataclass(frozen=True)
@@ -26,12 +28,19 @@ def stage_assets(catalog, platform: str, source_root: Path, repository_root: Pat
     """Stage original catalog bytes, persist a local manifest, and return the output root."""
     stage_root = stage_root_for(platform, repository_root)
     _validate_stage_root(repository_root, stage_root)
-    entries = plan_stage(catalog, platform, repository_root, source_root)
-    _reject_unlisted_files(stage_root, entries)
-    rows = [_stage_entry(entry, stage_root, source_root) for entry in entries]
-    _write_manifest(stage_root, platform, rows)
-    relative_root = stage_root.relative_to(repository_root)
-    return StageReport(platform=platform, relative_root=relative_root, entry_count=len(rows))
+    stage_root.mkdir(parents=True, exist_ok=True)
+    lock_path = stage_root / LOCK_NAME
+    with lock_path.open("w") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            entries = plan_stage(catalog, platform, repository_root, source_root)
+            _reject_unlisted_files(stage_root, entries)
+            rows = [_stage_entry(entry, stage_root, source_root) for entry in entries]
+            _write_manifest(stage_root, platform, rows)
+            relative_root = stage_root.relative_to(repository_root)
+            return StageReport(platform=platform, relative_root=relative_root, entry_count=len(rows))
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 def _reject_unlisted_files(stage_root: Path, entries: tuple[StageEntry, ...]) -> None:

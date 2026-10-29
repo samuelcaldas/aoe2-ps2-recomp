@@ -53,6 +53,15 @@ class TestSwitchValidationScript(unittest.TestCase):
         self.assertIn("--memory=12g", command)
         self.assertIn("--cpus=4", command)
         self.assertIn("aoe2-switch-emulator", command)
+        self.assertIn("--name=aoe2-validate-switch", command)
+        self.assertIn("--hostname=aoe2-validate-switch", command)
+        self.assertIn("--label=aoe2.platform=switch", command)
+        self.assertIn("--label=aoe2.role=validate", command)
+
+    def test_default_jobs_is_eight(self):
+        self.assertEqual(validation.DEFAULT_JOBS, 8)
+        command = validation.container_command(run_seconds=60)
+        self.assertIn("--cpus=8", command)
 
     def test_verdict_passes_only_with_progress_and_changing_real_frames(self):
         with tempfile.TemporaryDirectory() as directory:

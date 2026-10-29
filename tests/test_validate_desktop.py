@@ -143,6 +143,16 @@ class TestDesktopValidation(unittest.TestCase):
         summary = validation.summarize_log(stalled)
         self.assertFalse(validation.passed(summary, still_running=True, frames=REAL_AND_CHANGED))
 
+    def test_container_command_options_and_default_jobs(self):
+        self.assertEqual(validation.DEFAULT_JOBS, 8)
+        cmd = validation.container_command(run_seconds=30, interval=10, jobs=8)
+        self.assertIn("--name=aoe2-validate-desktop", cmd)
+        self.assertIn("--hostname=aoe2-validate-desktop", cmd)
+        self.assertIn("--label=aoe2.platform=desktop", cmd)
+        self.assertIn("--label=aoe2.role=validate", cmd)
+        self.assertIn("--cpus=8", cmd)
+        self.assertIn("aoe2-build-desktop", cmd)
+
 
 if __name__ == "__main__":
     unittest.main()

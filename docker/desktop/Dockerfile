@@ -13,6 +13,7 @@ RUN apt-get update \
       libgl1-mesa-dev libglu1-mesa-dev libwayland-dev libxkbcommon-dev \
       libasound2-dev libpulse-dev \
       libavcodec-dev libavformat-dev libavutil-dev libswresample-dev libswscale-dev \
+      xvfb x11-apps imagemagick \
  && rm -rf /var/lib/apt/lists/*
 
 ARG BUILD_UID=1000

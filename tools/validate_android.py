@@ -38,7 +38,26 @@ GAME_DIR = "game/SLES-50282"
 EVIDENCE_DIR = "build/android-validation"
 SYSTEM_IMAGE = "system-images;android-34;default;x86_64"
 SCREENSHOT_INTERVAL = 15
+CONTAINER_NAME = "aoe2-validate-android"
+DEFAULT_JOBS = 8
 EXIT_PASS, EXIT_FAIL, EXIT_PREFLIGHT = 0, 1, 2
+
+
+def ensure_container_clean(name: str) -> None:
+    """Ensure no stale stopped container with `name` blocks docker run --name."""
+    inspect = subprocess.run(
+        ["docker", "--context", DOCKER_CONTEXT, "container", "inspect", "-f", "{{.State.Running}}", name],
+        capture_output=True,
+        text=True,
+    )
+    if inspect.returncode == 0:
+        if inspect.stdout.strip() == "false":
+            subprocess.run(
+                ["docker", "--context", DOCKER_CONTEXT, "rm", "-f", name],
+                capture_output=True,
+            )
+        else:
+            raise RuntimeError(f"container '{name}' is already running")
 
 
 def emulator_script(run_seconds: int, interval: int = SCREENSHOT_INTERVAL) -> str:
@@ -76,11 +95,16 @@ def evidence_passed(alive: bool, logcat: str, screenshots: list, executor=run_co
     return alive and progressing and frames.real_frames >= 2 and frames.changed
 
 
-def container_command(run_seconds: int) -> list:
+def container_command(run_seconds: int, jobs: int = DEFAULT_JOBS) -> list:
     return [
         "docker", "--context", DOCKER_CONTEXT, "run", "--rm",
+        f"--name={CONTAINER_NAME}",
+        f"--hostname={CONTAINER_NAME}",
+        "--label=aoe2.platform=android",
+        "--label=aoe2.role=validate",
+        f"--label=aoe2.container={CONTAINER_NAME}",
         "--device", "/dev/kvm", "--group-add", str(os.stat("/dev/kvm").st_gid),
-        "--memory=10g", "--cpus=6",
+        "--memory=10g", f"--cpus={jobs}",
         "-v", f"{REPO_ROOT}:{CONTAINER_ROOT}", "-w", CONTAINER_ROOT,
         IMAGE, "bash", "-c", emulator_script(run_seconds),
     ]
@@ -97,13 +121,20 @@ def check_preflight() -> None:
 def main(argv: list | None = None) -> int:
     parser = argparse.ArgumentParser(description="Validate the Android APK in a headless emulator.")
     parser.add_argument("--run-seconds", type=int, default=90)
+    parser.add_argument("--jobs", type=int, default=DEFAULT_JOBS, help="CPU quota allocated to emulator container (default: 8)")
+    parser.add_argument("--dry-run", action="store_true", help="print container command without running")
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
     try:
         check_preflight()
     except FileNotFoundError as error:
         sys.stderr.write(f"PREFLIGHT FAILED: {error}\n")
         return EXIT_PREFLIGHT
-    subprocess.run(container_command(args.run_seconds))
+    cmd = container_command(args.run_seconds, jobs=args.jobs)
+    if args.dry_run:
+        print("+ " + shlex.join(cmd))
+        return EXIT_PASS
+    ensure_container_clean(CONTAINER_NAME)
+    subprocess.run(cmd)
     evidence = REPO_ROOT / EVIDENCE_DIR
     alive_file = evidence / "alive.txt"
     logcat_file = evidence / "logcat.txt"
