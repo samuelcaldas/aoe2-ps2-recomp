@@ -59,9 +59,9 @@ Patch 0008 has no current use. Deciding its retention is a decision for the owne
 
 - `PS2_RAM_SIZE` (`ps2_memory.h`): Expanded to `64u * 1024u * 1024u` (64 MB).
 - `PS2_RAM_MASK`: `0x03FFFFFFu`.
-- Heap exclusive end: `PS2_HLE_RESERVATION_BASE = PS2_RAM_SIZE - 0x00140000u` (62.75 MiB). HLE RPC/TLS/BootMode pools occupy the following reserved 256 KiB, retaining their relative offsets. Callback stacks independently occupy the top 1 MiB, starting at `PS2_ASYNC_STACK_FLOOR`.
-- ELF segment loads reject any RDRAM interval extending into these reservations before copying that segment. Heap allocations cannot cross the HLE reservation; callback stacks cannot descend into it.
-- Extra RAM is addressable, not exclusively assigned to a future map buffer. Viewport expansion still requires explicit buffer ownership and allocation.
+- Heap exclusive end: `PS2_MAP_ARENA_BASE = PS2_HLE_RESERVATION_BASE - PS2_MAP_ARENA_SIZE` (54.75 MiB). The map reservation occupies the following 8 MiB; `PS2_HLE_RESERVATION_BASE = PS2_RAM_SIZE - 0x00140000u` remains at 62.75 MiB. HLE RPC/TLS/BootMode pools retain the following 256 KiB, and callback stacks independently occupy the top 1 MiB, starting at `PS2_ASYNC_STACK_FLOOR`.
+- ELF segment loads reject any RDRAM interval extending into these reservations before copying that segment. Heap allocation and reconfiguration cannot cross the map reservation; callback stacks retain their existing floor above HLE.
+- The map interval is reserved independently of heap blocks, but no surface allocator, module ownership API, or relocation is implemented. See the [reservation tests and legacy replay checkpoint](native-map-view-checkpoint.md); reservation alone does not establish native viewport rendering.
 - SIF HLE masks (`SifCommandEndpoint.cpp`, `SifCdvdServer.cpp`) updated to `PS2_RAM_MASK`.
 - DMA chain walking in `ps2_memory.cpp` automatically clamps addresses to the expanded `PS2_RAM_SIZE`.
 - The GS VRAM (4 MB) is a separate allocation and is not the guest RAM limit.
@@ -84,8 +84,8 @@ python3 -m unittest tests.test_deps_bootstrap tests.test_generation_manifest
 
 ## 7. Remaining viewport work (outside RAM expansion)
 
-1. Measure the real guest RAM budget, including DMA-written regions, since write-watch does not see DMA.
-2. Choose the target map view size from the PC reference (demo binary and partial decomp), not from the PS2 layout.
-3. Reserve or allocate the enlarged playfield buffer explicitly, then validate rendering and input geometry. Expanded RAM and passing initialization tests do not establish HD gameplay.
+1. Verify area pitch, guard rows, row tables, active map CLUT, and completed-frame snapshot synchronization against the current generated implementation.
+2. Add explicit surface ownership/lifecycle and relocate at 640×262, preserving indices and image before enlarging anything.
+3. Derive the target map rectangle from verified functional HUD regions for 1280×720 and 1920×1080; present and route input through the same layout. Expanded RAM, a reserved interval, and passing initialization tests do not establish HD gameplay.
 
 The presentation callback API remains in the fork; removing an unused API is not required by the RAM expansion.

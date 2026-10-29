@@ -93,8 +93,11 @@ flowchart LR
 ```
 
 ### Phase A: Configurable Engine Viewport
-- Target: Override the internal constants defining the map viewport (width, height, and clip bounds `D_004E30DC..E8` in the decomp).
-- Allocate a larger guest RAM buffer replacing `0x01F98C80` to allow the engine to rasterize a larger portion of the map natively.
+- The [native map view plan](../plans/nifty-herding-pudding.md) requires opt-in native output with legacy as the default. The [2026-10-29 checkpoint](../native-map-view-checkpoint.md) records a successful replay into the first mission with the existing diagnostic executable, its exact hash, and the new fork reservation tests. That replay predates the reservation changes; it is not validation of the modified runtime or enlarged gameplay.
+- An exclusive 8 MiB guest interval below HLE is now excluded from heap allocation/reconfiguration and ELF segment writes. Surface ownership, pitch/guard validation, and initial 640×262 relocation parity are still pending; no larger draw area is activated.
+- Width, height, pitch, backing address, clipping, and dimension-dependent tables must change coherently before initialization writes. Both area setup calls must use the correct storage; changing a pointer after an enlarged clear is unsafe.
+- Active map palette identity, upload identity, and completed-frame snapshot synchronization remain unverified. Do not substitute a presumed interface palette or use the existing post-present callback as a shared compositor.
+- Final native output must render more terrain and units at 1:1 pixel scale, preserve functional HUD/input, and bypass the GS texture-size ceiling. A reserved interval or larger window does not meet that criterion.
 
 ### Phase B: Direct Playfield Presentation
 - Bypass the PS2 Graphics Synthesizer's 4 MB eDRAM and 1024 px texture dimension restrictions.
