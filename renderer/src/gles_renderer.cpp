@@ -1,112 +1,39 @@
 #include <aoe2/renderer/gles_renderer.hpp>
 
-#include <iostream>
-
 #if defined(__SWITCH__)
-#include <switch.h>
-#include <EGL/egl.h>
-#include <EGL/eglext.h>
 #include <GLES2/gl2.h>
 #elif defined(AOE2_HAS_GLES)
-#include <EGL/egl.h>
 #include <GLES3/gl3.h>
 #endif
 
 namespace aoe2::renderer {
 
-#if defined(__SWITCH__)
-namespace {
-static EGLDisplay s_switch_display = EGL_NO_DISPLAY;
-static EGLContext s_switch_context = EGL_NO_CONTEXT;
-static EGLSurface s_switch_surface = EGL_NO_SURFACE;
-}
-#endif
-
 GlesRenderer::~GlesRenderer() {
     Shutdown();
 }
 
-void GlesRenderer::InitGlesContext() {
-#if defined(__SWITCH__)
-    NWindow* win = nwindowGetDefault();
-    if (win) {
-        AppletOperationMode op_mode = appletGetOperationMode();
-        u32 winWidth = (op_mode == AppletOperationMode_Console) ? 1920 : 1280;
-        u32 winHeight = (op_mode == AppletOperationMode_Console) ? 1080 : 720;
-        nwindowSetDimensions(win, winWidth, winHeight);
-
-        s_switch_display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-        if (s_switch_display && eglInitialize(s_switch_display, nullptr, nullptr)) {
-            eglBindAPI(EGL_OPENGL_ES_API);
-            static const EGLint configAttribs[] = {
-                EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
-                EGL_RED_SIZE, 8,
-                EGL_GREEN_SIZE, 8,
-                EGL_BLUE_SIZE, 8,
-                EGL_ALPHA_SIZE, 8,
-                EGL_NONE
-            };
-            EGLConfig config;
-            EGLint numConfigs = 0;
-            if (eglChooseConfig(s_switch_display, configAttribs, &config, 1, &numConfigs) && numConfigs > 0) {
-                s_switch_surface = eglCreateWindowSurface(s_switch_display, config, win, nullptr);
-                static const EGLint ctxAttribs[] = {
-                    EGL_CONTEXT_CLIENT_VERSION, 2,
-                    EGL_NONE
-                };
-                s_switch_context = eglCreateContext(s_switch_display, config, EGL_NO_CONTEXT, ctxAttribs);
-                if (s_switch_context && s_switch_surface) {
-                    eglMakeCurrent(s_switch_display, s_switch_surface, s_switch_surface, s_switch_context);
-                    eglSwapInterval(s_switch_display, 1);
-                    gl_context_active_ = true;
-                    return;
-                }
-            }
-        }
-    }
-    gl_context_active_ = false;
-#elif defined(AOE2_HAS_GLES)
-    // Desktop EGL / GLES3 context initialization
-    gl_context_active_ = true;
-#else
-    // Headless / mock context for CI and tests without display server
-    gl_context_active_ = false;
-#endif
-}
-
-void GlesRenderer::CleanupGlesContext() {
-#if defined(__SWITCH__)
-    if (s_switch_display != EGL_NO_DISPLAY) {
-        eglMakeCurrent(s_switch_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-        if (s_switch_context != EGL_NO_CONTEXT) {
-            eglDestroyContext(s_switch_display, s_switch_context);
-            s_switch_context = EGL_NO_CONTEXT;
-        }
-        if (s_switch_surface != EGL_NO_SURFACE) {
-            eglDestroySurface(s_switch_display, s_switch_surface);
-            s_switch_surface = EGL_NO_SURFACE;
-        }
-        eglTerminate(s_switch_display);
-        s_switch_display = EGL_NO_DISPLAY;
-    }
-    gl_context_active_ = false;
-#elif defined(AOE2_HAS_GLES)
-    gl_context_active_ = false;
-#endif
+bool GlesRenderer::InitGlObjects() {
+    if (!context_.IsActive() || !shader_.Initialize() || !batch_.Initialize()) return false;
+    return font_.Initialize(*this);
 }
 
 bool GlesRenderer::Initialize(const FramebufferInfo& info) {
+    if (info.width == 0 || info.height == 0) return false;
     if (initialized_) {
-        return true;
+        if (info_.width == info.width && info_.height == info.height) return true;
+        Shutdown();
     }
     info_ = info;
-    InitGlesContext();
+    // UploadTexture is used by GlesFont::Initialize, so mark the renderer
+    // initialized while constructing GL resources. Roll back all partial state
+    // if the EGL context or any dependent object fails to initialize.
     initialized_ = true;
+    if (!context_.Initialize(info.width, info.height) || !InitGlObjects()) {
+        Shutdown();
+        return false;
+    }
     frame_count_ = 0;
     draw_call_count_ = 0;
-    textures_.clear();
-    current_frame_commands_.clear();
-    current_text_commands_.clear();
     return true;
 }
 
@@ -115,43 +42,38 @@ void GlesRenderer::BeginFrame() {
     draw_call_count_ = 0;
     current_frame_commands_.clear();
     current_text_commands_.clear();
-
+    if (!context_.IsActive()) return;
 #if defined(AOE2_HAS_GLES) || defined(__SWITCH__)
-    if (gl_context_active_) {
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    }
+    glViewport(0, 0, static_cast<GLsizei>(info_.width), static_cast<GLsizei>(info_.height));
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 #endif
+    shader_.Bind();
+    shader_.UpdateProjection(static_cast<float>(info_.width), static_cast<float>(info_.height));
+    batch_.Begin();
 }
 
 void GlesRenderer::EndFrame() {
     if (!initialized_) return;
     ++frame_count_;
-
-#if defined(__SWITCH__)
-    if (gl_context_active_ && s_switch_display != EGL_NO_DISPLAY && s_switch_surface != EGL_NO_SURFACE) {
-        eglSwapBuffers(s_switch_display, s_switch_surface);
-    }
-#elif defined(AOE2_HAS_GLES)
-    if (gl_context_active_) {
-        // eglSwapBuffers(...)
-    }
-#endif
+    if (!context_.IsActive()) return;
+    batch_.Flush();
+    context_.SwapBuffers();
 }
 
 void GlesRenderer::Shutdown() {
     if (!initialized_) return;
+    for (auto& [id, tex] : textures_) {
 #if defined(AOE2_HAS_GLES) || defined(__SWITCH__)
-    if (gl_context_active_) {
-        for (auto& [id, tex] : textures_) {
-            if (tex.gl_handle != 0) {
-                glDeleteTextures(1, &tex.gl_handle);
-                tex.gl_handle = 0;
-            }
-        }
-    }
+        if (context_.IsActive() && tex.gl_handle != 0) glDeleteTextures(1, &tex.gl_handle);
 #endif
-    CleanupGlesContext();
+    }
+    batch_.Teardown();
+    shader_.Teardown();
+    font_.Teardown();
+    context_.Teardown();
     textures_.clear();
     current_frame_commands_.clear();
     current_text_commands_.clear();
@@ -161,72 +83,68 @@ void GlesRenderer::Shutdown() {
 void GlesRenderer::DeleteTexture(uint32_t texture_id) {
     auto it = textures_.find(texture_id);
     if (it == textures_.end()) return;
-
+    if (context_.IsActive()) batch_.Flush();
 #if defined(AOE2_HAS_GLES) || defined(__SWITCH__)
-    if (gl_context_active_ && it->second.gl_handle != 0) {
-        glDeleteTextures(1, &it->second.gl_handle);
-    }
+    if (context_.IsActive() && it->second.gl_handle != 0) glDeleteTextures(1, &it->second.gl_handle);
 #endif
     textures_.erase(it);
 }
 
 bool GlesRenderer::UploadTexture(uint32_t texture_id, uint32_t width, uint32_t height, const uint32_t* rgba_pixels) {
-    if (!initialized_ || width == 0 || height == 0 || !rgba_pixels) {
-        return false;
-    }
-
-    // Clean up previous GL handle if replacing existing texture
-    auto it = textures_.find(texture_id);
-    if (it != textures_.end()) {
+    if (!initialized_ || width == 0 || height == 0 || !rgba_pixels) return false;
+    GlesTexture tex{texture_id, width, height, 0, {}};
+    const size_t pixel_count = static_cast<size_t>(width) * height;
+    if (pixel_count / width != height || pixel_count > tex.pixels.max_size()) return false;
+    tex.pixels.assign(rgba_pixels, rgba_pixels + pixel_count);
 #if defined(AOE2_HAS_GLES) || defined(__SWITCH__)
-        if (gl_context_active_ && it->second.gl_handle != 0) {
-            glDeleteTextures(1, &it->second.gl_handle);
-            it->second.gl_handle = 0;
-        }
-#endif
-    }
-
-    GlesTexture tex;
-    tex.id = texture_id;
-    tex.width = width;
-    tex.height = height;
-    tex.pixels.assign(rgba_pixels, rgba_pixels + (width * height));
-
-#if defined(AOE2_HAS_GLES) || defined(__SWITCH__)
-    if (gl_context_active_) {
+    if (context_.IsActive()) {
         GLuint handle = 0;
         glGenTextures(1, &handle);
+        if (!handle) return false;
         glBindTexture(GL_TEXTURE_2D, handle);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba_pixels);
+        if (glGetError() != GL_NO_ERROR) { glDeleteTextures(1, &handle); return false; }
         tex.gl_handle = handle;
     }
 #endif
-
+    DeleteTexture(texture_id);
     textures_[texture_id] = std::move(tex);
     return true;
+}
+
+void GlesRenderer::BuildSpriteVertices(Vertex2D v[4], const RectF& src, const RectF& dst,
+                                      float tw, float th, uint32_t tint) {
+    float u0 = src.x / tw, v0 = src.y / th;
+    float u1 = (src.x + src.width) / tw, v1 = (src.y + src.height) / th;
+    float x0 = dst.x, y0 = dst.y;
+    float x1 = dst.x + dst.width, y1 = dst.y + dst.height;
+    v[0] = {x0, y0, u0, v0, tint};
+    v[1] = {x1, y0, u1, v0, tint};
+    v[2] = {x1, y1, u1, v1, tint};
+    v[3] = {x0, y1, u0, v1, tint};
 }
 
 void GlesRenderer::DrawSprite(uint32_t texture_id, const RectF& src_rect, const RectF& dst_rect, uint32_t tint_color) {
     if (!initialized_) return;
     ++draw_call_count_;
     current_frame_commands_.push_back(DrawSpriteCommand{texture_id, src_rect, dst_rect, tint_color});
-
-#if defined(AOE2_HAS_GLES) || defined(__SWITCH__)
-    if (gl_context_active_) {
-        auto it = textures_.find(texture_id);
-        if (it != textures_.end()) {
-            glBindTexture(GL_TEXTURE_2D, it->second.gl_handle);
-            // Draw textured quad using VBO / shaders
-        }
-    }
-#endif
+    if (!context_.IsActive()) return;
+    auto it = textures_.find(texture_id);
+    if (it == textures_.end() || it->second.gl_handle == 0) return;
+    Vertex2D v[4];
+    BuildSpriteVertices(v, src_rect, dst_rect, static_cast<float>(it->second.width),
+                        static_cast<float>(it->second.height), tint_color);
+    batch_.PushQuad(v, it->second.gl_handle);
 }
 
 void GlesRenderer::DrawText(std::string_view text, float x, float y, float font_size, uint32_t color) {
     if (!initialized_) return;
     current_text_commands_.push_back(DrawTextCommand{std::string(text), x, y, font_size, color});
+    font_.DrawString(*this, text, x, y, font_size, color);
 }
 
 bool GlesRenderer::HasTexture(uint32_t texture_id) const {
@@ -235,9 +153,7 @@ bool GlesRenderer::HasTexture(uint32_t texture_id) const {
 
 const GlesTexture* GlesRenderer::GetTexture(uint32_t texture_id) const {
     auto it = textures_.find(texture_id);
-    if (it != textures_.end()) {
-        return &it->second;
-    }
+    if (it != textures_.end()) return &it->second;
     return nullptr;
 }
 

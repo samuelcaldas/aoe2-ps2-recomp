@@ -1,6 +1,10 @@
 #pragma once
 
 #include <aoe2/renderer/renderer.hpp>
+#include <aoe2/renderer/gles_context.hpp>
+#include <aoe2/renderer/gles_shader.hpp>
+#include <aoe2/renderer/gles_batch.hpp>
+#include <aoe2/renderer/gles_font.hpp>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -52,6 +56,11 @@ public:
     void DeleteTexture(uint32_t texture_id) override;
     const GlesTexture* GetTexture(uint32_t texture_id) const;
 
+    const GlesContext& GetContext() const { return context_; }
+    const GlesShader& GetShader() const { return shader_; }
+    const GlesBatch& GetBatch() const { return batch_; }
+    const GlesFont& GetFont() const { return font_; }
+
     const std::vector<DrawSpriteCommand>& GetSpriteCommands() const { return current_frame_commands_; }
     const std::vector<DrawTextCommand>& GetTextCommands() const { return current_text_commands_; }
 
@@ -60,14 +69,19 @@ public:
     const FramebufferInfo& GetFramebufferInfo() const { return info_; }
 
 private:
-    void InitGlesContext();
-    void CleanupGlesContext();
+    bool InitGlObjects();
+    void BuildSpriteVertices(Vertex2D v[4], const RectF& src, const RectF& dst,
+                             float tw, float th, uint32_t tint);
 
     FramebufferInfo info_{};
     uint64_t frame_count_{0};
     uint32_t draw_call_count_{0};
     bool initialized_{false};
-    bool gl_context_active_{false};
+
+    GlesContext context_{};
+    GlesShader shader_{};
+    GlesBatch batch_{};
+    GlesFont font_{};
 
     std::unordered_map<uint32_t, GlesTexture> textures_;
     std::vector<DrawSpriteCommand> current_frame_commands_;
