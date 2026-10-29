@@ -25,6 +25,9 @@ void configuration() {
     check(ReadMapViewConfig("legacy", nullptr) == MapViewMode::Legacy);
     check(ReadMapViewConfig("relocation", nullptr) == MapViewMode::Relocation);
     check(ReadMapViewConfig("native", nullptr) == MapViewMode::Native);
+    check(DefaultMapOutput(false, false) == std::pair<uint32_t, uint32_t>{640, 448});
+    check(DefaultMapOutput(true, false) == std::pair<uint32_t, uint32_t>{1280, 720});
+    check(DefaultMapOutput(true, true) == std::pair<uint32_t, uint32_t>{1920, 1080});
     rejects([] { ReadMapViewConfig("", nullptr); });
     rejects([] { ReadMapViewConfig("NATIVE", nullptr); });
     rejects([] { ReadMapViewConfig("native ", nullptr); });

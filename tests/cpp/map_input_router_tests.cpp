@@ -40,5 +40,31 @@ void drag_and_resize() {
     check_point(docked.Route(1919, 787, {1920, 1080}), MapInputRegion::Map, 1919, 707);
     check(!docked.Route(100, 800, {1920, 1080}));
 }
+void mouse_buttons() {
+    MapInputRouter router(aoe2::renderer::MapViewLayout::ForOutput(1280, 720));
+    const Extent window{1280, 720};
+    auto result = router.RouteMouse(100, 600, window, kMouseButtonLeft);
+    check(!result.point && result.buttons == 0);
+    result = router.RouteMouse(640, 300, window, kMouseButtonLeft);
+    check(result.point && result.buttons == 0); // A press in empty space stays suppressed.
+    router.RouteMouse(640, 300, window, 0);
+    result = router.RouteMouse(640, 300, window, kMouseButtonLeft);
+    check(result.point && result.buttons == kMouseButtonLeft);
+    result = router.RouteMouse(100, 600, window, kMouseButtonLeft);
+    check_point(result.point, MapInputRegion::Map, 100, 533);
+    check(result.buttons == kMouseButtonLeft); // The drag keeps its original domain.
+    result = router.RouteMouse(100, 600, window, 0);
+    check(!result.point && result.buttons == 0);
+    router.ResetMouse(kMouseButtonRight);
+    result = router.RouteMouse(640, 300, window, kMouseButtonRight);
+    check(result.point && result.buttons == 0);
+    router.RouteMouse(640, 300, window, 0);
+    result = router.RouteMouse(640, 300, window, kMouseButtonRight);
+    check(result.point && result.buttons == kMouseButtonRight);
+    result = router.RouteMouse(100, 600, window, kMouseButtonRight);
+    check(!result.point && result.buttons == 0);
+    result = router.RouteMouse(640, 300, window, kMouseButtonRight);
+    check(result.point && result.buttons == 0);
 }
-int main() { regions(); drag_and_resize(); return failures == 0 ? 0 : 1; }
+}
+int main() { regions(); drag_and_resize(); mouse_buttons(); return failures == 0 ? 0 : 1; }
