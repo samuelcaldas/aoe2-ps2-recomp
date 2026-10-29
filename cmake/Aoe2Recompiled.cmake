@@ -34,6 +34,9 @@ target_link_libraries(aoe2_generated_game_code PRIVATE aoe2_ps2_runtime)
 if(NOT MSVC AND AOE2_GENERATED_OPTIMIZATION)
     target_compile_options(aoe2_generated_game_code PRIVATE "${AOE2_GENERATED_OPTIMIZATION}")
 endif()
+if(NINTENDO_SWITCH)
+    target_compile_options(aoe2_generated_game_code PRIVATE -fexceptions -fasynchronous-unwind-tables)
+endif()
 
 if(AOE2_GENERATED_UNITY_BATCH GREATER 0)
     set_target_properties(aoe2_generated_game_code PROPERTIES
