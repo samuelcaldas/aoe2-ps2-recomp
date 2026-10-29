@@ -12,6 +12,9 @@
 #include <memory>
 #include <mutex>
 #include <unordered_map>
+#if defined(__SWITCH__)
+#include <switch.h>
+#endif
 
 namespace aoe2::game_hooks::map_view {
 namespace {
@@ -32,7 +35,11 @@ void ReapplyPanelBounds(uint8_t *ram, uint32_t panel, uint32_t w, uint32_t h) {
   std::memcpy(Bytes(ram, panel + 0x18, 4), &h, 4);
 }
 renderer::MapViewLayout ResolveOutputLayout() {
-  uint32_t out_w = 1280, out_h = 720;
+#if defined(__SWITCH__)
+  auto [out_w, out_h] = DefaultMapOutput(true, appletGetOperationMode() == AppletOperationMode_Console);
+#else
+  auto [out_w, out_h] = DefaultMapOutput(false, false);
+#endif
   if (const char *w_env = std::getenv("AOE2_WINDOW_WIDTH")) {
     uint32_t val = std::strtoul(w_env, nullptr, 10);
     if (val >= 640 && val <= 1920)
