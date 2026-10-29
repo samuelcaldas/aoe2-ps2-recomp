@@ -33,7 +33,7 @@ void observer_original(uint8_t*, R5900Context* ctx, PS2Runtime*) {
 }
 void observer_tests() {
     PS2Runtime rt;
-    for (auto entry : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0})
+    for (auto entry : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0,0x31a3d0})
         rt.functions[entry] = observer_original;
     unsetenv("AOE2_MAP_VIEW");
     Install(rt);
@@ -64,7 +64,7 @@ void observer_tests() {
         check(std::memcmp(&ctx,&observer_expected,sizeof(ctx))==0 && ram==before);
     };
     Install(rt);
-    check(rt.replacements==6 && rt.claims==0 && !Capture(rt));
+    check(rt.replacements==7 && rt.claims==0 && !Capture(rt));
     invoke(0x31a410,panel,0);
     // Area creation happens inside the original, after Prepare has observed panel init.
     word(ram,panel+0x1c5c,area);
@@ -86,7 +86,7 @@ void observer_tests() {
     check(snap->indices[0]==0x73 && snap->palette[0]==0x73);
     Teardown(rt); Teardown(rt);
     check(rt.owner==&external_owner && rt.claims==0 && rt.releases==0 && !Capture(rt));
-    for (auto entry : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0})
+    for (auto entry : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0,0x31a3d0})
         check(rt.lookupFunction(entry)==observer_original);
 }
 void enlarged_720p_tests() {
@@ -94,7 +94,7 @@ void enlarged_720p_tests() {
     setenv("AOE2_WINDOW_WIDTH", "1280", 1);
     setenv("AOE2_WINDOW_HEIGHT", "720", 1);
     PS2Runtime rt;
-    for (auto address : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0}) rt.functions[address] = original;
+    for (auto address : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0,0x31a3d0}) rt.functions[address] = original;
     std::vector<uint8_t> ram(64*1024*1024);
     const uint32_t panel=0x1000, area=0x4000, viewport=0x8000, manager=0x9000, target=0xa000;
     word(ram,panel+0x14,640); word(ram,panel+0x18,262); word(ram,panel+0x1c5c,area);
@@ -164,6 +164,10 @@ void enlarged_720p_tests() {
     c.pc=0x2257c0; reg(c,4,1500); reg(c,5,800);
     rt.lookupFunction(0x2257c0)(ram.data(),&c,&rt);
     check(getRegU32(&c,2)==1 && read_word(ram,0xC5E840)==1279 && read_word(ram,0xC5E844)==719);
+    // A resumed guest call must continue in the original function.
+    c.pc=0x2257c4; reg(c,4,1500); reg(c,5,800);
+    rt.lookupFunction(0x2257c0)(ram.data(),&c,&rt);
+    check(c.pc == 0x1abb80);
 
     // Failed composition returns input to the original coordinate path.
     check(!rt.compositor({legacy_dummy.data(), 640, 448, 1}));
@@ -172,6 +176,31 @@ void enlarged_720p_tests() {
     rt.lookupFunction(0x2257c0)(ram.data(),&c,&rt);
     check(c.pc == 0x1abb80);
 
+    check(rt.compositor(legacy_view).has_value() && ActiveLayout(rt));
+    // The shared release routine may also be called for an unrelated panel.
+    c.pc=0x31a3d0; reg(c,4,0xe000);
+    rt.lookupFunction(0x31a3d0)(ram.data(),&c,&rt);
+    check(ActiveLayout(rt) && Capture(rt));
+    // Releasing the active panel removes both the frame and its input mapping.
+    c.pc=0x31a3d0; reg(c,4,panel);
+    rt.lookupFunction(0x31a3d0)(ram.data(),&c,&rt);
+    check(c.pc == 0x1abb80 && !ActiveLayout(rt) && !Capture(rt));
+    check(!rt.compositor(legacy_view));
+    check(!PublishComposedLayout(rt, &*snap));
+
+    // The guest can create another area at the same panel address. A frame
+    // captured before release must not reactivate it after this reuse.
+    word(ram,panel+0x1c5c,0);
+    c.pc=0x31a410; reg(c,4,panel);
+    rt.lookupFunction(0x31a410)(ram.data(),&c,&rt);
+    word(ram,panel+0x1c5c,area);
+    c.pc=0x21acd0; reg(c,4,viewport); reg(c,5,target);
+    rt.lookupFunction(0x21acd0)(ram.data(),&c,&rt);
+    auto reused=Capture(rt);
+    check(reused && reused->lifecycle != snap->lifecycle);
+    check(rt.compositor(legacy_view).has_value() && ActiveLayout(rt));
+    check(!PublishComposedLayout(rt, &*snap) && ActiveLayout(rt));
+
     session.Close();
 }
 void relocation_tests() {
@@ -179,7 +208,7 @@ void relocation_tests() {
     setenv("AOE2_WINDOW_WIDTH", "1920", 1);
     setenv("AOE2_WINDOW_HEIGHT", "1080", 1);
     PS2Runtime rt;
-    for (auto address : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0})
+    for (auto address : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0,0x31a3d0})
         rt.functions[address] = original;
     std::vector<uint8_t> ram(64*1024*1024);
     const uint32_t panel=0x1000, area=0x4000;
@@ -202,7 +231,7 @@ void enlarged_1080p_tests() {
     setenv("AOE2_WINDOW_WIDTH", "1920", 1);
     setenv("AOE2_WINDOW_HEIGHT", "1080", 1);
     PS2Runtime rt;
-    for (auto address : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0})
+    for (auto address : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0,0x31a3d0})
         rt.functions[address] = original;
     std::vector<uint8_t> ram(64*1024*1024);
     const uint32_t panel=0x1000, area=0x4000, viewport=0x8000, manager=0x9000, target=0xa000;
@@ -246,7 +275,7 @@ int main() {
     setenv("AOE2_WINDOW_HEIGHT", "448", 1);
     unsetenv("AOE2_MAP_VIEW_OVERRIDE");
     PS2Runtime rt;
-    for (auto address : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0}) rt.functions[address] = original;
+    for (auto address : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0,0x31a3d0}) rt.functions[address] = original;
     std::vector<uint8_t> ram(64*1024*1024);
     const uint32_t panel=0x1000, area=0x4000, viewport=0x8000, manager=0x9000, target=0xa000;
     word(ram,panel+0x14,640); word(ram,panel+0x18,262); word(ram,panel+0x1c5c,area);
@@ -349,7 +378,7 @@ int main() {
     Teardown(rt); Teardown(rt);
     const auto released = [&] {
         check(!rt.owner && !Capture(rt));
-        for (auto address : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0})
+        for (auto address : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0,0x31a3d0})
             check(rt.lookupFunction(address) == original);
     };
     released();
