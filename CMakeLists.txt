@@ -52,6 +52,10 @@ add_library(aoe2_interfaces STATIC
     net/src/lan_discovery.cpp
     net/src/null_transport.cpp
     renderer/src/null_renderer.cpp
+    renderer/src/gles_context.cpp
+    renderer/src/gles_shader.cpp
+    renderer/src/gles_batch.cpp
+    renderer/src/gles_font.cpp
     renderer/src/gles_renderer.cpp
     renderer/src/hud_layout.cpp
     renderer/src/map_view_layout.cpp
@@ -88,6 +92,18 @@ target_include_directories(aoe2_interfaces PUBLIC
 )
 if(NINTENDO_SWITCH)
     target_include_directories(aoe2_interfaces PUBLIC /opt/devkitpro/portlibs/switch/include)
+    target_link_libraries(aoe2_interfaces PUBLIC EGL GLESv2)
+else()
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(EGL QUIET egl)
+        pkg_check_modules(GLESv2 QUIET glesv2)
+        if(EGL_FOUND AND GLESv2_FOUND)
+            target_compile_definitions(aoe2_interfaces PUBLIC AOE2_HAS_GLES)
+            target_include_directories(aoe2_interfaces PUBLIC ${EGL_INCLUDE_DIRS} ${GLESv2_INCLUDE_DIRS})
+            target_link_libraries(aoe2_interfaces PUBLIC ${EGL_LIBRARIES} ${GLESv2_LIBRARIES})
+        endif()
+    endif()
 endif()
 
 add_executable(aoe2_kt_mouse_model_tests tests/cpp/kt_mouse_model_tests.cpp)
