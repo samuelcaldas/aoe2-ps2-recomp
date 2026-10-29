@@ -45,7 +45,7 @@ int main() {
     }
     buffer_reg=0;
     word(ram,area+0x40,viewport);
-    word(ram,viewport+0x98,0x800); word(ram,viewport+0x3c,640); word(ram,viewport+0x38,262);
+    word(ram,viewport+0x98,0x800); word(ram,viewport+0x38,640); word(ram,viewport+0x3c,262);
     word(ram,viewport+0x54,0x3000010+640*5);
     for (unsigned i=1;i<=2;++i) {
         c.pc=0x21acd0; reg(c,4,viewport); reg(c,5,target);

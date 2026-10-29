@@ -146,7 +146,8 @@ void Observe(uint8_t* ram, R5900Context* ctx, PS2Runtime& runtime, State& state,
     Bytes(ram, snap.palette_slot, 0x45c);
     snap.palette_source = snap.palette_slot+0x5c;
     // Keep both the source address and call number: two uploads need not be two buffers.
-    if (Word(ram, viewport+0x3c) != 640 || Word(ram, viewport+0x38) != 262 ||
+    // Submission ABI: +0x38 is the row width, +0x3c is rounded to four rows.
+    if (Word(ram, viewport+0x38) != 640 || Word(ram, viewport+0x3c) != 262 ||
         snap.source != r.base+r.layout.visible_offset)
         throw std::runtime_error("map submission differs from legacy relocation contract");
     auto* indices = Bytes(ram, snap.source, 640*264);
