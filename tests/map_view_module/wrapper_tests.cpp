@@ -109,6 +109,11 @@ void enlarged_720p_tests() {
     c.pc=0x31a410; reg(c,4,panel);
     rt.lookupFunction(0x31a410)(ram.data(),&c,&rt);
     check(read_word(ram, panel+0x14) == 1280 && read_word(ram, panel+0x18) == 534);
+    // Until a native frame is composed, input still follows the original path.
+    check(!ActiveLayout(rt));
+    c.pc=0x2257c0; reg(c,4,1500); reg(c,5,800);
+    rt.lookupFunction(0x2257c0)(ram.data(),&c,&rt);
+    check(c.pc == 0x1abb80);
 
     for (auto entry : {0x1ab7e0,0x1abac0}) {
         const bool first = (entry == 0x1ab7e0);
@@ -146,18 +151,26 @@ void enlarged_720p_tests() {
     auto snap = Capture(rt);
     check(snap && snap->width == 1280 && snap->height == 534 && snap->indices[0] == 42);
     check(snap->indices.size() == 1280 * 536);
+    check(!ActiveLayout(rt));
+
+    // Only a successfully composed frame publishes the expanded input layout.
+    check(bool(rt.compositor));
+    std::vector<uint8_t> legacy_dummy(640*448*4, 128);
+    PS2PresentationFrameView legacy_view{legacy_dummy.data(), 640, 448, 640*4};
+    auto composed = rt.compositor(legacy_view);
+    check(composed && composed->width == 1280 && composed->height == 720 && ActiveLayout(rt));
 
     // Test cursor clamp at 0x2257C0 with 1280x720:
     c.pc=0x2257c0; reg(c,4,1500); reg(c,5,800);
     rt.lookupFunction(0x2257c0)(ram.data(),&c,&rt);
     check(getRegU32(&c,2)==1 && read_word(ram,0xC5E840)==1279 && read_word(ram,0xC5E844)==719);
 
-    // Test frame compositor:
-    check(bool(rt.compositor));
-    std::vector<uint8_t> legacy_dummy(640*448*4, 128);
-    PS2PresentationFrameView legacy_view{legacy_dummy.data(), 640, 448, 640*4};
-    auto composed = rt.compositor(legacy_view);
-    check(composed && composed->width == 1280 && composed->height == 720);
+    // Failed composition returns input to the original coordinate path.
+    check(!rt.compositor({legacy_dummy.data(), 640, 448, 1}));
+    check(!ActiveLayout(rt));
+    c.pc=0x2257c0; reg(c,4,1500); reg(c,5,800);
+    rt.lookupFunction(0x2257c0)(ram.data(),&c,&rt);
+    check(c.pc == 0x1abb80);
 
     session.Close();
 }
@@ -216,14 +229,15 @@ void enlarged_1080p_tests() {
     rt.lookupFunction(0x21acd0)(ram.data(),&c,&rt);
     auto snap=Capture(rt);
     check(snap && snap->width==1920 && snap->height==708 && snap->pitch==1920 && snap->indices[0]==42);
+    check(!ActiveLayout(rt));
+    std::vector<uint8_t> legacy(640*448*4,128);
+    auto composed=rt.compositor({legacy.data(),640,448,640*4});
+    check(composed && composed->width==1920 && composed->height==1080);
     auto layout=ActiveLayout(rt);
     check(layout && layout->output.width==1920 && layout->output.height==1080 && layout->map.y==80 && layout->map.height==708);
     c.pc=0x2257c0; reg(c,4,2200); reg(c,5,1200);
     rt.lookupFunction(0x2257c0)(ram.data(),&c,&rt);
     check(read_word(ram,0xC5E840)==1919 && read_word(ram,0xC5E844)==1079);
-    std::vector<uint8_t> legacy(640*448*4,128);
-    auto composed=rt.compositor({legacy.data(),640,448,640*4});
-    check(composed && composed->width==1920 && composed->height==1080);
     session.Close();
 }
 int main() {
@@ -294,16 +308,14 @@ int main() {
     c.pc=0x21acd0; reg(c,4,viewport); reg(c,5,target);
     rt.lookupFunction(0x21acd0)(ram.data(),&c,&rt);
     check(Capture(rt)->palette_calls==1 && Capture(rt)->palette_source==manager+0x5c);
-    // Cursor clamping respects active output layout (640x448)
-    c.pc=0x2257c0; reg(c,4,700); reg(c,5,500);
-    rt.lookupFunction(0x2257c0)(ram.data(),&c,&rt);
-    check(getRegU32(&c,2)==1 && read_word(ram,0xC5E840)==639 && read_word(ram,0xC5E844)==447);
-    // Compositor delivers composed frame matching layout
-    check(bool(rt.compositor));
     std::vector<uint8_t> legacy_dummy(640*448*4, 128);
     PS2PresentationFrameView legacy_view{legacy_dummy.data(), 640, 448, 640*4};
     auto composed = rt.compositor(legacy_view);
     check(composed && composed->width == 640 && composed->height == 448);
+    // Cursor clamping respects active output layout (640x448)
+    c.pc=0x2257c0; reg(c,4,700); reg(c,5,500);
+    rt.lookupFunction(0x2257c0)(ram.data(),&c,&rt);
+    check(getRegU32(&c,2)==1 && read_word(ram,0xC5E840)==639 && read_word(ram,0xC5E844)==447);
     // Unrelated callers of the shared routine retain their buffer argument.
     c.pc=0x1abac0; reg(c,31,0x123456); reg(c,8,0x1234);
     buffer_reg=8; expected=0x1234;
@@ -317,7 +329,7 @@ int main() {
     catch (const std::runtime_error&) { damaged=true; }
     check(damaged); ram[0x3000000]=0xa5;
     ++rt.generation;
-    check(!Capture(rt));
+    check(!Capture(rt) && !ActiveLayout(rt));
     bool rejected=false;
     try { c.pc=0x1abac0; reg(c,4,area); reg(c,16,panel); reg(c,31,0x31a4b4);
           rt.lookupFunction(0x1abac0)(ram.data(),&c,&rt); }
