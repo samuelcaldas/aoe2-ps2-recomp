@@ -1,11 +1,13 @@
 #pragma once
 #include "map_view_module_private.hpp"
+#include <aoe2/game_hooks/map_view_config.hpp>
 #include "ps2_runtime.h"
 #include <mutex>
 
 namespace aoe2::game_hooks::map_view::detail {
 constexpr std::array<uint32_t, 6> entries{0x31a410, 0x1ab7e0, 0x1abac0, 0x21acd0, 0x1ae350, 0x2257c0};
 struct State {
+    MapViewMode mode = MapViewMode::Legacy;
     Relocation relocation;
     MapArenaLease lease;
     std::array<PS2Runtime::RecompiledFunction, 6> originals{};

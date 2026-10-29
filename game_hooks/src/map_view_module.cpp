@@ -73,9 +73,16 @@ void Prepare(uint8_t* ram, R5900Context* ctx, PS2Runtime& runtime, State& state)
     if (state.relocation.panel)
         throw std::runtime_error("map panel changed: stop guest and reinstall map view module");
     ValidateAreaReuse(ram, Word(ram, panel+0x1c5c));
-    auto layout = ResolveOutputLayout();
-    ReapplyPanelBounds(ram, panel, layout.map.width, layout.map.height);
-    state.relocation.begin(panel, layout.map.width, layout.map.height,
+    auto layout = state.mode == MapViewMode::Native ? ResolveOutputLayout() : renderer::MapViewLayout{};
+    const uint32_t width = state.mode == MapViewMode::Native ? static_cast<uint32_t>(layout.map.width) : 640;
+    const uint32_t height = state.mode == MapViewMode::Native ? static_cast<uint32_t>(layout.map.height) : 262;
+    // The guest's guarded scanline table advances by visible width, while the
+    // surface descriptor and host snapshot use a 16-byte aligned pitch.
+    // Until those paths are unified, padded widths would address different rows.
+    if ((width & 15u) != 0)
+        throw std::runtime_error("map viewport width must be a multiple of 16 pixels");
+    ReapplyPanelBounds(ram, panel, width, height);
+    state.relocation.begin(panel, width, height,
                            state.lease.base, state.lease.capacity, state.lease.generation, layout);
     state.relocation.area = Word(ram, panel+0x1c5c);
     InitializeArenaCanaries(ram, state.relocation);
@@ -138,8 +145,10 @@ void Wrapper(uint8_t* ram, R5900Context* ctx, PS2Runtime* runtime) {
     if constexpr (Slot == 1 || Slot == 2) Redirect(ram, ctx, *runtime, *state, Slot);
     if constexpr (Slot == 3 || Slot == 4) Observe(ram, ctx, *runtime, *state, Slot);
     if constexpr (Slot == 5) {
-        CursorClamp(ram, ctx, *runtime, *state);
-        return;
+        if (state->lease && state->relocation.active_layout.output.width > 0) {
+            CursorClamp(ram, ctx, *runtime, *state);
+            return;
+        }
     }
     state->originals[Slot](ram, ctx, runtime);
     // Return may mean yield or tail dispatch. No completion cleanup or register restoration.
@@ -166,12 +175,13 @@ void Install(PS2Runtime& runtime) {
     Teardown(runtime);
     if (!configured) return; // Default legacy has no hooks or arena overhead.
     auto state = std::make_shared<State>();
+    state->mode = mode;
     for (size_t i = 0; i < entries.size(); ++i) {
         state->originals[i] = runtime.lookupFunction(entries[i]);
         if (!state->originals[i] || state->originals[i] == wrappers[i])
             throw std::runtime_error("map view original unavailable");
     }
-    if (mode == MapViewMode::Native) {
+    if (mode == MapViewMode::Native || mode == MapViewMode::Relocation) {
         state->lease = runtime.claimMapArena(state.get());
         if (!state->lease) throw std::runtime_error("map arena already owned or unavailable");
     }

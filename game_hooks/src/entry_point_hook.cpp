@@ -54,11 +54,51 @@ void EntryHook(uint8_t* rdram, R5900Context* ctx, PS2Runtime* runtime) {
 #if defined(__SWITCH__)
     svcOutputDebugString("[aoe2-switch] EntryHook: dispatching func_10CB58\n", 49);
 #endif
-    // Set target PC to func_10CB58 and set return address to 0x10008C
-    // Instead of calling dispatchGuestBranch inside EntryHook (which would nest C++ call stacks),
-    // we simply update ctx->pc and return so EeScheduler dispatches func_10CB58 at the root frame!
-    ctx->pc = 0x10CB58u;
-    SET_GPR_U32(ctx, 31, 0x10008Cu);
+    // 1. Run func_10CB58 directly
+    auto fn_10CB58 = runtime->lookupFunction(0x10CB58u);
+    if (fn_10CB58) {
+#if defined(__SWITCH__)
+        svcOutputDebugString("[aoe2-switch] EntryHook: executing func_10CB58 synchronously\n", 62);
+#endif
+        ctx->pc = 0x10CB58u;
+        SET_GPR_U32(ctx, 31, 0x10008Cu);
+        fn_10CB58(rdram, ctx, runtime);
+#if defined(__SWITCH__)
+        char ehbuf[128];
+        snprintf(ehbuf, sizeof(ehbuf), "[aoe2-switch] EntryHook: func_10CB58 returned, next pc=0x%x\n", (unsigned)ctx->pc);
+        svcOutputDebugString(ehbuf, strlen(ehbuf));
+#endif
+    }
+
+    // 2. Execute 0x10008c: jal func_104FA0
+    auto fn_104FA0 = runtime->lookupFunction(0x104FA0u);
+    if (fn_104FA0) {
+#if defined(__SWITCH__)
+        svcOutputDebugString("[aoe2-switch] EntryHook: executing func_104FA0 (InitSys)\n", 57);
+#endif
+        SET_GPR_U64(ctx, 4, 0); // move $a0, $zero
+        ctx->pc = 0x104FA0u;
+        SET_GPR_U32(ctx, 31, 0x100094u);
+        fn_104FA0(rdram, ctx, runtime);
+    }
+
+    // 3. Enable interrupts (0x100094: ei)
+    ctx->cop0_status |= 0x10000;
+
+    // 4. Setup args for main (0x220530)
+    SET_GPR_S32(ctx, 4, (int32_t)FAST_READ32(0x4E3C40u)); // argc
+    SET_GPR_S32(ctx, 5, 0x4E3C44); // argv
+    ctx->pc = 0x220530u;
+    SET_GPR_U32(ctx, 31, 0x1000ACu);
+#if defined(__SWITCH__)
+    char spbuf[128];
+    snprintf(spbuf, sizeof(spbuf), "[aoe2-switch] EntryHook: sp=0x%x gp=0x%x argc=%d\n",
+             (unsigned)GPR_U32(ctx, 29), (unsigned)GPR_U32(ctx, 28), (int)GPR_S32(ctx, 4));
+    svcOutputDebugString(spbuf, strlen(spbuf));
+#endif
+#if defined(__SWITCH__)
+    svcOutputDebugString("[aoe2-switch] EntryHook: ready to dispatch game main (0x220530)!\n", 66);
+#endif
 #if defined(__SWITCH__)
     svcOutputDebugString("[aoe2-switch] EntryHook: returning to scheduler with pc=0x10CB58\n", 65);
 #endif

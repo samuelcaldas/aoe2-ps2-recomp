@@ -9,6 +9,7 @@ MapViewSession::MapViewSession(PS2Runtime& runtime) {
     map_view::Install(runtime);
     runtime_ = &runtime;
     runtime.setFrameCompositor([&runtime](PS2PresentationFrameView legacy) -> std::optional<PS2OwnedPresentationFrame> {
+        if (!map_view::ActiveLayout(runtime)) return std::nullopt;
         auto snap = map_view::Capture(runtime);
         if (!snap || snap->indices.empty() || snap->layout.output.width == 0) return std::nullopt;
         renderer::MapFrameSnapshot frame_snap;
