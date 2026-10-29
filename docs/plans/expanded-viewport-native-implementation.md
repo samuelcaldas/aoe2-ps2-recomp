@@ -42,8 +42,9 @@ The implementation is governed by seven strict gates:
 ## Implementation Stages
 
 ### Stage 1: Legacy Relocation Parity Verification (Gate 3)
-- Run `AOE2_MAP_VIEW=native` with `Phase::LegacyRelocation` (640×262).
+- Run `AOE2_MAP_VIEW=relocation` to relocate the 640×262 surface while retaining legacy presentation and input.
 - Inspect canaries and verify visual parity against baseline screenshot.
+- This mode is available for investigation; parity has not yet been established. Native enlargement must not become the default until the remaining gates pass.
 
 ### Stage 2: Sizing & Hook Dynamic Dimensions (Gate 4)
 - Update `map_view_module.cpp` to support `Phase::NativeEnlargement`.
