@@ -17,7 +17,9 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-TABLE_ENTRY = re.compile(r"g_ps2RecompiledFunctionTable\[\d+\]\s*=\s*(\w+);\s*//\s*0x([0-9a-fA-F]+)")
+TABLE_ENTRY = re.compile(
+    r"(?:g_ps2RecompiledFunctionTable\[\d+\]\s*=\s*(\w+);|\{\s*\d+u?,\s*(\w+)\s*\},?)\s*//\s*0x([0-9a-fA-F]+)"
+)
 DECLARATION = re.compile(r"^void\s+(\w+)\s*\(\s*uint8_t\*\s*rdram", re.MULTILINE)
 PREFIX = re.compile(r"^[A-Za-z_]\w*_$")
 NAME = re.compile(r"^[A-Za-z_]\w*$")
@@ -29,7 +31,11 @@ class OverlayRegistrationError(ValueError):
 
 def parse_register_file(text: str) -> list:
     """Return (address, function name) for every table entry, in file order."""
-    pairs = [(int(address, 16), name) for name, address in TABLE_ENTRY.findall(text)]
+    pairs = []
+    for match in TABLE_ENTRY.finditer(text):
+        name = match.group(1) or match.group(2)
+        address = match.group(3)
+        pairs.append((int(address, 16), name))
     if not pairs:
         raise OverlayRegistrationError("no function table entries found in the register file")
     return pairs

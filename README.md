@@ -123,35 +123,40 @@ The pipeline runs Ghidra analysis and export, validates function boundaries, gen
 
 ### Headless desktop initialization probe
 
-Build the native probe only through its memory-capped wrapper; adjust the job count to available resources:
+Build the native probe only through its memory-capped wrapper in Debug configuration; adjust the job count to available resources:
 
 ```bash
-python3 tools/run_desktop_probe_build.py --jobs 3
-ctest --test-dir build/desktop-probe -R desktop_runtime_probe_init --output-on-failure
+python3 tools/run_desktop_probe_build.py --jobs 8
+ctest --test-dir build/desktop-probe -R desktop_runtime_probe_init --output-on-failure -V
 ```
 
 This checks initialization, ELF loading, and registration, **not guest execution or gameplay**.
 
 ### Desktop game runner and diagnostic validation
 
+All bring-up and verification builds enforce **Debug builds with high-level output**:
+
+- **Debug Symbols & Invariants**: Full `-g` debug symbols, active assertions (never `-DNDEBUG`), and stack traces.
+- **Diagnostics Tracing**: Built with `--diagnostics` (`-DAOE2_RUNTIME_DIAGNOSTICS=ON`), enabling aggressive PS2Recomp runtime logging (`PS2X_ENABLE_AGRESSIVE_LOGS=ON`), IOP RPC traces (`PS2X_ENABLE_IOP_RPC_TRACE=ON`), and `StopOnMissingFunction`.
+
 After generation, resolve local mouse hooks from the owned ELF and function map, then build the diagnostic runner in Docker:
 
 ```bash
 python3 tools/resolve_kcet_hooks.py
-python3 tools/docker_build.py --platform desktop --diagnostics --jobs 3
-python3 tools/validate_desktop.py --run-seconds 60 --interval 15
+python3 tools/docker_build.py --platform desktop --diagnostics --jobs 8
+python3 tools/validate_desktop.py --docker --run-seconds 60 --interval 15
 ```
 
 The resolver writes ignored `game/SLES-50282/kcet_hooks.ini`; `--decomp-root ../aoe` optionally cross-checks the result against the authorized reference. Hooks do not resolve the current SIF boot blocker.
 
 Validation runs `build/docker-desktop-diagnostics/aoe2_game`, saves its log under `build/desktop-validation/`, and captures screenshots in `.playwright-mcp/`. A pass requires guest progress and at least two changing real frames, not merely a live process or the runtime's fallback image. **The latest recorded baseline fails these criteria** with `stalled_in_loop` and zero real frames.
 
-Container build entry points also exist for normal desktop, Android, and Switch builds:
+Container build entry points also exist for normal desktop, Android, and Switch builds (all defaulting to `-j8` concurrency):
 
 ```bash
-python3 tools/docker_build.py --platform desktop --jobs 3
-python3 tools/docker_build.py --platform android --jobs 3
-python3 tools/docker_build.py --platform switch --jobs 3
+python3 tools/docker_build.py --platform desktop --jobs 8
+python3 tools/docker_build.py --platform android --jobs 8
+python3 tools/docker_build.py --platform switch --jobs 8
 ```
 
 These commands describe the available tooling, not verified boot or gameplay on those targets. Switch builds use the devkitPro Docker image through `docker-dev`.

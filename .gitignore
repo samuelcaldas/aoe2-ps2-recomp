@@ -66,3 +66,8 @@ platform/android/build/
 logs/
 *.log
 /ps2_log.txt
+
+# Local debug and scratch scripts
+run_gdb*.sh
+start_x.sh
+gdb_script_*.txt

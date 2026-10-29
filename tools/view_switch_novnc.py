@@ -25,6 +25,25 @@ NRO_PATH = "build/docker-switch/aoe2_game.nro"
 EVIDENCE_DIR = "build/switch-validation"
 DISPLAY = ":99"
 MEMORY_LIMIT = "12g"
+CONTAINER_NAME = "aoe2-view-switch"
+DEFAULT_JOBS = 8
+
+
+def ensure_container_clean(name: str) -> None:
+    """Ensure no stale stopped container with `name` blocks docker run --name."""
+    inspect = subprocess.run(
+        ["docker", "--context", DOCKER_CONTEXT, "container", "inspect", "-f", "{{.State.Running}}", name],
+        capture_output=True,
+        text=True,
+    )
+    if inspect.returncode == 0:
+        if inspect.stdout.strip() == "false":
+            subprocess.run(
+                ["docker", "--context", DOCKER_CONTEXT, "rm", "-f", name],
+                capture_output=True,
+            )
+        else:
+            raise RuntimeError(f"container '{name}' is already running")
 
 
 def novnc_runner_script(nro: str = NRO_PATH) -> str:
@@ -53,7 +72,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--port", type=int, default=6080, help="host HTTP/web port for noVNC (default: 6080)")
     parser.add_argument("--vnc-port", type=int, default=5900, help="host VNC port (default: 5900)")
-    parser.add_argument("--jobs", type=int, default=4, help="CPU quota")
+    parser.add_argument("--jobs", type=int, default=DEFAULT_JOBS, help=f"CPU quota (default: {DEFAULT_JOBS})")
+    parser.add_argument("--dry-run", action="store_true", help="print commands without executing them")
     args = parser.parse_args()
 
     nro = REPO_ROOT / NRO_PATH
@@ -63,6 +83,11 @@ def main() -> int:
 
     cmd = [
         "docker", "--context", DOCKER_CONTEXT, "run", "--rm", "-it",
+        f"--name={CONTAINER_NAME}",
+        f"--hostname={CONTAINER_NAME}",
+        "--label=aoe2.platform=switch",
+        "--label=aoe2.role=view",
+        f"--label=aoe2.container={CONTAINER_NAME}",
         f"--memory={MEMORY_LIMIT}", f"--memory-swap={MEMORY_LIMIT}", f"--cpus={args.jobs}",
         "-p", f"{args.port}:6080",
         "-p", f"{args.vnc_port}:5900",
@@ -73,6 +98,10 @@ def main() -> int:
 
     print("Starting Nintendo Switch Ryujinx emulator with noVNC...")
     print(f"👉 Chrome URL: http://localhost:{args.port}/vnc.html")
+    if args.dry_run:
+        print("+ " + shlex.join(cmd))
+        return 0
+    ensure_container_clean(CONTAINER_NAME)
     return subprocess.run(cmd).returncode
 
 

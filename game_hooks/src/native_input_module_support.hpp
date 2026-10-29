@@ -12,6 +12,9 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#if defined(__SWITCH__)
+#include <switch.h>
+#endif
 
 namespace aoe2::game_hooks::native_input {
 
@@ -34,6 +37,12 @@ inline NativeModuleSwitches ReadSwitches() {
 
 inline KcetHookConfig ReadKcetHooks(const char* module) {
     const auto path = PS2Runtime::getIoPaths().elfDirectory / "kcet_hooks.ini";
+#if defined(__SWITCH__)
+    {
+        std::string msg = std::string("[native_input] ReadKcetHooks path: ") + path.string() + "\n";
+        svcOutputDebugString(msg.c_str(), msg.length());
+    }
+#endif
     std::ifstream file(path);
     if (!file.is_open())
         throw std::runtime_error(std::string("Native kt_") + module +
@@ -52,7 +61,13 @@ template <std::size_t EntryCount, std::size_t RoleCount>
 void ValidateModule(PS2Runtime& runtime, const char* module,
                     const std::array<FunctionEntry, EntryCount>& entries,
                     const std::array<DeviceRole, RoleCount>& roles) {
+#if defined(__SWITCH__)
+    svcOutputDebugString("[native_input] ValidateModule: ReadKcetHooks ENTER\n", 53);
+#endif
     const auto hooks = ReadKcetHooks(module);
+#if defined(__SWITCH__)
+    svcOutputDebugString("[native_input] ValidateModule: ReadKcetHooks SUCCESS\n", 55);
+#endif
     std::set<uint32_t> device_addresses;
     for (const DeviceRole& role : roles) {
         const auto found = hooks.replacements.find(role.name);
@@ -63,10 +78,21 @@ void ValidateModule(PS2Runtime& runtime, const char* module,
         if (!runtime.hasFunction(found->second))
             throw std::runtime_error(std::string("Native kt_") + module + " device hook has no recompiled function: " + role.name);
     }
+#if defined(__SWITCH__)
+    svcOutputDebugString("[native_input] ValidateModule: roles validated\n", 49);
+#endif
     for (const FunctionEntry& entry : entries) {
-        if (!runtime.hasFunction(entry.address) && !IsValidPaddingEntry(module, entry.address))
+        if (!runtime.hasFunction(entry.address) && !IsValidPaddingEntry(module, entry.address)) {
+#if defined(__SWITCH__)
+            std::string err = std::string("[native_input] missing recompiled function: ") + entry.name + "\n";
+            svcOutputDebugString(err.c_str(), err.length());
+#endif
             throw std::runtime_error(std::string("Native kt_") + module + " cannot install: missing recompiled function " + entry.name);
+        }
     }
+#if defined(__SWITCH__)
+    svcOutputDebugString("[native_input] ValidateModule: entries validated\n", 51);
+#endif
 }
 
 inline std::array<uint32_t, 32> ReadRegisters(R5900Context* context) {

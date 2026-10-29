@@ -155,6 +155,10 @@ if(AOE2_BUILD_GAME)
         game_hooks/src/kcet_mc_module.cpp
         game_hooks/src/kcet_hd_module.cpp
         game_hooks/src/kcet_gpu_module.cpp
+        game_hooks/src/entry_point_hook.cpp
+        game_hooks/src/map_view_module.cpp
+        game_hooks/src/map_view_observation.cpp
+        game_hooks/src/map_view_session.cpp
     )
     if(NOT AOE2_OVERLAY_TARGETS)
         target_sources(aoe2_game PRIVATE game_hooks/src/overlay_stub.cpp)
@@ -167,7 +171,7 @@ if(AOE2_BUILD_GAME)
             game_hooks/src/aoe2_shape_trace.cpp)
     endif()
     if(NINTENDO_SWITCH)
-        target_sources(aoe2_game PRIVATE platform/switch/src/switch_compat.c)
+        target_sources(aoe2_game PRIVATE platform/switch/src/switch_compat.c platform/switch/src/switch_early.cpp)
     endif()
     target_link_libraries(aoe2_game PRIVATE aoe2_interfaces)
     if(AOE2_DEFAULT_BOOT_ELF)

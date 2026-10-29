@@ -1,5 +1,7 @@
 // KCET host input replacements; guest addresses are loaded from local configuration.
 #include <aoe2/game_hooks/kcet_handlers.hpp>
+#include <aoe2/game_hooks/map_view_config.hpp>
+#include <aoe2/input/map_input_router.hpp>
 #include <aoe2/input/presentation_transform.hpp>
 #include <aoe2/input/usb_mouse_rpc.hpp>
 #include "input_synthetic.hpp"
@@ -60,6 +62,7 @@ constexpr float kGuestScreenWidth = 640.0f;
 constexpr float kGuestScreenHeight = 448.0f;
 // Set once hooks are installed; the runtime publishes the GS frame size it presents.
 std::atomic<const PS2Runtime*> g_presentation_runtime{nullptr};
+std::atomic<bool> g_cursor_visible{true};
 
 int32_t LoadGuestInt(uint8_t* rdram, uint32_t address) {
     int32_t value = 0;
@@ -99,6 +102,45 @@ aoe2::input::PresentationTransform CurrentPresentation() {
 
 // Absolute pointing: the host pointer's place in the window is where the game's cursor should be.
 void SteerGuestCursor(uint8_t* rdram, Vector2 position, uint32_t buttons) {
+    const PS2Runtime* runtime = g_presentation_runtime.load(std::memory_order_acquire);
+    auto active_layout = runtime ? aoe2::game_hooks::ActiveMapViewLayout(const_cast<PS2Runtime&>(*runtime))
+                                 : aoe2::game_hooks::ActiveMapViewLayout();
+    if (active_layout) {
+        static aoe2::input::MapInputRouter router(*active_layout);
+        static float last_layout_w = active_layout->output.width;
+        static float last_layout_h = active_layout->output.height;
+        if (last_layout_w != active_layout->output.width || last_layout_h != active_layout->output.height) {
+            router = aoe2::input::MapInputRouter(*active_layout);
+            last_layout_w = active_layout->output.width;
+            last_layout_h = active_layout->output.height;
+        }
+        const aoe2::input::Extent win_extent{static_cast<float>(GetScreenWidth()), static_cast<float>(GetScreenHeight())};
+        static uint32_t last_buttons = 0;
+        if ((buttons & aoe2::input::kMouseButtonLeft) && !(last_buttons & aoe2::input::kMouseButtonLeft)) {
+            router.BeginDrag(position.x, position.y, win_extent);
+        } else if (!(buttons & aoe2::input::kMouseButtonLeft) && (last_buttons & aoe2::input::kMouseButtonLeft)) {
+            router.EndDrag();
+        }
+        last_buttons = buttons;
+
+        auto routed = router.Route(position.x, position.y, win_extent);
+        if (routed) {
+            const int32_t cursor_x = LoadGuestInt(rdram, kGuestCursorX);
+            const int32_t cursor_y = LoadGuestInt(rdram, kGuestCursorY);
+            aoe2::input::GuestPoint target{0.0f, 0.0f};
+            if (routed->region == aoe2::input::MapInputRegion::Map) {
+                target.x = routed->coordinates.x;
+                target.y = active_layout->map.y + routed->coordinates.y;
+            } else {
+                target = routed->coordinates;
+            }
+            LogPointer(position, target, cursor_x, cursor_y);
+            g_mouse_model.SteerTo(target.x - static_cast<float>(cursor_x),
+                                 target.y - static_cast<float>(cursor_y), buttons);
+            return;
+        }
+    }
+
     const auto target = CurrentPresentation().ToLogical(position.x, position.y);
     const int32_t cursor_x = LoadGuestInt(rdram, kGuestCursorX);
     const int32_t cursor_y = LoadGuestInt(rdram, kGuestCursorY);
@@ -161,6 +203,14 @@ void MouseDeviceInfo(uint8_t* rdram, R5900Context* ctx, PS2Runtime*) {
 namespace aoe2::game_hooks {
 void SetMousePresentationSource(const PS2Runtime& runtime) {
     g_presentation_runtime.store(&runtime, std::memory_order_release);
+}
+
+void SetMouseCursorVisible(bool visible) {
+    g_cursor_visible.store(visible, std::memory_order_release);
+}
+
+bool IsMouseCursorVisible() {
+    return g_cursor_visible.load(std::memory_order_acquire);
 }
 
 void RegisterMouseHandlers(KcetHandlers& handlers) {

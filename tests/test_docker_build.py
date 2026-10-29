@@ -31,6 +31,64 @@ class TestDockerBuildCommands(unittest.TestCase):
         self.assertIn("--cpus=6", command)
         self.assertIn("LC_ALL=C", command)
         self.assertIn("--rm", command)
+        self.assertIn("--name=aoe2-build-desktop", command)
+        self.assertIn("--hostname=aoe2-build-desktop", command)
+        self.assertIn("--label=aoe2.platform=desktop", command)
+        self.assertIn("--label=aoe2.role=build", command)
+
+    def test_default_jobs_is_eight(self):
+        self.assertEqual(docker_build.DEFAULT_JOBS, 8)
+        args = docker_build.parse_args(["--platform", "desktop"])
+        self.assertEqual(args.jobs, 8)
+
+    def test_pc_platform_alias_resolves_to_desktop(self):
+        args = docker_build.parse_args(["--platform", "pc"])
+        self.assertEqual(docker_build.canonical_platform_name(args.platform), "desktop")
+        spec = docker_build.select_spec(args.platform, diagnostics=False)
+        self.assertEqual(spec, docker_build.PLATFORMS["desktop"])
+        self.assertEqual(docker_build.container_name_for(args), "aoe2-build-desktop")
+
+    def test_concurrent_platforms_have_distinct_container_identifications(self):
+        platforms = ["desktop", "android", "switch"]
+        container_names = set()
+        for platform in platforms:
+            args = docker_build.parse_args(["--platform", platform])
+            name = docker_build.container_name_for(args)
+            self.assertNotIn(name, container_names, f"collision on container name: {name}")
+            container_names.add(name)
+            cmd = docker_build.container_run_command(docker_build.PLATFORMS[platform], args)
+            self.assertIn(f"--name={name}", cmd)
+            self.assertIn(f"--hostname={name}", cmd)
+            self.assertIn(f"--label=aoe2.platform={platform}", cmd)
+        # Diagnostic variant also has unique identification
+        diag_args = docker_build.parse_args(["--platform", "desktop", "--diagnostics"])
+        diag_name = docker_build.container_name_for(diag_args)
+        self.assertEqual(diag_name, "aoe2-build-desktop-diagnostics")
+        self.assertNotIn(diag_name, container_names)
+
+    def test_android_build_uses_build_cache(self):
+        android_script = docker_build.build_script(docker_build.PLATFORMS["android"], jobs=8)
+        self.assertIn("--build-cache", android_script)
+
+    def test_test_flag_appends_test_commands(self):
+        desktop_script = docker_build.build_script(self.spec, jobs=8, test=True)
+        self.assertIn("ctest --test-dir", desktop_script)
+
+    def test_ensure_container_clean_removes_stopped_container(self):
+        inspect_res = mock.Mock(returncode=0, stdout="false\n")
+        with mock.patch("subprocess.run", side_effect=[inspect_res, mock.Mock(returncode=0)]) as run_mock:
+            docker_build.ensure_container_clean("aoe2-build-desktop")
+            self.assertEqual(run_mock.call_count, 2)
+            rm_call = run_mock.call_args_list[1][0][0]
+            self.assertIn("rm", rm_call)
+            self.assertIn("aoe2-build-desktop", rm_call)
+
+    def test_ensure_container_clean_rejects_running_container(self):
+        inspect_res = mock.Mock(returncode=0, stdout="true\n")
+        with mock.patch("subprocess.run", return_value=inspect_res):
+            with self.assertRaises(docker_build.PreflightError) as ctx:
+                docker_build.ensure_container_clean("aoe2-build-desktop")
+            self.assertIn("is already running", str(ctx.exception))
 
     def test_build_script_uses_requested_jobs_and_platform_build_dir(self):
         script = docker_build.build_script(self.spec, jobs=6)

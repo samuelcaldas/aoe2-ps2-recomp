@@ -28,10 +28,10 @@ python3 -m unittest discover -s tests
 python3 -m unittest tests.test_diagnostic_classifier                       # one module
 python3 -m unittest tests.test_diagnostic_classifier.TestDiagnosticClassifier.test_missing_host_dependency  # one test
 
-# C++ host scaffolding (C++20, CMake >= 3.20, Ninja)
-cmake -B build -G Ninja && cmake --build build
-ctest --test-dir build --output-on-failure        # tests: smoke_test, input_tests
-ctest --test-dir build -R input_tests --output-on-failure  # single test
+# C++ host scaffolding (C++20, CMake >= 3.20, Ninja) - Enforce Debug builds with high output
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug && cmake --build build -v
+ctest --test-dir build --output-on-failure -V        # tests: smoke_test, input_tests (verbose)
+ctest --test-dir build -R input_tests --output-on-failure -V  # single test
 
 # Dependencies / provenance
 python3 tools/bootstrap_dependencies.py [--check]  # clone third_party/ at lockfile SHAs
@@ -44,11 +44,24 @@ python3 tools/verify_function_map.py               # reject map entries that spa
 python3 tools/install_ghidra_ee_extension.py       # pinned Emotion Engine (R5900) language; the pipeline requires it
 python3 tools/import_owned_disc.py --iso /path/to/aoe2.iso  # extract the owned disc next to AOK.ELF (CD root)
 python3 tools/resolve_kcet_hooks.py                # KCET hook addresses from ../aoe decomp -> ignored game/SLES-50282/kcet_hooks.ini
-python3 tools/docker_build.py --platform desktop|android|switch [--jobs N]  # containerized builds (docker-dev)
+python3 tools/docker_build.py --platform desktop|android|switch|pc [--jobs N] [--test] [--diagnostics]  # containerized debug/diagnostic builds (docker-dev, default -j8)
 python3 tools/classify_diagnostics.py --log build.log [--out report.json]
 ```
 
 No linter is configured. Style is set by `.editorconfig` (4-space indent, 2 for JSON/YAML, LF).
+
+## Mandatory Debug Builds & High Output Policy
+
+All bring-up, compilation, and testing across all platforms MUST use **Debug builds with high-level output verbosity**:
+- **Debug Build Mandate**: Always compile with `-DCMAKE_BUILD_TYPE=Debug` (or `--diagnostics` / `assembleDebug`). Never use uninstrumented release builds for bring-up or troubleshooting. Debug symbols (`-g`), assertions (`assert()` active; never `-DNDEBUG`), and stack traces must be preserved so crashes, illegal memory access, or missing functions fail fast and are immediately diagnosable.
+- **High Output & Verbosity**:
+  - Build verbosity: Always pass `-v` to `cmake --build` / `ninja` and use `ctest --output-on-failure -V` (verbose mode).
+  - Runtime diagnostics: Pass `--diagnostics` (`-DAOE2_RUNTIME_DIAGNOSTICS=ON`) to enable aggressive PS2Recomp runtime logging (`PS2X_ENABLE_AGRESSIVE_LOGS=ON`), IOP RPC traces (`PS2X_ENABLE_IOP_RPC_TRACE=ON`), EE DECI2 TTY output (`AOE2_GAME_TTY=ON`), and `StopOnMissingFunction`.
+  - Rich trace variables: Utilize runtime environment variables for high output capture:
+    - `AOE2_CALL_TRACE_FIRST=N`: Log first N calls per guest function (default 3).
+    - `AOE2_CALL_TRACE_MEM=1`: Hex dump 16 bytes at `$a0` arguments.
+    - `AOE2_SHAPE_TRACE=1`: SLP shape loader and draw entry-point logging.
+  - Full output logging: Pipe complete build and test outputs to dedicated log files (`build.log`, `switch_validation.log`, `desktop_validation.log`) and classify compiler or runtime diagnostics via `tools/classify_diagnostics.py`.
 
 ## Architecture
 

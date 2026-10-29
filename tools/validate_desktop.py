@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -31,6 +32,13 @@ sys.path.insert(0, str(REPO_ROOT))
 from tools.classify_diagnostics import RunVerdict, classify_run_log  # noqa: E402
 from tools.frame_analysis import FrameSeries, analyze_frames, run_command  # noqa: E402
 
+CONTAINER_ROOT = "/src"
+IMAGE = "aoe2-build-desktop"
+DOCKER_CONTEXT = "docker-dev"
+CONTAINER_NAME = "aoe2-validate-desktop"
+DEFAULT_JOBS = 8
+MEMORY_LIMIT = "18g"
+
 GAME_BINARY = REPO_ROOT / "build" / "docker-desktop-diagnostics" / "aoe2_game"
 OWNED_ELF = REPO_ROOT / "game" / "SLES-50282" / "AOK.ELF"
 # Ignored; the game reads by real disc LBN, which only the image resolves.
@@ -41,6 +49,39 @@ DISPLAY = ":99"
 STARTED_MARKER = "Starting execution"
 MISSING_TARGET_MARKER = "[guest-branch:missing-target]"
 EXIT_PASS, EXIT_FAIL, EXIT_PREFLIGHT = 0, 1, 2
+
+
+def ensure_container_clean(name: str) -> None:
+    """Ensure no stale stopped container with `name` blocks docker run --name."""
+    inspect = subprocess.run(
+        ["docker", "--context", DOCKER_CONTEXT, "container", "inspect", "-f", "{{.State.Running}}", name],
+        capture_output=True,
+        text=True,
+    )
+    if inspect.returncode == 0:
+        if inspect.stdout.strip() == "false":
+            subprocess.run(
+                ["docker", "--context", DOCKER_CONTEXT, "rm", "-f", name],
+                capture_output=True,
+            )
+        else:
+            raise RuntimeError(f"container '{name}' is already running")
+
+
+def container_command(run_seconds: int, interval: int = 15, jobs: int = DEFAULT_JOBS) -> list:
+    return [
+        "docker", "--context", DOCKER_CONTEXT, "run", "--rm",
+        f"--name={CONTAINER_NAME}",
+        f"--hostname={CONTAINER_NAME}",
+        "--label=aoe2.platform=desktop",
+        "--label=aoe2.role=validate",
+        f"--label=aoe2.container={CONTAINER_NAME}",
+        f"--memory={MEMORY_LIMIT}", f"--memory-swap={MEMORY_LIMIT}", f"--cpus={jobs}",
+        "-e", "LC_ALL=C.UTF-8", "-e", "TZ=America/Sao_Paulo",
+        "-v", f"{REPO_ROOT}:{CONTAINER_ROOT}", "-w", CONTAINER_ROOT,
+        IMAGE, "bash", "-c",
+        f"python3 tools/validate_desktop.py --run-seconds {run_seconds} --interval {interval}",
+    ]
 
 
 @dataclass(frozen=True)
@@ -119,7 +160,17 @@ def main(argv: list | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run the desktop diagnostic build on a virtual display and validate it.")
     parser.add_argument("--run-seconds", type=int, default=90)
     parser.add_argument("--interval", type=int, default=15)
+    parser.add_argument("--docker", action="store_true", help="run validation inside aoe2-build-desktop container")
+    parser.add_argument("--jobs", type=int, default=DEFAULT_JOBS, help=f"CPU quota for container (default: {DEFAULT_JOBS})")
+    parser.add_argument("--dry-run", action="store_true", help="print docker command without running")
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
+    if args.docker:
+        cmd = container_command(args.run_seconds, args.interval, jobs=args.jobs)
+        if args.dry_run:
+            print("+ " + shlex.join(cmd))
+            return EXIT_PASS
+        ensure_container_clean(CONTAINER_NAME)
+        return subprocess.run(cmd).returncode
     try:
         check_preflight()
     except FileNotFoundError as error:

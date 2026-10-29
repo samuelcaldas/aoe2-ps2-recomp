@@ -51,33 +51,94 @@ Because each Docker container runs with `-B {build_dir}` pointing to its dedicat
 
 ---
 
-## 4. Switching Targets Incrementally
+## 4. Concurrent Execution & Container Identification
+
+All containerized build and test drivers enforce unique, non-colliding container names, hostnames, and metadata labels. Builds and tests for different platforms (`desktop` / `pc`, `android`, `switch`) can run concurrently without collision:
+
+| Role | Platform / Target | Container Name | Hostname | Labels | Default Jobs |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Build** | Desktop (Release) | `aoe2-build-desktop` | `aoe2-build-desktop` | `aoe2.platform=desktop`, `aoe2.role=build` | `-j8` |
+| **Build** | Desktop (Diagnostics) | `aoe2-build-desktop-diagnostics` | `aoe2-build-desktop-diagnostics` | `aoe2.platform=desktop`, `aoe2.role=build` | `-j8` |
+| **Build** | Nintendo Switch | `aoe2-build-switch` | `aoe2-build-switch` | `aoe2.platform=switch`, `aoe2.role=build` | `-j8` |
+| **Build** | Android | `aoe2-build-android` | `aoe2-build-android` | `aoe2.platform=android`, `aoe2.role=build` | `-j8` |
+| **Test** | Desktop Validation | `aoe2-validate-desktop` | `aoe2-validate-desktop` | `aoe2.platform=desktop`, `aoe2.role=validate` | `-j8` |
+| **Test** | Switch Validation | `aoe2-validate-switch` | `aoe2-validate-switch` | `aoe2.platform=switch`, `aoe2.role=validate` | `-j8` |
+| **View** | Switch noVNC View | `aoe2-view-switch` | `aoe2-view-switch` | `aoe2.platform=switch`, `aoe2.role=view` | `-j8` |
+| **Test** | Android Validation | `aoe2-validate-android` | `aoe2-validate-android` | `aoe2.platform=android`, `aoe2.role=validate` | `-j8` |
+
+### Concurrency & Cache Guarantees:
+1. **Container Name Isolation**: Running `docker_build.py --platform desktop`, `docker_build.py --platform android`, and `docker_build.py --platform switch` simultaneously spins up containers with completely distinct IDs (`aoe2-build-desktop`, `aoe2-build-android`, `aoe2-build-switch`), avoiding Docker daemon name conflicts.
+2. **Build Cache Preservation**:
+   - Desktop and Switch preserve intermediate CMake/Ninja `.o` and `.ninja_deps` files under `build/docker-desktop/` and `build/docker-switch/`.
+   - Android utilizes Gradle's `--build-cache` and isolates Gradle home cache in `build/docker-android/gradle-home` and native C++ in `build/android-cxx`.
+   - HD asset staging acquires an exclusive file lock (`.staging.lock`) during preparation so concurrent builds never corrupt staged assets or manifests.
+3. **Default Parallelism**: All containerized commands default to `-j8` / `--cpus=8`.
+4. **Platform Aliases**: `--platform pc` is supported as an alias for `--platform desktop`.
+
+---
+
+## 5. Switching Targets Incrementally
 
 When switching targets, Ninja and Gradle inspect timestamps in their respective isolated build directories. Generated PS2Recomp files under `generated/SLES-50282/` are read-only inputs mounted into the containers:
 
 1. **Compiling Switch after Desktop**:
    ```bash
-   python3 tools/docker_build.py --platform switch --jobs 4
+   python3 tools/docker_build.py --platform switch --jobs 8
    ```
    *Reads* the generated sources and writes objects to `build/docker-switch/`. `build/docker-desktop/` remains untouched.
 
 2. **Switching back to Desktop**:
    ```bash
-   python3 tools/docker_build.py --platform desktop --jobs 4
+   python3 tools/docker_build.py --platform desktop --jobs 8
    ```
    Ninja immediately inspects `build/docker-desktop/build.ninja`. If no source or header files were changed, it exits with `ninja: no work to do`. If only a few host-layer files (e.g., `game_hooks/` or `input/`) changed, **only those specific files are recompiled**. The thousands of unchanged generated game logic files are **not recompiled**.
 
 3. **Building Android APK**:
    ```bash
-   python3 tools/docker_build.py --platform android --jobs 4
+   python3 tools/docker_build.py --platform android --jobs 8
    ```
    Gradle compiles native C++ libraries for `arm64-v8a` and `x86_64` using `platform/android/build.gradle`, producing `build/docker-android/aoe2-recomp-debug.apk`.
 
 ---
 
-## 5. Local Host Development Best Practices
+## 6. Local Host Development Best Practices
 
 - **Never configure CMake directly at the repo root with default `build/` for full game targets**:
   Running `cmake -B build` is reserved for lightweight host interface tests (`aoe2_interfaces`, `aoe2_smoke_test`).
 - **Use the dedicated tool wrappers**:
-  Always invoke `python3 tools/docker_build.py --platform <desktop|switch|android>` or `python3 tools/run_desktop_probe_build.py` to prevent memory exhaustion and preserve directory isolation.
+  Always invoke `python3 tools/docker_build.py --platform <desktop|pc|switch|android>` or `python3 tools/run_desktop_probe_build.py` to prevent memory exhaustion and preserve directory isolation.
+
+---
+
+## 7. Agent Skills Integration
+
+For autonomous agent and pair-programming workflows, dedicated skills are provided under `.agents/skills/` (and mirrored in `.claude/skills/`):
+- **`docker-build`** ([`.agents/skills/docker-build/SKILL.md`](../.agents/skills/docker-build/SKILL.md)): Automated build invocation across all targets with default `-j8`, build cache preservation, diagnostics, and high-level output.
+- **`docker-validate`** ([`.agents/skills/docker-validate/SKILL.md`](../.agents/skills/docker-validate/SKILL.md)): Automated runtime validation, probe execution, high-output log capture, and live noVNC inspection inside containers.
+
+---
+
+## 8. Mandatory Debug Builds & High Output Policy
+
+To accelerate bring-up, overlay analysis, and bug localization across all targets, the codebase mandates **Debug builds** with **high-level output logging**:
+
+### 1. Rationale
+Recompiling ~17,000 to ~58,000 guest functions alongside native KCET shims requires maximum transparency:
+- **Fast Failure & Stack Traces**: Release builds optimize away call stacks, inline crucial boundaries, and strip assertions (`NDEBUG`), hiding silent memory corruptions and infinite loops. Debug builds preserve line-level symbol resolution and halt at the exact site of failure.
+- **Missing Function Trapping**: In diagnostic builds (`-DAOE2_RUNTIME_DIAGNOSTICS=ON`), unmapped guest branches trigger `[guest-branch:missing-target]` and halt immediately via `StopOnMissingFunction`, preventing silent spin-locks.
+- **RPC & Protocol Observability**: Aggressive logging exposes every SIF/IOP RPC transaction, DECI2 packet, and DMA buffer exchange.
+
+### 2. Configuration Matrix by Platform
+
+| Target | Build Configuration | Verbosity & Output Flags | Artifacts / Logs |
+| :--- | :--- | :--- | :--- |
+| **Desktop / PC** | `-DCMAKE_BUILD_TYPE=Debug`<br/>`-DAOE2_RUNTIME_DIAGNOSTICS=ON` | `cmake --build ... -v`<br/>`ctest --output-on-failure -V` | `build/docker-desktop-diagnostics/`<br/>`desktop_validation.log` |
+| **Nintendo Switch**| `-DCMAKE_BUILD_TYPE=Debug` (devkitA64) | Full symbols (`-g`), assertions active | `build/docker-switch/`<br/>`switch_validation.log` |
+| **Android** | `assembleDebug` (Gradle) | RelWithDebInfo / Debug symbols, JNI logs | `build/docker-android/aoe2-recomp-debug.apk` |
+
+### 3. High-Output Runtime Environment Variables
+When executing or validating binaries, enable rich trace logging:
+- `AOE2_CALL_TRACE_FIRST=N`: Sets how many initial calls per guest function are logged to stderr (default 3).
+- `AOE2_CALL_TRACE_MEM=1`: Prints a 16-byte hex memory dump of the block pointed to by register `$a0`.
+- `AOE2_SHAPE_TRACE=1`: Reports every SLP shape load and frame rasterization call.
+- `AOE2_GAME_TTY=ON`: Captures EE kernel `printf` via DECI2 `[game-tty]`.

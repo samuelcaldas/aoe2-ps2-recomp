@@ -27,6 +27,11 @@ DOCKER_CONTEXT = "docker-dev"
 GENERATED_DIR = REPO_ROOT / "generated" / "SLES-50282"
 MEMORY_LIMIT = "18g"
 EXIT_PREFLIGHT = 2
+DEFAULT_JOBS = 8
+
+PLATFORM_ALIASES = {
+    "pc": "desktop",
+}
 
 
 class PreflightError(RuntimeError):
@@ -46,6 +51,7 @@ class PlatformSpec:
     build_dir: str
     commands: tuple
     devices: tuple = ()
+    test_commands: tuple = ()
 
 
 def cmake_commands(*configure_args: str, targets: tuple = ("aoe2_game",)) -> tuple:
@@ -83,6 +89,7 @@ DIAGNOSTIC_VARIANTS = {
         image="aoe2-build-desktop",
         build_dir="build/docker-desktop-diagnostics",
         commands=desktop_commands("-DAOE2_RUNTIME_DIAGNOSTICS=ON"),
+        test_commands=("ctest --test-dir {build_dir} --output-on-failure",),
     ),
 }
 
@@ -92,6 +99,7 @@ PLATFORMS = {
         image="aoe2-build-desktop",
         build_dir="build/docker-desktop",
         commands=desktop_commands(),
+        test_commands=("ctest --test-dir {build_dir} --output-on-failure",),
     ),
     "android": PlatformSpec(
         dockerfile="docker/android/Dockerfile",
@@ -99,10 +107,13 @@ PLATFORMS = {
         build_dir="build/docker-android",
         commands=with_hd_stage("android", (
             "export GRADLE_USER_HOME={build_dir}/gradle-home",
-            "cd platform/android && gradle --no-daemon --console=plain assembleDebug "
+            "cd platform/android && gradle --build-cache --no-daemon --console=plain assembleDebug "
             "-Paoe2NativeJobs={jobs} -Paoe2Abis=arm64-v8a,x86_64",
             "mkdir -p {build_dir} && cp app/build/outputs/apk/debug/app-debug.apk {build_dir}/aoe2-recomp-debug.apk",
         )),
+        test_commands=(
+            "cd platform/android && gradle --build-cache --no-daemon --console=plain testDebugUnitTest",
+        ),
     ),
     "switch": PlatformSpec(
         dockerfile="docker/switch/Dockerfile",
@@ -114,8 +125,39 @@ PLATFORMS = {
             "-DPLATFORM=SDL", "-DPS2X_ENABLE_FFMPEG=OFF",
             targets=("aoe2_game_nro",),
         )),
+        test_commands=(
+            "printf '%s\\n' 'Switch NRO tests run in emulator container; run python3 tools/validate_switch.py'",
+        ),
     ),
 }
+
+
+def canonical_platform_name(platform: str) -> str:
+    return PLATFORM_ALIASES.get(platform, platform)
+
+
+def container_name_for(args: argparse.Namespace) -> str:
+    """Distinct container identifier per platform/variant so parallel runs do not collide."""
+    platform = canonical_platform_name(args.platform)
+    suffix = "-diagnostics" if getattr(args, "diagnostics", False) else ""
+    return f"aoe2-build-{platform}{suffix}"
+
+
+def ensure_container_clean(name: str) -> None:
+    """Ensure no stale stopped container with `name` blocks docker run --name."""
+    inspect = subprocess.run(
+        ["docker", "--context", DOCKER_CONTEXT, "container", "inspect", "-f", "{{.State.Running}}", name],
+        capture_output=True,
+        text=True,
+    )
+    if inspect.returncode == 0:
+        if inspect.stdout.strip() == "false":
+            subprocess.run(
+                ["docker", "--context", DOCKER_CONTEXT, "rm", "-f", name],
+                capture_output=True,
+            )
+        else:
+            raise PreflightError(f"container '{name}' is already running")
 
 
 def generated_source_count() -> int:
@@ -133,15 +175,18 @@ def check_preflight(args: argparse.Namespace) -> None:
         raise PreflightError(f"docker context '{DOCKER_CONTEXT}' not found")
     if args.jobs < 1:
         raise PreflightError("--jobs must be at least 1")
+    if not getattr(args, "dry_run", False):
+        ensure_container_clean(container_name_for(args))
 
 
 def select_spec(platform: str, diagnostics: bool) -> PlatformSpec:
     """Return the build spec for a platform, or its diagnostic variant; raises PreflightError if none exists."""
+    canonical = canonical_platform_name(platform)
     if not diagnostics:
-        return PLATFORMS[platform]
-    if platform not in DIAGNOSTIC_VARIANTS:
+        return PLATFORMS[canonical]
+    if canonical not in DIAGNOSTIC_VARIANTS:
         raise PreflightError(f"--diagnostics is only available for: {', '.join(sorted(DIAGNOSTIC_VARIANTS))}")
-    return DIAGNOSTIC_VARIANTS[platform]
+    return DIAGNOSTIC_VARIANTS[canonical]
 
 
 def image_build_command(spec: PlatformSpec, uid: int, gid: int) -> list:
@@ -155,31 +200,46 @@ def image_build_command(spec: PlatformSpec, uid: int, gid: int) -> list:
     ]
 
 
-def build_script(spec: PlatformSpec, jobs: int) -> str:
+def build_script(spec: PlatformSpec, jobs: int, test: bool = False) -> str:
     """Shell script run inside the container, failing on the first error."""
     build_dir = f"{CONTAINER_ROOT}/{spec.build_dir}"
-    steps = [command.format(jobs=jobs, build_dir=build_dir) for command in spec.commands]
+    commands = list(spec.commands)
+    if test:
+        commands.extend(spec.test_commands)
+    steps = [command.format(jobs=jobs, build_dir=build_dir) for command in commands]
     return "set -euo pipefail\n" + "\n".join(steps) + "\n"
 
 
 def container_run_command(spec: PlatformSpec, args: argparse.Namespace) -> list:
+    name = container_name_for(args)
+    platform = canonical_platform_name(args.platform)
     return [
         "docker", "--context", DOCKER_CONTEXT, "run", "--rm",
+        f"--name={name}",
+        f"--hostname={name}",
+        f"--label=aoe2.platform={platform}",
+        "--label=aoe2.role=build",
+        f"--label=aoe2.container={name}",
         f"--memory={MEMORY_LIMIT}", f"--memory-swap={MEMORY_LIMIT}", f"--cpus={args.jobs}",
         "-e", "LC_ALL=C", "-e", "TZ=America/Sao_Paulo",
         "-v", f"{REPO_ROOT}:{CONTAINER_ROOT}",
         *[flag for device in spec.devices for flag in ("--device", device)],
         "-w", CONTAINER_ROOT,
-        spec.image, "bash", "-c", build_script(spec, args.jobs),
+        spec.image, "bash", "-c", build_script(spec, args.jobs, getattr(args, "test", False)),
     ]
 
 
 def parse_args(argv: list) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--platform", required=True, choices=sorted(PLATFORMS))
-    parser.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) - 1))
+    supported_platforms = sorted(set(PLATFORMS) | set(PLATFORM_ALIASES))
+    parser.add_argument("--platform", required=True, choices=supported_platforms,
+                        help=f"target platform ({', '.join(supported_platforms)})")
+    parser.add_argument("--jobs", type=int, default=DEFAULT_JOBS,
+                        help=f"number of parallel build jobs (default: {DEFAULT_JOBS})")
     parser.add_argument("--diagnostics", action="store_true",
                         help="build with verbose runtime traces into build/docker-<platform>-diagnostics")
+    parser.add_argument("--test", action="store_true",
+                        help="run test suite inside the container after build")
     parser.add_argument("--dry-run", action="store_true", help="print the docker commands without running them")
     return parser.parse_args(argv)
 

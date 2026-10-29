@@ -107,6 +107,8 @@ python3 tools/classify_diagnostics.py \
    Never patch generated functions or add stub functions with fabricated return codes (`ret0`/`ret1`). All runtime dispatch and memory access functions (`Store128`, `dispatchGuestBranch`, `Read128`, etc.) must be provided by the runtime layer (`aoe2::runtime` or `ps2xRuntime`).
 3. **Linker Probe Baseline**:
    With the diagnostic classifier established and passing 27 automated tests, future build experiments can continuously measure reduction in missing runtime API references as the runtime abstraction is fleshed out.
+4. **Mandatory Debug Builds & High Output Tracing**:
+   All recompilation builds and probe tests must use Debug configurations with maximum diagnostic output (`-DCMAKE_BUILD_TYPE=Debug`, `-DAOE2_RUNTIME_DIAGNOSTICS=ON`, `ctest --output-on-failure -V`). Aggressive runtime logging (`PS2X_ENABLE_AGRESSIVE_LOGS=ON`), IOP RPC traces (`PS2X_ENABLE_IOP_RPC_TRACE=ON`), and DECI2 EE debug output (`AOE2_GAME_TTY=ON`) must remain enabled to capture guest branch behavior and hardware handshakes.
 
 ---
 

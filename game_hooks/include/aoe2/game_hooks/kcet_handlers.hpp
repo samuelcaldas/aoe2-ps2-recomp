@@ -12,6 +12,9 @@ using KcetHandlers = std::map<std::string, PS2Runtime::RecompiledFunction>;
 void RegisterMouseHandlers(KcetHandlers& handlers);
 // Lets absolute pointing follow the frame size the runtime presents.
 void SetMousePresentationSource(const PS2Runtime& runtime);
+// Host-side cursor visibility control (e.g. hidden during direct touch interaction).
+void SetMouseCursorVisible(bool visible);
+bool IsMouseCursorVisible();
 // Adds host keyboard replacements to the registry; addresses come from local configuration.
 void RegisterKeyboardHandlers(KcetHandlers& handlers);
 // Adds the i.LINK socket replacements (host socket model); addresses come from local configuration.

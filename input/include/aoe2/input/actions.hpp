@@ -11,11 +11,20 @@ enum class ActionType : uint32_t {
     PointerUp,
     PrimaryClick,
     SecondaryClick,
+    DoubleClick,
+    AttackMove,
     Pan,
     Zoom,
+    TouchReticleFeedback,
     MenuAccept,
     MenuBack,
     Pause
+};
+
+enum class TouchInteractionModality : uint32_t {
+    Touch,
+    Pointer,
+    Gamepad
 };
 
 struct ActionEvent {

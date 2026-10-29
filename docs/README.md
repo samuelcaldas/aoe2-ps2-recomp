@@ -57,7 +57,8 @@ Subsystem-specific behavioral specifications:
 ---
 
 ### Plans & Work in Progress (`docs/plans/`)
-* **[`docs/plans/nifty-herding-pudding.md`](plans/nifty-herding-pudding.md)**: **Active implementation plan** for 64 MiB guest RAM and heap/HLE/stack reservation validation, prerequisite for viewport expansion.
+* **[`docs/plans/nifty-herding-pudding.md`](plans/nifty-herding-pudding.md)**: **Active implementation plan** for native-scale map viewport expansion after the 64 MiB RAM work.
+* **[`docs/native-map-view-checkpoint.md`](native-map-view-checkpoint.md)**: Legacy first-mission replay, executable identity, protected 8 MiB map reservation tests, and unresolved activation contracts. Native map mode is not implemented.
 
 ---
 
