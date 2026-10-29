@@ -9,8 +9,11 @@ const char* ToString(ActionType action) {
         case ActionType::PointerUp: return "PointerUp";
         case ActionType::PrimaryClick: return "PrimaryClick";
         case ActionType::SecondaryClick: return "SecondaryClick";
+        case ActionType::DoubleClick: return "DoubleClick";
+        case ActionType::AttackMove: return "AttackMove";
         case ActionType::Pan: return "Pan";
         case ActionType::Zoom: return "Zoom";
+        case ActionType::TouchReticleFeedback: return "TouchReticleFeedback";
         case ActionType::MenuAccept: return "MenuAccept";
         case ActionType::MenuBack: return "MenuBack";
         case ActionType::Pause: return "Pause";

@@ -13,6 +13,7 @@ struct GuestMouseState {
     float y{0.0f};
     bool left{false};
     bool right{false};
+    bool cursor_visible{true};
 };
 
 // High-level replacement for the PS2 USB mouse path (IOP driver over SIF):
@@ -29,12 +30,16 @@ public:
     // Advances one guest poll and returns the state the game should observe.
     GuestMouseState NextFrame();
 
+    void SetCursorVisible(bool visible);
+    bool IsCursorVisible() const;
+
 private:
     void MoveTo(const ActionEvent& event);
     void SetButtons(bool left, bool right);
 
     GuestMouseState current_;
     std::deque<GuestMouseState> pending_frames_;
+    bool cursor_visible_{true};
 };
 
 } // namespace aoe2::input

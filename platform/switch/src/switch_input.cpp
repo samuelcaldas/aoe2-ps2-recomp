@@ -77,4 +77,25 @@ aoe2::input::GuestPoint SwitchInputBridge::MapTouchToGuest(
     return handheld_mapping_.ToGuest(host_x, host_y);
 }
 
+void SwitchInputBridge::SetModifierState(uint64_t switch_keys_down) {
+    // When ZL is held, disable one-finger pan to allow dragging a selection marquee
+    const bool zl_held = (switch_keys_down & switch_btn::ZL) != 0;
+    SetOneFingerPan(!zl_held);
+}
+
+void SwitchInputBridge::SetSelectionActive(bool active) {
+    if (handheld_translator_) handheld_translator_->SetSelectionActive(active);
+    if (docked_translator_) docked_translator_->SetSelectionActive(active);
+}
+
+void SwitchInputBridge::SetTouchRegion(aoe2::input::TouchRegion region) {
+    if (handheld_translator_) handheld_translator_->SetTouchRegion(region);
+    if (docked_translator_) docked_translator_->SetTouchRegion(region);
+}
+
+void SwitchInputBridge::SetOneFingerPan(bool enable) {
+    if (handheld_translator_) handheld_translator_->SetOneFingerPan(enable);
+    if (docked_translator_) docked_translator_->SetOneFingerPan(enable);
+}
+
 } // namespace aoe2::platform::switch_env

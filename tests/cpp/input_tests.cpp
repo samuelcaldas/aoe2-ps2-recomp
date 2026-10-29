@@ -134,6 +134,100 @@ void TestCancelledDragReleasesButton() {
   CHECK(sink.events.back().type == ActionType::PointerUp);
 }
 
+void TestDoubleTapEmitsDoubleClick() {
+  RecordingSink sink;
+  TouchGestureTranslator translator(
+      sink, SurfaceMapping(kSwitchScreen, kGuestFramebuffer));
+  // Tap 1
+  translator.Submit(Touch(1, 640.0f, 360.0f, TouchPhase::Began, 0));
+  translator.Submit(Touch(1, 640.0f, 360.0f, TouchPhase::Ended, 50000));
+  CHECK(sink.events.size() == 2);
+  CHECK(sink.events[1].type == ActionType::PrimaryClick);
+
+  // Tap 2 within double tap threshold (150ms later)
+  translator.Submit(Touch(1, 642.0f, 361.0f, TouchPhase::Began, 150000));
+  translator.Submit(Touch(1, 642.0f, 361.0f, TouchPhase::Ended, 200000));
+  CHECK(sink.events.size() == 4);
+  CHECK(sink.events[3].type == ActionType::DoubleClick);
+}
+
+void TestTapWithSelectionEmitsSmartCommand() {
+  RecordingSink sink;
+  TouchGestureTranslator translator(
+      sink, SurfaceMapping(kSwitchScreen, kGuestFramebuffer));
+  translator.SetSelectionActive(true);
+  translator.SetTouchRegion(TouchRegion::Map);
+
+  // Tap on map with active selection -> SecondaryClick (Smart Command)
+  translator.Submit(Touch(1, 640.0f, 360.0f, TouchPhase::Began, 0));
+  translator.Submit(Touch(1, 640.0f, 360.0f, TouchPhase::Ended, 50000));
+  CHECK(sink.events.size() == 2);
+  CHECK(sink.events[1].type == ActionType::SecondaryClick);
+
+  // Tap on HUD with active selection -> PrimaryClick (e.g. click UI buttons)
+  sink.events.clear();
+  translator.SetTouchRegion(TouchRegion::Hud);
+  translator.Submit(Touch(1, 640.0f, 360.0f, TouchPhase::Began, 1000000));
+  translator.Submit(Touch(1, 640.0f, 360.0f, TouchPhase::Ended, 1050000));
+  CHECK(sink.events.size() == 2);
+  CHECK(sink.events[1].type == ActionType::PrimaryClick);
+}
+
+void TestTwoFingerTapEmitsAttackMove() {
+  RecordingSink sink;
+  TouchGestureTranslator translator(
+      sink, SurfaceMapping(kSwitchScreen, kGuestFramebuffer));
+  translator.Submit(Touch(1, 500.0f, 300.0f, TouchPhase::Began, 0));
+  translator.Submit(Touch(2, 550.0f, 300.0f, TouchPhase::Began, 1000));
+  translator.Submit(Touch(1, 500.0f, 300.0f, TouchPhase::Ended, 50000));
+  translator.Submit(Touch(2, 550.0f, 300.0f, TouchPhase::Ended, 50000));
+  bool found_attack_move = false;
+  for (const auto& ev : sink.events) {
+    if (ev.type == ActionType::AttackMove) {
+      found_attack_move = true;
+      break;
+    }
+  }
+  CHECK(found_attack_move);
+}
+
+void TestVerticalTargetingOffset() {
+  RecordingSink sink;
+  GestureConfig config;
+  config.vertical_target_offset_px = 12.0f;
+  TouchGestureTranslator translator(
+      sink, SurfaceMapping(kSwitchScreen, kGuestFramebuffer), config);
+
+  // Tap at center (640, 360). Guest mapping: (320, 240).
+  // With 12px vertical offset upward: y = 240 - 12 = 228.
+  translator.Submit(Touch(1, 640.0f, 360.0f, TouchPhase::Began, 0));
+  translator.Submit(Touch(1, 640.0f, 360.0f, TouchPhase::Ended, 50000));
+  CHECK(sink.events.size() == 2);
+  CHECK(Near(sink.events[0].y, 228.0f));
+  CHECK(Near(sink.events[1].y, 228.0f));
+}
+
+void TestOneFingerPanGesture() {
+  RecordingSink sink;
+  GestureConfig config;
+  config.one_finger_pan = true;
+  TouchGestureTranslator translator(
+      sink, SurfaceMapping(kSwitchScreen, kGuestFramebuffer), config);
+
+  translator.Submit(Touch(1, 500.0f, 300.0f, TouchPhase::Began, 0));
+  translator.Submit(Touch(1, 550.0f, 300.0f, TouchPhase::Moved, 1000));
+  translator.Submit(Touch(1, 550.0f, 300.0f, TouchPhase::Ended, 2000));
+
+  bool found_pan = false;
+  for (const auto& ev : sink.events) {
+    if (ev.type == ActionType::Pan) {
+      found_pan = true;
+      break;
+    }
+  }
+  CHECK(found_pan);
+}
+
 void TestGuestMouseSeesTapAcrossTwoFrames() {
   GuestMouseAdapter mouse;
   mouse.SubmitEvent(
@@ -166,6 +260,40 @@ void TestGuestMouseLongPressIsRightButton() {
   const GuestMouseState pressed = mouse.NextFrame();
   CHECK(pressed.right && !pressed.left);
   CHECK(!mouse.NextFrame().right);
+}
+
+void TestGuestMouseSeesDoubleClickAcrossFrames() {
+  GuestMouseAdapter mouse;
+  mouse.SubmitEvent(
+      ActionEvent{.type = ActionType::DoubleClick, .x = 100.0f, .y = 50.0f});
+  const GuestMouseState press1 = mouse.NextFrame();
+  const GuestMouseState rel1 = mouse.NextFrame();
+  const GuestMouseState press2 = mouse.NextFrame();
+  const GuestMouseState rel2 = mouse.NextFrame();
+  const GuestMouseState idle = mouse.NextFrame();
+
+  CHECK(press1.left && Near(press1.x, 100.0f) && Near(press1.y, 50.0f));
+  CHECK(!rel1.left);
+  CHECK(press2.left && Near(press2.x, 100.0f) && Near(press2.y, 50.0f));
+  CHECK(!rel2.left);
+  CHECK(!idle.left);
+}
+
+void TestGuestMouseCursorVisibility() {
+  GuestMouseAdapter mouse;
+  CHECK(mouse.IsCursorVisible());
+  GuestMouseState s1 = mouse.NextFrame();
+  CHECK(s1.cursor_visible);
+
+  mouse.SetCursorVisible(false);
+  CHECK(!mouse.IsCursorVisible());
+  GuestMouseState s2 = mouse.NextFrame();
+  CHECK(!s2.cursor_visible);
+
+  mouse.SetCursorVisible(true);
+  CHECK(mouse.IsCursorVisible());
+  GuestMouseState s3 = mouse.NextFrame();
+  CHECK(s3.cursor_visible);
 }
 
 HostMouseReport MouseReport(float dx, float dy, uint32_t buttons,
@@ -443,9 +571,16 @@ int main() {
   TestOneFingerDragIsPointerDrag();
   TestTwoFingerDragIsPanWithoutClicks();
   TestCancelledDragReleasesButton();
+  TestDoubleTapEmitsDoubleClick();
+  TestTapWithSelectionEmitsSmartCommand();
+  TestTwoFingerTapEmitsAttackMove();
+  TestVerticalTargetingOffset();
+  TestOneFingerPanGesture();
   TestGuestMouseSeesTapAcrossTwoFrames();
   TestGuestMouseHoldsButtonDuringDrag();
   TestGuestMouseLongPressIsRightButton();
+  TestGuestMouseSeesDoubleClickAcrossFrames();
+  TestGuestMouseCursorVisibility();
   TestUsbMouseMotionMovesCursorWithinGuest();
   TestUsbMouseIdleReportEmitsNothing();
   TestUsbMouseLeftButtonDrags();
