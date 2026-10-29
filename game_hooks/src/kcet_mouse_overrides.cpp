@@ -105,41 +105,37 @@ void SteerGuestCursor(uint8_t* rdram, Vector2 position, uint32_t buttons) {
     const PS2Runtime* runtime = g_presentation_runtime.load(std::memory_order_acquire);
     auto active_layout = runtime ? aoe2::game_hooks::ActiveMapViewLayout(const_cast<PS2Runtime&>(*runtime))
                                  : aoe2::game_hooks::ActiveMapViewLayout();
+    static std::optional<aoe2::input::MapInputRouter> router;
+    static float last_layout_w = 0;
+    static float last_layout_h = 0;
     if (active_layout) {
-        static aoe2::input::MapInputRouter router(*active_layout);
-        static float last_layout_w = active_layout->output.width;
-        static float last_layout_h = active_layout->output.height;
-        if (last_layout_w != active_layout->output.width || last_layout_h != active_layout->output.height) {
-            router = aoe2::input::MapInputRouter(*active_layout);
+        if (!router || last_layout_w != active_layout->output.width || last_layout_h != active_layout->output.height) {
+            router.emplace(*active_layout);
+            router->ResetMouse(buttons);
             last_layout_w = active_layout->output.width;
             last_layout_h = active_layout->output.height;
         }
         const aoe2::input::Extent win_extent{static_cast<float>(GetScreenWidth()), static_cast<float>(GetScreenHeight())};
-        static uint32_t last_buttons = 0;
-        if ((buttons & aoe2::input::kMouseButtonLeft) && !(last_buttons & aoe2::input::kMouseButtonLeft)) {
-            router.BeginDrag(position.x, position.y, win_extent);
-        } else if (!(buttons & aoe2::input::kMouseButtonLeft) && (last_buttons & aoe2::input::kMouseButtonLeft)) {
-            router.EndDrag();
-        }
-        last_buttons = buttons;
-
-        auto routed = router.Route(position.x, position.y, win_extent);
-        if (routed) {
+        auto routed = router->RouteMouse(position.x, position.y, win_extent, buttons);
+        if (routed.point) {
             const int32_t cursor_x = LoadGuestInt(rdram, kGuestCursorX);
             const int32_t cursor_y = LoadGuestInt(rdram, kGuestCursorY);
             aoe2::input::GuestPoint target{0.0f, 0.0f};
-            if (routed->region == aoe2::input::MapInputRegion::Map) {
-                target.x = routed->coordinates.x;
-                target.y = active_layout->map.y + routed->coordinates.y;
+            if (routed.point->region == aoe2::input::MapInputRegion::Map) {
+                target.x = routed.point->coordinates.x;
+                target.y = active_layout->map.y + routed.point->coordinates.y;
             } else {
-                target = routed->coordinates;
+                target = routed.point->coordinates;
             }
             LogPointer(position, target, cursor_x, cursor_y);
             g_mouse_model.SteerTo(target.x - static_cast<float>(cursor_x),
-                                 target.y - static_cast<float>(cursor_y), buttons);
+                                 target.y - static_cast<float>(cursor_y), routed.buttons);
             return;
         }
+        g_mouse_model.SteerTo(0, 0, 0);
+        return;
     }
+    router.reset();
 
     const auto target = CurrentPresentation().ToLogical(position.x, position.y);
     const int32_t cursor_x = LoadGuestInt(rdram, kGuestCursorX);
