@@ -11,7 +11,7 @@ RUN dkp-pacman -Syu --noconfirm --needed \
  && dkp-pacman -Scc --noconfirm
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends cmake ninja-build python3 git ca-certificates tzdata \
+ && apt-get install -y --no-install-recommends cmake ninja-build lld python3 git ca-certificates tzdata \
  && rm -rf /var/lib/apt/lists/*
 
 ARG BUILD_UID=1000

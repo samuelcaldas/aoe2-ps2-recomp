@@ -10,7 +10,11 @@
 set(GENERATED_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/generated/SLES-50282")
 include("${CMAKE_CURRENT_LIST_DIR}/Aoe2Runtime.cmake")
 
-set(AOE2_GENERATED_UNITY_BATCH 16 CACHE STRING "Generated units per unity translation unit (0 disables unity builds)")
+if(NINTENDO_SWITCH)
+    set(AOE2_GENERATED_UNITY_BATCH 64 CACHE STRING "Generated units per unity translation unit (0 disables unity builds)")
+else()
+    set(AOE2_GENERATED_UNITY_BATCH 16 CACHE STRING "Generated units per unity translation unit (0 disables unity builds)")
+endif()
 set(AOE2_GENERATED_OPTIMIZATION "-O1" CACHE STRING "Optimization flag for generated code; higher levels multiply compile time")
 
 file(GLOB GENERATED_CPP_SOURCES CONFIGURE_DEPENDS "${GENERATED_SRC_DIR}/*.cpp")
@@ -35,7 +39,7 @@ if(NOT MSVC AND AOE2_GENERATED_OPTIMIZATION)
     target_compile_options(aoe2_generated_game_code PRIVATE "${AOE2_GENERATED_OPTIMIZATION}")
 endif()
 if(NINTENDO_SWITCH)
-    target_compile_options(aoe2_generated_game_code PRIVATE -fexceptions -fasynchronous-unwind-tables)
+    target_compile_options(aoe2_generated_game_code PRIVATE -fexceptions -fasynchronous-unwind-tables -fvisibility=hidden)
 endif()
 
 if(AOE2_GENERATED_UNITY_BATCH GREATER 0)
@@ -65,6 +69,9 @@ if(AOE2_ENABLE_OVERLAYS AND EXISTS "${AOE2_OVERLAY_DIR}/overlay_all.cpp")
         target_include_directories(aoe2_overlay_${overlay_name} PRIVATE "${overlay_dir}")
         target_link_libraries(aoe2_overlay_${overlay_name} PRIVATE aoe2_ps2_runtime)
         target_compile_options(aoe2_overlay_${overlay_name} PRIVATE -include "${overlay_dir}/overlay_rename.h")
+        if(NINTENDO_SWITCH)
+            target_compile_options(aoe2_overlay_${overlay_name} PRIVATE -fvisibility=hidden)
+        endif()
         if(NOT MSVC AND AOE2_GENERATED_OPTIMIZATION)
             target_compile_options(aoe2_overlay_${overlay_name} PRIVATE "${AOE2_GENERATED_OPTIMIZATION}")
         endif()
@@ -177,6 +184,19 @@ if(AOE2_BUILD_GAME)
         target_sources(aoe2_game PRIVATE platform/switch/src/switch_compat.c platform/switch/src/switch_early.cpp)
     endif()
     target_link_libraries(aoe2_game PRIVATE aoe2_interfaces)
+    if(NINTENDO_SWITCH)
+        target_link_options(aoe2_game PRIVATE -fuse-ld=lld)
+        # Mesa's static GLES/EGL portlibs have cyclic references between the
+        # entry points, glapi dispatch, and nouveau backend. Keep them in a
+        # rescan group at the final executable link so the devkitPro linker can
+        # resolve the full dependency cycle regardless of transitive link order.
+        set(CMAKE_CXX_LINK_GROUP_USING_RESCAN_SUPPORTED TRUE)
+        set(CMAKE_CXX_LINK_GROUP_USING_RESCAN
+            "LINKER:--start-group" "LINKER:--end-group")
+        target_link_libraries(aoe2_game PRIVATE
+            "$<LINK_GROUP:RESCAN,EGL,GLESv2,glapi,drm_nouveau,nx>"
+        )
+    endif()
     if(AOE2_DEFAULT_BOOT_ELF)
         target_compile_definitions(aoe2_game PRIVATE PS2X_DEFAULT_BOOT_ELF="${AOE2_DEFAULT_BOOT_ELF}")
     endif()
