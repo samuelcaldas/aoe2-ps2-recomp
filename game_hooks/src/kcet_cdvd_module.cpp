@@ -12,6 +12,13 @@
 // which thread 7 calls immediately before its first WaitSema(74).
 #include "Stubs/SifCdvdServer.h"
 
+#if AOE2_MODULAR_OVERLAYS
+#include <aoe2/game_hooks/overlay_dispatcher.hpp>
+#include <string_view>
+
+void FUN_002240b0_0x2240b0(uint8_t* rdram, R5900Context* ctx, PS2Runtime* runtime);
+#endif
+
 #include <array>
 #include <atomic>
 #include <cstdint>
@@ -127,7 +134,37 @@ void Handler_FlushPendingNcmdSignals(uint8_t* rdram, R5900Context* context, PS2R
     context->pc = getRegU32(context, 31);
 }
 
+#if AOE2_MODULAR_OVERLAYS
+// func_002240B0: loads a disc code overlay (e.g. "smenu_cd.bin") into guest RAM and executes
+// its static constructors via mwOverlayInit (func_00100270 -> func_001001F0).
+// When modular overlays are enabled, register the requested overlay's function table on entry
+// before the guest executes the overlay's static constructors.
+constexpr uint32_t kFunc002240B0 = 0x002240B0u;
+
+void Handler_OverlayCdReaderBridge(uint8_t* rdram, R5900Context* context, PS2Runtime* runtime) {
+    if (runtime != nullptr && context->pc == kFunc002240B0) {
+        const uint32_t filename_addr = getRegU32(context, 4);
+        const char* const raw_ptr =
+            reinterpret_cast<const char*>(getConstMemPtr(rdram, filename_addr));
+        if (raw_ptr != nullptr) {
+            const std::size_t len = strnlen(raw_ptr, 64);
+            if (len > 0) {
+                (void)aoe2::game_hooks::LoadModularOverlayOnDemand(
+                    *runtime, std::string_view(raw_ptr, len));
+            }
+        }
+    }
+    FUN_002240b0_0x2240b0(rdram, context, runtime);
+}
+#endif
+
 void InstallNativeCdvd(PS2Runtime& runtime) {
+#if AOE2_MODULAR_OVERLAYS
+    if (runtime.hasFunction(kFunc002240B0) &&
+        runtime.replaceFunction(kFunc002240B0, Handler_OverlayCdReaderBridge)) {
+        std::cout << "[aoe2] modular overlays: hooked func_002240B0 (on-demand overlay loader)\n";
+    }
+#endif
     const auto switches = aoe2::game_hooks::native_input::ReadSwitches();
     const bool enabled = switches.Enabled("cdvd") || switches.Enabled("file_cd");
     if (!enabled) {
