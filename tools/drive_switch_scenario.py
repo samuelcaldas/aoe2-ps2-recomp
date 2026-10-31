@@ -3,11 +3,12 @@
 
 Executes scenario steps targeting the Ryujinx emulator window inside Xvfb:
 - Focuses the emulator window;
-- Executes sequence of keyboard keys and mouse clicks (mapped to logical 640x448);
+- Executes sequence of gamepad buttons and directional arrows (PS2 pad navigation);
 - Follows guest log events (such as [game-tty] and [map-submit]);
 - Captures timed and per-step screenshots labeled with mode ('native' or 'gs');
 - Fails fast if native mode fails or falls back to GS at runtime.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -28,7 +29,7 @@ DISPLAY_DEFAULT = ":99"
 WINDOW_SIZE = (1280, 720)
 
 # (step name, action, argument, settle seconds)
-# Logical coordinates match PS2 640x448 screen.
+# Sequence of steps mirrors the PC scenario 1:1, driven via gamepad buttons and arrows.
 BOOT_TO_MENU = [
     ("key-return-1", "key", "Return", 5),
     ("key-return-2", "key", "Return", 5),
@@ -126,6 +127,119 @@ def capture_screenshot(out_path: Path, display: str) -> bool:
     return res.returncode == 0 and out_path.exists() and out_path.stat().st_size > 0
 
 
+def get_screen_brightness(display: str) -> float:
+    """Return mean brightness of the screen (0.0 for pure black)."""
+    tmp_path = Path("/tmp/screen_check.png")
+    if capture_screenshot(tmp_path, display):
+        res = subprocess.run(
+            f"convert {tmp_path} -format '%[mean]' info:",
+            shell=True,
+            capture_output=True,
+            text=True,
+        )
+        try:
+            return float(res.stdout.strip())
+        except ValueError:
+            pass
+    return 0.0
+
+
+def is_screen_loading(display: str) -> bool:
+    """Check if the screen is pure black (mean < 1.0)."""
+    return get_screen_brightness(display) < 1.0
+
+
+def wait_for_screen_ready(display: str, timeout: float = 90.0, settle_after: float = 2.0) -> bool:
+    """Wait until screen is rendered (not pure black), then allow settle_after for UI stabilization."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not is_screen_loading(display):
+            if settle_after > 0:
+                time.sleep(settle_after)
+            return True
+        time.sleep(1.0)
+    return False
+
+
+def get_screen_text(display: str) -> str:
+    """Return lowercase OCR text extracted from current screen."""
+    tmp_path = Path("/tmp/screen_ocr.png")
+    if not capture_screenshot(tmp_path, display):
+        return ""
+    try:
+        out = subprocess.check_output(
+            ["tesseract", str(tmp_path), "stdout", "--psm", "6"],
+            stderr=subprocess.DEVNULL,
+            timeout=5.0,
+        ).decode("utf-8", errors="ignore")
+        return out.lower()
+    except Exception:
+        return ""
+
+
+def send_pad_button(display: str, btn: str, duration: float = 0.25) -> None:
+    """Send gamepad button / D-pad arrow to Ryujinx window."""
+    env = {**os.environ, "DISPLAY": display}
+    win = find_window(display, timeout=5.0)
+    btn_map = {
+        "cross": "z",
+        "confirm": "z",
+        "circle": "x",
+        "cancel": "x",
+        "start": "Return",
+        "up": "Up",
+        "down": "Down",
+        "left": "Left",
+        "right": "Right",
+        "triangle": "c",
+        "square": "v",
+        "select": "Minus",
+    }
+    key = btn_map.get(btn.lower(), btn)
+    if win:
+        subprocess.run(["xdotool", "windowfocus", win], env=env)
+        subprocess.run(["xdotool", "keydown", "--window", win, key], env=env)
+        subprocess.run(["xdotool", "keydown", key], env=env)
+        time.sleep(duration)
+        subprocess.run(["xdotool", "keyup", "--window", win, key], env=env)
+        subprocess.run(["xdotool", "keyup", key], env=env)
+    else:
+        subprocess.run(["xdotool", "keydown", key], env=env)
+        time.sleep(duration)
+        subprocess.run(["xdotool", "keyup", key], env=env)
+
+
+def is_memory_card_busy(display: str) -> bool:
+    """Check if memory card is still displaying '---KB' (busy dashes)."""
+    tmp_path = Path("/tmp/mc_check.png")
+    if not capture_screenshot(tmp_path, display):
+        return True
+    try:
+        from PIL import Image
+
+        with Image.open(tmp_path) as im:
+            bright_pts = sum(
+                1
+                for x in range(775, 815)
+                if im.getpixel((x, 123))[0] > 180 and im.getpixel((x, 123))[1] > 140
+            )
+            return bright_pts >= 25
+    except Exception:
+        return False
+
+
+def wait_for_card_ready(display: str, timeout: float = 60.0, settle_after: float = 3.0) -> bool:
+    """Wait until memory card check completes (not showing '---KB')."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not is_memory_card_busy(display):
+            if settle_after > 0:
+                time.sleep(settle_after)
+            return True
+        time.sleep(1.0)
+    return False
+
+
 def follow_guest_event(
     log_path: Path,
     marker: bytes,
@@ -161,57 +275,45 @@ def follow_guest_event(
                     time.sleep(min(1.0, max(0.0, deadline - now)))
 
 
-def get_screen_brightness(display: str) -> float:
-    """Return mean brightness of the screen (0.0 for pure black)."""
-    tmp_path = Path("/tmp/screen_check.png")
-    if capture_screenshot(tmp_path, display):
-        res = subprocess.run(
-            f"convert {tmp_path} -format '%[mean]' info:",
-            shell=True,
-            capture_output=True,
-            text=True,
-        )
-        try:
-            return float(res.stdout.strip())
-        except ValueError:
-            pass
-    return 0.0
-
-
-def is_screen_loading(display: str) -> bool:
-    """Check if the screen is pure black (mean < 1.0)."""
-    return get_screen_brightness(display) < 1.0
-
-
-def wait_for_screen_ready(display: str, timeout: float = 90.0, settle_after: float = 2.0) -> bool:
-    """Wait until screen is rendered (not pure black), then allow settle_after for UI stabilization."""
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if not is_screen_loading(display):
-            if settle_after > 0:
-                time.sleep(settle_after)
-            return True
-        time.sleep(1.0)
-    return False
-
-
-def do_step(display: str, action: str, argument, settle: float) -> None:
-    """Execute a single scenario action on the display / focused window."""
-    env = {**os.environ, "DISPLAY": display}
-    win = find_window(display, timeout=5.0)
-    if win:
-        subprocess.run(["xdotool", "windowfocus", win], env=env)
-    if action == "key":
-        subprocess.run(["xdotool", "keydown", str(argument)], env=env)
-        time.sleep(0.3)
-        subprocess.run(["xdotool", "keyup", str(argument)], env=env)
-    elif action == "click" and isinstance(argument, (tuple, list)):
-        wx, wy = argument
-        subprocess.run(["xdotool", "mousemove", str(int(wx)), str(int(wy))], env=env)
-        time.sleep(1.2)
-        subprocess.run(["xdotool", "mousedown", "1"], env=env)
-        time.sleep(0.8)
-        subprocess.run(["xdotool", "mouseup", "1"], env=env)
+def do_step(display: str, action: str, argument, settle: float, step_name: str = "") -> None:
+    """Execute a scenario action via native controller buttons / arrows."""
+    # Step-name aware navigation using controller pad:
+    if step_name in ("key-return-1", "key-return-2", "osk-letter-a"):
+        send_pad_button(display, "cross", 0.3)
+    elif step_name in ("osk-enter", "profile-name-enter"):
+        send_pad_button(display, "start", 0.3)
+    elif step_name == "card-ok":
+        wait_for_card_ready(display, timeout=45.0, settle_after=2.0)
+        send_pad_button(display, "cross", 0.3)
+    elif step_name in ("profile-new-player", "profile-name-field", "profile-name-a", "profile-name-o", "profile-name-k"):
+        send_pad_button(display, "cross", 0.3)
+    elif step_name in ("profile-submit", "profile-confirm"):
+        send_pad_button(display, "cross", 0.3)
+    elif step_name == "single-player":
+        txt = get_screen_text(display)
+        if not ("campaign" in txt or "random map" in txt):
+            send_pad_button(display, "cross", 0.3)
+            time.sleep(2.0)
+            txt = get_screen_text(display)
+            if not ("campaign" in txt or "random map" in txt):
+                send_pad_button(display, "circle", 0.3)
+                time.sleep(1.0)
+                send_pad_button(display, "down", 0.3)
+                time.sleep(1.0)
+                send_pad_button(display, "cross", 0.3)
+    elif step_name in ("campaigns", "wallace-marker", "scenario-1"):
+        send_pad_button(display, "cross", 0.3)
+    elif step_name in ("briefing", "briefing-next", "mission-loading", "brief-3", "brief-4", "brief-5", "mission", "mission-start"):
+        send_pad_button(display, "cross", 0.3)
+    elif step_name.startswith("story-advance"):
+        send_pad_button(display, "cross", 0.3)
+    elif action == "pad":
+        send_pad_button(display, str(argument), 0.3)
+    elif action == "key":
+        send_pad_button(display, str(argument), 0.3)
+    elif action == "click":
+        # Fallback for clicks: send Cross button
+        send_pad_button(display, "cross", 0.3)
     elif action == "wait":
         pass
     time.sleep(settle)
@@ -226,7 +328,7 @@ def drive_scenario(
     run_seconds: float = 600.0,
     speed_factor: float = 2.5,
 ) -> dict:
-    """Drive the given scenario, saving mode-tagged screenshots."""
+    """Drive the given scenario using controller buttons, saving mode-tagged screenshots."""
     log_path = evidence_dir / "run.log"
     steps = SCENARIOS.get(scenario_name, SCENARIOS["campaign-auto"])
     results = {
@@ -244,9 +346,8 @@ def drive_scenario(
 
     subprocess.run(["xdotool", "windowfocus", "--sync", win], env={**os.environ, "DISPLAY": display})
     print(f"[{mode}] Focused Ryujinx window {win} on {display}", flush=True)
-    win_w, win_h = WINDOW_SIZE
 
-    # Generous boot delay for guest emulator to initialize and reach title screen
+    # Boot delay for guest emulator to initialize and reach title screen
     print(f"[{mode}] Waiting for guest boot (30s)...", flush=True)
     time.sleep(30.0)
     wait_for_screen_ready(display, timeout=45.0, settle_after=3.0)
@@ -255,20 +356,12 @@ def drive_scenario(
     print(f"[{mode}] Captured {boot_shot.name} (brightness={get_screen_brightness(display):.1f})", flush=True)
 
     for name, action, argument, settle in steps:
-        scaled_arg = argument
-        if action in ("click", "story-until", "map-until") and isinstance(argument, (tuple, list)):
-            wx, wy = to_window(argument, (win_w, win_h))
-            scaled_arg = (int(wx), int(wy))
-
-        # Scale settle times for emulator clock (~2.5x slower than desktop PC)
         effective_settle = (settle * speed_factor) if settle else 0.0
-        print(f"[{mode}] Step {name}: {action} {scaled_arg} (settle={effective_settle:.1f}s)", flush=True)
+        print(f"[{mode}] Step {name}: {action} (settle={effective_settle:.1f}s)", flush=True)
 
-        # Before clicks or keys, ensure the screen is ready and not black
-        if action in ("click", "key"):
-            if is_screen_loading(display):
-                print(f"[{mode}] Screen is in loading transition; waiting for render before {name}...", flush=True)
-                wait_for_screen_ready(display, timeout=90.0, settle_after=3.0)
+        if is_screen_loading(display):
+            print(f"[{mode}] Screen is in loading transition; waiting for render before {name}...", flush=True)
+            wait_for_screen_ready(display, timeout=90.0, settle_after=3.0)
 
         if action == "story-until":
             story_clicks = 0
@@ -276,7 +369,8 @@ def drive_scenario(
             def advance_story():
                 nonlocal story_clicks
                 story_clicks += 1
-                do_step(display, "click", scaled_arg, effective_settle)
+                send_pad_button(display, "cross", 0.3)
+                send_pad_button(display, "start", 0.3)
                 shot = screenshots_dir / f"switch-{mode}-story-{story_clicks}.png"
                 capture_screenshot(shot, display)
                 print(f"[{mode}] Captured {shot.name}", flush=True)
@@ -292,7 +386,7 @@ def drive_scenario(
             def advance_map():
                 nonlocal map_clicks
                 map_clicks += 1
-                do_step(display, "click", scaled_arg, 12.0 * speed_factor)
+                send_pad_button(display, "cross", 0.3)
                 shot = screenshots_dir / f"switch-{mode}-map-wait-{map_clicks}.png"
                 capture_screenshot(shot, display)
                 print(f"[{mode}] Captured {shot.name}", flush=True)
@@ -302,17 +396,31 @@ def drive_scenario(
             )
             if matched:
                 results["map_submitted"] = True
+                submit_shot = screenshots_dir / f"switch-{mode}-map-submitted.png"
+                capture_screenshot(submit_shot, display)
+                print(f"[{mode}] Captured {submit_shot.name} [SUCCESS]!", flush=True)
             else:
                 sys.stderr.write(f"WARNING: [map-submit] not reached before timeout\n")
         else:
-            do_step(display, action, scaled_arg, effective_settle)
+            do_step(display, action, argument, effective_settle, step_name=name)
+            if name == "profile-settle":
+                wait_for_screen_ready(display, timeout=45.0, settle_after=4.0)
+            elif name == "map-stability":
+                # Exercise map navigation using D-Pad directional arrows (setas)
+                print(f"[{mode}] Testing map navigation using controller D-Pad arrows...", flush=True)
+                for arrow in ["right", "down", "left", "up"]:
+                    send_pad_button(display, arrow, 0.5)
+                    time.sleep(1.0)
+                stability_shot = screenshots_dir / f"switch-{mode}-map-stability.png"
+                capture_screenshot(stability_shot, display)
+                print(f"[{mode}] Captured {stability_shot.name}!", flush=True)
 
         step_shot = screenshots_dir / f"switch-{mode}-{name}.png"
         capture_screenshot(step_shot, display)
         print(f"[{mode}] Captured {step_shot.name} (brightness={get_screen_brightness(display):.1f})", flush=True)
         results["completed_steps"].append(name)
 
-    results["success"] = True
+    results["success"] = results.get("map_submitted", False) if scenario_name in ("campaign", "campaign-auto") else True
     return results
 
 

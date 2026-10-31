@@ -110,6 +110,13 @@ def emulator_script(
                 "fi",
                 f"echo 'mode={ini_mode}' > {sdcard_dir}/map_view.ini",
                 f"export AOE2_MAP_VIEW={ini_mode}",
+                f"Xvfb {DISPLAY} -screen 0 1280x760x24 > /dev/null 2>&1 &",
+                "XVFB_PID=$!",
+                "sleep 1",
+                f"export DISPLAY={DISPLAY}",
+                "RYUJINX_BIN=$(which Ryujinx.Headless.SDL2 2>/dev/null || which Ryujinx 2>/dev/null || true)",
+                'if [ -z "$RYUJINX_BIN" ]; then echo "FATAL: Ryujinx executable not found in PATH" >&2; kill $XVFB_PID; exit 1; fi',
+                f'timeout 2 "$RYUJINX_BIN" --root-data-dir {config_dir} > /dev/null 2>&1 || true',
                 f'python3 -c "',
                 "import json, os",
                 f"cfg_path = '{config_dir}/Config.json'",
@@ -124,6 +131,7 @@ def emulator_script(
                 "cfg['start_fullscreen'] = False",
                 "cfg['start_no_ui'] = False",
                 "cfg['show_title_bar'] = True",
+                "cfg['show_console'] = True",
                 "cfg['enable_file_log'] = True",
                 "cfg['enable_keyboard'] = True",
                 "cfg['enable_mouse'] = True",
@@ -134,13 +142,17 @@ def emulator_script(
                 "        rj['button_plus'] = 'Enter'",
                 "        rj['button_b'] = 'Z'",
                 "        rj['button_a'] = 'X'",
+                "        rj['button_x'] = 'C'",
+                "        rj['button_y'] = 'V'",
+                "        lj = inp.setdefault('left_joycon', {})",
+                "        lj['dpad_up'] = 'Up'",
+                "        lj['dpad_down'] = 'Down'",
+                "        lj['dpad_left'] = 'Left'",
+                "        lj['dpad_right'] = 'Right'",
+                "        lj['button_minus'] = 'Minus'",
                 "with open(cfg_path, 'w') as f:",
                 "    json.dump(cfg, f, indent=2)",
                 '"',
-                f"Xvfb {DISPLAY} -screen 0 1280x760x24 > /dev/null 2>&1 &",
-                "XVFB_PID=$!",
-                "sleep 1",
-                f"export DISPLAY={DISPLAY}",
                 f"x11vnc -display {DISPLAY} -nopw -forever -shared -rfbport 5900 > /dev/null 2>&1 &",
                 "VNC_PID=$!",
                 "websockify --web /usr/share/novnc 6080 localhost:5900 > /dev/null 2>&1 &",
@@ -148,8 +160,6 @@ def emulator_script(
                 "echo '================================================================='",
                 "echo 'Validation live view: http://localhost:6080/vnc.html'",
                 "echo '================================================================='",
-                "RYUJINX_BIN=$(which Ryujinx.Headless.SDL2 2>/dev/null || which Ryujinx 2>/dev/null || true)",
-                "if [ -z \"$RYUJINX_BIN\" ]; then echo 'FATAL: Ryujinx executable not found in PATH' >&2; kill $XVFB_PID; exit 1; fi",
                 f'"$RYUJINX_BIN" --root-data-dir {config_dir} {CONTAINER_ROOT}/{nro} > {evidence}/run.log 2>&1 &',
                 "EMU_PID=$!",
                 f"python3 -u {CONTAINER_ROOT}/tools/drive_switch_scenario.py --mode {mode} --scenario {scenario} --evidence {evidence} --screenshots {shots_dir} --display {DISPLAY} --run-seconds {run_seconds} --speed-factor 1.3 > {evidence}/scenario.log 2>&1 &",
@@ -195,6 +205,8 @@ def evidence_passed(
         has_map_submit = "[map-submit]" in log
         has_map_screenshot = any("map" in s and f"-{mode}-" in s for s in screenshots)
         if not (has_map_submit or has_map_screenshot):
+            return False
+        if mode == "native" and not has_map_submit:
             return False
     return True
 
