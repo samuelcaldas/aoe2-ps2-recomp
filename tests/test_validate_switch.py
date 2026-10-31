@@ -152,7 +152,8 @@ class TestSwitchValidationScript(unittest.TestCase):
         magick = FakeImageMagick(
             {name: histogram(REAL_COLORS) for name in shots}, metric="5000"
         )
-        for marker in ("presentation: guest framebuffer fallback", "GS::latchHostPresentationFrame"):
+        for marker in ("presentation: guest framebuffer fallback", "GS::latchHostPresentationFrame",
+                       "map-only: menus and HUD are not implemented"):
             self.assertFalse(validation.evidence_passed(True, PROGRESSING_LOG + marker, shots, magick))
 
     def test_rejects_screenshots_without_mode_tagging(self):
