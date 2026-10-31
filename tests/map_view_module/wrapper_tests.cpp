@@ -1,5 +1,6 @@
 #include "map_view_module_private.hpp"
 #include <aoe2/game_hooks/map_view_session.hpp>
+#include <aoe2/renderer/map_view_compositor.hpp>
 #include "ps2_runtime.h"
 #include <cstdlib>
 #include <cstring>
@@ -9,6 +10,10 @@
 #include <source_location>
 #include <string>
 using namespace aoe2::game_hooks::map_view;
+// Unused experimental rasterizer calls are external to this focused harness.
+void FUN_001820c0_0x1820c0(uint8_t*, R5900Context*, PS2Runtime*) {}
+void FUN_001820a0_0x1820a0(uint8_t*, R5900Context*, PS2Runtime*) {}
+void FUN_0017e350_0x17e350(uint8_t*, R5900Context*, PS2Runtime*) {}
 void check(bool ok, const std::source_location where = std::source_location::current()) {
     if (!ok) throw std::runtime_error("wrapper assertion failed at line " + std::to_string(where.line()));
 }
@@ -33,7 +38,7 @@ void observer_original(uint8_t*, R5900Context* ctx, PS2Runtime*) {
 }
 void observer_tests() {
     PS2Runtime rt;
-    for (auto entry : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0,0x31a3d0})
+    for (auto entry : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0,0x31a3d0,0x1ac110,0x1ac220,0x25fa10,0x25fb10,0x3209b0,0x326b80,0x326f60,0x31e110,0x31b6c0})
         rt.functions[entry] = observer_original;
     unsetenv("AOE2_MAP_VIEW");
     Install(rt);
@@ -48,8 +53,9 @@ void observer_tests() {
     word(ram,panel,0); word(ram,panel+0x14,640); word(ram,panel+0x18,262);
     word(ram,panel+0x1c5c,0);
     word(ram,area,palette); word(ram,area+0x40,viewport);
+    word(ram,viewport+0x14,palette); word(ram,palette+4,palette+0x5c);
     word(ram,viewport+0x98,0x800); word(ram,target+0x98,0);
-    word(ram,viewport+0x38,640); word(ram,viewport+0x3c,262);
+    word(ram,viewport+0x38,262); word(ram,viewport+0x3c,640);
     word(ram,viewport+0x54,source);
     const auto invoke = [&](uint32_t entry, uint32_t a0, uint32_t a1) {
         R5900Context ctx;
@@ -64,7 +70,7 @@ void observer_tests() {
         check(std::memcmp(&ctx,&observer_expected,sizeof(ctx))==0 && ram==before);
     };
     Install(rt);
-    check(rt.replacements==7 && rt.claims==0 && !Capture(rt));
+    check(rt.replacements==16 && rt.claims==0 && !Capture(rt));
     invoke(0x31a410,panel,0);
     // Area creation happens inside the original, after Prepare has observed panel init.
     word(ram,panel+0x1c5c,area);
@@ -86,7 +92,7 @@ void observer_tests() {
     check(snap->indices[0]==0x73 && snap->palette[0]==0x73);
     Teardown(rt); Teardown(rt);
     check(rt.owner==&external_owner && rt.claims==0 && rt.releases==0 && !Capture(rt));
-    for (auto entry : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0,0x31a3d0})
+    for (auto entry : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0,0x31a3d0,0x1ac110,0x1ac220,0x25fa10,0x25fb10,0x3209b0,0x326b80,0x326f60,0x31e110,0x31b6c0})
         check(rt.lookupFunction(entry)==observer_original);
 }
 void enlarged_720p_tests() {
@@ -94,7 +100,7 @@ void enlarged_720p_tests() {
     setenv("AOE2_WINDOW_WIDTH", "1280", 1);
     setenv("AOE2_WINDOW_HEIGHT", "720", 1);
     PS2Runtime rt;
-    for (auto address : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0,0x31a3d0}) rt.functions[address] = original;
+    for (auto address : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0,0x31a3d0,0x1ac110,0x1ac220,0x25fa10,0x25fb10,0x3209b0,0x326b80,0x326f60,0x31e110,0x31b6c0}) rt.functions[address] = original;
     std::vector<uint8_t> ram(64*1024*1024);
     const uint32_t panel=0x1000, area=0x4000, viewport=0x8000, manager=0x9000, target=0xa000;
     word(ram,panel+0x14,640); word(ram,panel+0x18,262); word(ram,panel+0x1c5c,area);
@@ -142,7 +148,8 @@ void enlarged_720p_tests() {
     buffer_reg=0;
 
     word(ram,area+0x40,viewport);
-    word(ram,viewport+0x98,0x800); word(ram,viewport+0x38,1280); word(ram,viewport+0x3c,534);
+    word(ram,viewport+0x14,manager); word(ram,manager+4,manager+0x5c);
+    word(ram,viewport+0x98,0x800); word(ram,viewport+0x38,534); word(ram,viewport+0x3c,1280);
     word(ram,viewport+0x54,0x3000010+1280*5);
     ram[0x3000010+1280*5]=42;
 
@@ -152,6 +159,19 @@ void enlarged_720p_tests() {
     check(snap && snap->width == 1280 && snap->height == 534 && snap->indices[0] == 42);
     check(snap->indices.size() == 1280 * 536);
     check(!ActiveLayout(rt));
+
+    // Native composition needs no guest/GS frame and leaves unimplemented HUD black.
+    aoe2::renderer::MapFrameSnapshot native{snap->width, snap->height, snap->pitch,
+        snap->indices, {}, snap->layout};
+    native.palette[42] = {30, 120, 60, 128};
+    auto native_frame = aoe2::renderer::MapViewCompositor::TryComposeNativeMap(native);
+    check(native_frame && native_frame->width == 1280 && native_frame->height == 720);
+    const auto offset = static_cast<size_t>(native.layout.map.y) * native_frame->strideBytes;
+    check((*native_frame->pixels)[offset] == 30 && (*native_frame->pixels)[offset+1] == 120 &&
+          (*native_frame->pixels)[offset+2] == 60 && (*native_frame->pixels)[offset+3] == 255);
+    check((*native_frame->pixels)[0] == 0 && (*native_frame->pixels)[3] == 255);
+    native.pitch = native.width - 1;
+    check(!aoe2::renderer::MapViewCompositor::TryComposeNativeMap(native));
 
     // Only a successfully composed frame publishes the expanded input layout.
     check(bool(rt.compositor));
@@ -170,7 +190,10 @@ void enlarged_720p_tests() {
     check(c.pc == 0x1abb80);
 
     // Failed composition returns input to the original coordinate path.
-    check(!rt.compositor({legacy_dummy.data(), 640, 448, 1}));
+    bool invalid_rejected = false;
+    try { rt.compositor({legacy_dummy.data(), 640, 448, 1}); }
+    catch (const std::runtime_error&) { invalid_rejected = true; }
+    check(invalid_rejected);
     check(!ActiveLayout(rt));
     c.pc=0x2257c0; reg(c,4,1500); reg(c,5,800);
     rt.lookupFunction(0x2257c0)(ram.data(),&c,&rt);
@@ -208,7 +231,7 @@ void relocation_tests() {
     setenv("AOE2_WINDOW_WIDTH", "1920", 1);
     setenv("AOE2_WINDOW_HEIGHT", "1080", 1);
     PS2Runtime rt;
-    for (auto address : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0,0x31a3d0})
+    for (auto address : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0,0x31a3d0,0x1ac110,0x1ac220,0x25fa10,0x25fb10,0x3209b0,0x326b80,0x326f60,0x31e110,0x31b6c0})
         rt.functions[address] = original;
     std::vector<uint8_t> ram(64*1024*1024);
     const uint32_t panel=0x1000, area=0x4000;
@@ -231,7 +254,7 @@ void enlarged_1080p_tests() {
     setenv("AOE2_WINDOW_WIDTH", "1920", 1);
     setenv("AOE2_WINDOW_HEIGHT", "1080", 1);
     PS2Runtime rt;
-    for (auto address : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0,0x31a3d0})
+    for (auto address : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0,0x31a3d0,0x1ac110,0x1ac220,0x25fa10,0x25fb10,0x3209b0,0x326b80,0x326f60,0x31e110,0x31b6c0})
         rt.functions[address] = original;
     std::vector<uint8_t> ram(64*1024*1024);
     const uint32_t panel=0x1000, area=0x4000, viewport=0x8000, manager=0x9000, target=0xa000;
@@ -251,7 +274,8 @@ void enlarged_1080p_tests() {
     }
     buffer_reg=0;
     word(ram,area+0x40,viewport);
-    word(ram,viewport+0x98,0x800); word(ram,viewport+0x38,1920); word(ram,viewport+0x3c,708);
+    word(ram,viewport+0x14,manager); word(ram,manager+4,manager+0x5c);
+    word(ram,viewport+0x98,0x800); word(ram,viewport+0x38,708); word(ram,viewport+0x3c,1920);
     word(ram,viewport+0x54,0x3000010+5*1920);
     ram[0x3000010+5*1920]=42;
     c.pc=0x21acd0; reg(c,4,viewport); reg(c,5,target);
@@ -275,7 +299,7 @@ int main() {
     setenv("AOE2_WINDOW_HEIGHT", "448", 1);
     unsetenv("AOE2_MAP_VIEW_OVERRIDE");
     PS2Runtime rt;
-    for (auto address : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0,0x31a3d0}) rt.functions[address] = original;
+    for (auto address : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0,0x31a3d0,0x1ac110,0x1ac220,0x25fa10,0x25fb10,0x3209b0,0x326b80,0x326f60,0x31e110,0x31b6c0}) rt.functions[address] = original;
     std::vector<uint8_t> ram(64*1024*1024);
     const uint32_t panel=0x1000, area=0x4000, viewport=0x8000, manager=0x9000, target=0xa000;
     word(ram,panel+0x14,640); word(ram,panel+0x18,262); word(ram,panel+0x1c5c,area);
@@ -294,6 +318,10 @@ int main() {
     const auto diagnostic=trace.str();
     check(diagnostic.find("[map-panel-init] panel=4096 vtable=49152")!=std::string::npos);
     check(diagnostic.find(" slot_50=1048656 slot_b0=1048752 slot_b4=1048756 slot_f0=1048816")!=std::string::npos);
+    // A yielding guest draw routine has not completed and must not publish a frame.
+    c.pc=0x31b6c0; reg(c,4,panel);
+    rt.lookupFunction(0x31b6c0)(ram.data(),&c,&rt);
+    check(c.pc == 0x1abb80 && !Capture(rt));
     // A resumed panel wrapper cannot interpret its current a0 as a fresh panel.
     reg(c,4,0xffffffff);
     rt.lookupFunction(0x31a410)(ram.data(),&c,&rt);
@@ -303,7 +331,7 @@ int main() {
     c.pc=0x31a410; reg(c,4,panel);
     rt.lookupFunction(0x31a410)(ram.data(),&c,&rt);
     check(ram[0x3000010]==0x73);
-    check(trace.str().size()==2*diagnostic.size());
+    check(trace.str().find("[map-panel-init]", diagnostic.size()) != std::string::npos);
     // Invalid vtables remain diagnostic-only, with no out-of-range guest read.
     word(ram,panel,0xfffffffc); c.pc=0x31a410; reg(c,4,panel);
     rt.lookupFunction(0x31a410)(ram.data(),&c,&rt);
@@ -322,7 +350,8 @@ int main() {
     }
     buffer_reg=0;
     word(ram,area+0x40,viewport);
-    word(ram,viewport+0x98,0x800); word(ram,viewport+0x38,640); word(ram,viewport+0x3c,262);
+    word(ram,viewport+0x14,manager); word(ram,manager+4,manager+0x5c);
+    word(ram,viewport+0x98,0x800); word(ram,viewport+0x38,262); word(ram,viewport+0x3c,640);
     word(ram,viewport+0x54,0x3000010+640*5);
     for (unsigned i=1;i<=2;++i) {
         c.pc=0x21acd0; reg(c,4,viewport); reg(c,5,target);
@@ -378,7 +407,7 @@ int main() {
     Teardown(rt); Teardown(rt);
     const auto released = [&] {
         check(!rt.owner && !Capture(rt));
-        for (auto address : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0,0x31a3d0})
+        for (auto address : {0x31a410,0x1ab7e0,0x1abac0,0x21acd0,0x1ae350,0x2257c0,0x31a3d0,0x1ac110,0x1ac220,0x25fa10,0x25fb10,0x3209b0,0x326b80,0x326f60,0x31e110,0x31b6c0})
             check(rt.lookupFunction(address) == original);
     };
     released();

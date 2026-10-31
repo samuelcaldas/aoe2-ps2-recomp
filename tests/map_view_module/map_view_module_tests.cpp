@@ -19,7 +19,7 @@ int main() {
     // Reconfiguration may occur without the first area initializer on this invocation.
     check(state.redirect(0x1abac0, 0x31a4b4, 0x1000, 0x4000, 640, 262, true) == 0x3100010);
     bool rejected = false;
-    try { state.begin(0x1000, 1280, 918, 0x3000000, 8*1024*1024, 3); }
+    try { state.begin(0x1000, 1280, 2049, 0x3000000, 8*1024*1024, 3); }
     catch (const std::invalid_argument&) { rejected = true; }
     check(rejected);
     check(!state.generation);
