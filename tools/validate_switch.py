@@ -196,6 +196,7 @@ def evidence_passed(
     if mode == "native":
         if ("fallback to GS is prohibited in native mode" in log
                 or "presentation: guest framebuffer fallback" in log
+                or "map-only: menus and HUD are not implemented" in log
                 or "GS::latchHostPresentationFrame" in log):
             return False
     if classify_run_log(log).verdict is not RunVerdict.PROGRESSING:
