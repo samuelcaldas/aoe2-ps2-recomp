@@ -386,6 +386,20 @@ std::optional<renderer::MapViewLayout> ActiveLayout() {
   }
   return std::nullopt;
 }
+bool IsNativeMode(PS2Runtime &runtime) {
+  std::lock_guard lock(mutex);
+  auto found = states.find(&runtime);
+  if (found == states.end())
+    return false;
+  return found->second->mode == MapViewMode::Native;
+}
+bool IsMapActive(PS2Runtime &runtime) {
+  std::lock_guard lock(mutex);
+  auto found = states.find(&runtime);
+  if (found == states.end())
+    return false;
+  return found->second->relocation.panel != 0 || found->second->submissions > 0;
+}
 } // namespace aoe2::game_hooks::map_view
 
 namespace aoe2::game_hooks {

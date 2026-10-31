@@ -20,6 +20,9 @@ MapViewSession::MapViewSession(PS2Runtime& runtime) {
         auto snap = map_view::CaptureNative(runtime);
         if (!snap || snap->indices.empty() || snap->layout.output.width == 0) {
             map_view::PublishComposedLayout(runtime, nullptr);
+            if (map_view::IsNativeMode(runtime) && map_view::IsMapActive(runtime)) {
+                throw std::runtime_error("Native map view snapshot failed; runtime fallback to GS is prohibited in native mode");
+            }
             return std::nullopt;
         }
         renderer::MapFrameSnapshot frame_snap;
@@ -43,9 +46,17 @@ MapViewSession::MapViewSession(PS2Runtime& runtime) {
         auto composed = renderer::MapViewCompositor::TryCompose(legacy_view, frame_snap);
         if (!composed) {
             map_view::PublishComposedLayout(runtime, nullptr);
+            if (map_view::IsNativeMode(runtime)) {
+                throw std::runtime_error("Native map view TryCompose failed; runtime fallback to GS is prohibited in native mode");
+            }
             return std::nullopt;
         }
-        if (!map_view::PublishComposedLayout(runtime, &*snap)) return std::nullopt;
+        if (!map_view::PublishComposedLayout(runtime, &*snap)) {
+            if (map_view::IsNativeMode(runtime)) {
+                throw std::runtime_error("Native map view PublishComposedLayout failed; runtime fallback to GS is prohibited in native mode");
+            }
+            return std::nullopt;
+        }
         return PS2OwnedPresentationFrame{
             composed->pixels,
             composed->width,

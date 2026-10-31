@@ -9,6 +9,10 @@
 #include "raylib.h"
 #include "runtime/ps2_memory.h"
 
+#if defined(__SWITCH__)
+#include <switch.h>
+#endif
+
 #include <algorithm>
 #include <atomic>
 #include <cstdlib>
@@ -148,6 +152,50 @@ void SteerGuestCursor(uint8_t* rdram, Vector2 position, uint32_t buttons) {
 namespace aoe2::game_hooks::detail {
 void SampleHostMouse(uint8_t* rdram) {
     if (aoe2::game_hooks::synthetic::Enabled()) return SampleSyntheticMouse();
+#if defined(__SWITCH__)
+    static bool s_hid_mouse_init = false;
+    if (!s_hid_mouse_init) {
+        hidInitializeMouse();
+        hidInitializeTouchScreen();
+        s_hid_mouse_init = true;
+    }
+    HidMouseState mouse_states[1];
+    size_t mouse_count = hidGetMouseStates(mouse_states, 1);
+
+    HidTouchScreenState touch_states[1];
+    size_t touch_count = hidGetTouchScreenStates(touch_states, 1);
+
+    Vector2 position{0.0f, 0.0f};
+    uint32_t buttons = 0;
+    bool has_input = false;
+
+    if (touch_count > 0 && touch_states[0].count > 0) {
+        position.x = static_cast<float>(touch_states[0].touches[0].x);
+        position.y = static_cast<float>(touch_states[0].touches[0].y);
+        buttons |= aoe2::input::kMouseButtonLeft;
+        has_input = true;
+    } else if (mouse_count > 0) {
+        position.x = static_cast<float>(mouse_states[0].x);
+        position.y = static_cast<float>(mouse_states[0].y);
+        if (mouse_states[0].buttons & HidMouseButton_Left) buttons |= aoe2::input::kMouseButtonLeft;
+        if (mouse_states[0].buttons & HidMouseButton_Right) buttons |= aoe2::input::kMouseButtonRight;
+        if (mouse_states[0].buttons & HidMouseButton_Middle) buttons |= aoe2::input::kMouseButtonMiddle;
+        if (mouse_states[0].delta_x != 0 || mouse_states[0].delta_y != 0 || buttons != 0) {
+            has_input = true;
+        }
+    }
+
+    if (!has_input && !g_has_last_position) return;
+    if (!has_input) position = g_last_position;
+
+    g_mouse_model.SetConnected(true);
+    LogButtonChange(buttons);
+    if (rdram != nullptr) return SteerGuestCursor(rdram, position, buttons);
+    const Vector2 last = g_has_last_position ? g_last_position : position;
+    g_last_position = position;
+    g_has_last_position = true;
+    g_mouse_model.Submit(HostMouseReport{position.x - last.x, position.y - last.y, buttons, 0, 0.0f});
+#else
     const Vector2 position = GetMousePosition();
     const uint32_t buttons = HostButtons();
     g_mouse_model.SetConnected(true);
@@ -157,6 +205,7 @@ void SampleHostMouse(uint8_t* rdram) {
     g_last_position = position;
     g_has_last_position = true;
     g_mouse_model.Submit(HostMouseReport{position.x - last.x, position.y - last.y, buttons, 0, GetMouseWheelMove()});
+#endif
 }
 }  // namespace aoe2::game_hooks::detail
 

@@ -11,6 +11,10 @@
 #include <raylib.h>
 #include "pad_snapshot.hpp"
 
+#if defined(__SWITCH__)
+#include <switch.h>
+#endif
+
 #include <array>
 #include <chrono>
 #include <iostream>
@@ -51,6 +55,43 @@ class RaylibPadBackend final : public aoe2::pad::PadBackend {
 public:
     HostPadState Sample(int port) override {
         if (port != 0) return {};
+#if defined(__SWITCH__)
+        static PadState s_switchPad;
+        static bool s_switchPadInit = false;
+        if (!s_switchPadInit) {
+            padConfigureInput(1, HidNpadStyleSet_NpadStandard);
+            padInitializeAny(&s_switchPad);
+            s_switchPadInit = true;
+        }
+        padUpdate(&s_switchPad);
+        const uint64_t keys = padGetButtons(&s_switchPad);
+        const HidAnalogStickState lstick = padGetStickPos(&s_switchPad, 0);
+        const HidAnalogStickState rstick = padGetStickPos(&s_switchPad, 1);
+
+        std::array<bool, 16> down{};
+        down[static_cast<size_t>(aoe2::pad::HostButton::kCross)] = (keys & HidNpadButton_B) != 0;
+        down[static_cast<size_t>(aoe2::pad::HostButton::kCircle)] = (keys & HidNpadButton_A) != 0;
+        down[static_cast<size_t>(aoe2::pad::HostButton::kSquare)] = (keys & HidNpadButton_Y) != 0;
+        down[static_cast<size_t>(aoe2::pad::HostButton::kTriangle)] = (keys & HidNpadButton_X) != 0;
+        down[static_cast<size_t>(aoe2::pad::HostButton::kL1)] = (keys & HidNpadButton_L) != 0;
+        down[static_cast<size_t>(aoe2::pad::HostButton::kR1)] = (keys & HidNpadButton_R) != 0;
+        down[static_cast<size_t>(aoe2::pad::HostButton::kL2)] = (keys & HidNpadButton_ZL) != 0;
+        down[static_cast<size_t>(aoe2::pad::HostButton::kR2)] = (keys & HidNpadButton_ZR) != 0;
+        down[static_cast<size_t>(aoe2::pad::HostButton::kSelect)] = (keys & HidNpadButton_Minus) != 0;
+        down[static_cast<size_t>(aoe2::pad::HostButton::kStart)] = (keys & HidNpadButton_Plus) != 0;
+        down[static_cast<size_t>(aoe2::pad::HostButton::kL3)] = (keys & HidNpadButton_StickL) != 0;
+        down[static_cast<size_t>(aoe2::pad::HostButton::kR3)] = (keys & HidNpadButton_StickR) != 0;
+        down[static_cast<size_t>(aoe2::pad::HostButton::kUp)] = (keys & HidNpadButton_Up) != 0;
+        down[static_cast<size_t>(aoe2::pad::HostButton::kDown)] = (keys & HidNpadButton_Down) != 0;
+        down[static_cast<size_t>(aoe2::pad::HostButton::kLeft)] = (keys & HidNpadButton_Left) != 0;
+        down[static_cast<size_t>(aoe2::pad::HostButton::kRight)] = (keys & HidNpadButton_Right) != 0;
+
+        float rx = static_cast<float>(rstick.x) / 32767.0f;
+        float ry = -static_cast<float>(rstick.y) / 32767.0f;
+        float lx = static_cast<float>(lstick.x) / 32767.0f;
+        float ly = -static_cast<float>(lstick.y) / 32767.0f;
+        return {true, aoe2::pad::ToPadButtons(down), rx, ry, lx, ly};
+#else
         if (!IsGamepadAvailable(0)) return SampleKeyboard();
         ReapplyVibration();
         std::array<bool, 16> down{};
@@ -66,6 +107,7 @@ public:
                 GetGamepadAxisMovement(0, GAMEPAD_AXIS_RIGHT_Y),
                 GetGamepadAxisMovement(0, GAMEPAD_AXIS_LEFT_X),
                 GetGamepadAxisMovement(0, GAMEPAD_AXIS_LEFT_Y)};
+#endif
     }
 
     void Rumble(int port, uint8_t small_motor, uint8_t large_motor) override {

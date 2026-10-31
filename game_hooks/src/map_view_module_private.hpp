@@ -79,6 +79,8 @@ std::optional<Snapshot> CaptureNative(PS2Runtime&);
 bool PublishComposedLayout(PS2Runtime&, const Snapshot*);
 std::optional<renderer::MapViewLayout> ActiveLayout(PS2Runtime&);
 std::optional<renderer::MapViewLayout> ActiveLayout();
+bool IsNativeMode(PS2Runtime&);
+bool IsMapActive(PS2Runtime&);
 
 }  // namespace aoe2::game_hooks::map_view
 
