@@ -14,9 +14,6 @@ MapViewSession::MapViewSession(PS2Runtime& runtime) {
     map_view::Install(runtime);
     runtime_ = &runtime;
     runtime.setFrameCompositor([&runtime](PS2PresentationFrameView legacy) -> std::optional<PS2OwnedPresentationFrame> {
-#if defined(__SWITCH__)
-        svcOutputDebugString("[aoe2-switch] MapViewSession compositor callback ENTER\n", 53);
-#endif
         auto snap = map_view::CaptureNative(runtime);
         if (!snap || snap->indices.empty() || snap->layout.output.width == 0) {
             map_view::PublishComposedLayout(runtime, nullptr);

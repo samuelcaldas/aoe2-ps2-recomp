@@ -10,6 +10,10 @@
 #include "raylib.h"
 #include "runtime/ps2_memory.h"
 
+#if defined(__SWITCH__)
+#include <switch.h>
+#endif
+
 #include <cstring>
 #include <mutex>
 
@@ -59,25 +63,47 @@ void ReturnToCaller(R5900Context* ctx, uint32_t value) {
 
 namespace aoe2::game_hooks::detail {
 void SampleHostKeyboard() {
-    g_keyboard_model.SetConnected(true);
-    std::bitset<256> current;
-    if (aoe2::game_hooks::synthetic::Enabled()) {
-        using aoe2::game_hooks::synthetic::LogicalSteps;
-        using aoe2::game_hooks::synthetic::Module;
-        current = aoe2::game_hooks::synthetic::KeyboardState(LogicalSteps(Module::kKeyboard).load());
-    } else {
-        // The guest reads Escape (a Back/Cancel hotkey), so it must not also close the host window.
-        SetExitKey(KEY_NULL);
-        for (const auto& [host_key, usage] : kHostKeyboardUsages) {
-            current.set(usage, IsKeyDown(static_cast<KeyboardKey>(host_key)));
+    try {
+        g_keyboard_model.SetConnected(true);
+        std::bitset<256> current;
+        if (aoe2::game_hooks::synthetic::Enabled()) {
+            using aoe2::game_hooks::synthetic::LogicalSteps;
+            using aoe2::game_hooks::synthetic::Module;
+            current = aoe2::game_hooks::synthetic::KeyboardState(LogicalSteps(Module::kKeyboard).load());
+#if defined(__SWITCH__)
+        } else {
+            static bool s_hid_keyboard_init = false;
+            if (!s_hid_keyboard_init) {
+                hidInitializeKeyboard();
+                s_hid_keyboard_init = true;
+            }
+            HidKeyboardState kbd_states[1];
+            if (hidGetKeyboardStates(kbd_states, 1) > 0) {
+                for (const auto& [host_key, usage] : kHostKeyboardUsages) {
+                    current.set(usage, hidKeyboardStateGetKey(&kbd_states[0], static_cast<HidKeyboardKey>(usage)));
+                }
+            }
         }
+#else
+        } else {
+            // The guest reads Escape (a Back/Cancel hotkey), so it must not also close the host window.
+            SetExitKey(KEY_NULL);
+            for (const auto& [host_key, usage] : kHostKeyboardUsages) {
+                current.set(usage, IsKeyDown(static_cast<KeyboardKey>(host_key)));
+            }
+        }
+#endif
+        for (const auto& event : aoe2::input::DiffPressedKeys(g_previous_host_keys, current)) {
+            std::cerr << "[host-keyboard] key change usage=0x" << std::hex << int(event.usage) << std::dec << " pressed=" << event.pressed << std::endl;
+            g_keyboard_adapter.Submit(event);
+            g_keyboard_model.SubmitReport(g_keyboard_adapter.NextFrame());
+        }
+        g_previous_host_keys = current;
+    } catch (const std::exception& e) {
+        std::cerr << "[host-keyboard] exception: " << e.what() << std::endl;
+    } catch (...) {
+        std::cerr << "[host-keyboard] unknown exception" << std::endl;
     }
-    for (const auto& event : aoe2::input::DiffPressedKeys(g_previous_host_keys, current)) {
-        std::cerr << "[host-keyboard] key change usage=0x" << std::hex << int(event.usage) << std::dec << " pressed=" << event.pressed << std::endl;
-        g_keyboard_adapter.Submit(event);
-        g_keyboard_model.SubmitReport(g_keyboard_adapter.NextFrame());
-    }
-    g_previous_host_keys = current;
 }
 }  // namespace aoe2::game_hooks::detail
 

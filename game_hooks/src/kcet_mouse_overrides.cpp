@@ -91,6 +91,18 @@ void LogPointer(Vector2 window, aoe2::input::GuestPoint target, int32_t cursor_x
               << " cursor=" << cursor_x << "," << cursor_y << std::endl;
 }
 
+// Window dimensions: on Switch or fallback, return valid non-zero dimensions
+Vector2 WindowDimensions() {
+#if defined(__SWITCH__)
+    return {1280.0f, 720.0f};
+#else
+    const float w = static_cast<float>(GetScreenWidth());
+    const float h = static_cast<float>(GetScreenHeight());
+    if (w > 0.0f && h > 0.0f) return {w, h};
+    return {1920.0f, 1080.0f};
+#endif
+}
+
 // The game's 640x448 screen fills whatever frame the runtime draws (640x512 once PAL display is set).
 aoe2::input::PresentationTransform CurrentPresentation() {
     uint32_t width = 0;
@@ -99,113 +111,127 @@ aoe2::input::PresentationTransform CurrentPresentation() {
     const aoe2::input::Extent frame = width != 0 && height != 0
         ? aoe2::input::Extent{static_cast<float>(width), static_cast<float>(height)}
         : aoe2::input::Extent{kGuestScreenWidth, kGuestScreenHeight};
+    const Vector2 win = WindowDimensions();
     return aoe2::input::PresentationTransform::LogicalFillsFrame(
-        {static_cast<float>(GetScreenWidth()), static_cast<float>(GetScreenHeight())}, frame,
+        {win.x, win.y}, frame,
         {kGuestScreenWidth, kGuestScreenHeight});
 }
 
 // Absolute pointing: the host pointer's place in the window is where the game's cursor should be.
 void SteerGuestCursor(uint8_t* rdram, Vector2 position, uint32_t buttons) {
-    const PS2Runtime* runtime = g_presentation_runtime.load(std::memory_order_acquire);
-    auto active_layout = runtime ? aoe2::game_hooks::ActiveMapViewLayout(const_cast<PS2Runtime&>(*runtime))
-                                 : aoe2::game_hooks::ActiveMapViewLayout();
-    static std::optional<aoe2::input::MapInputRouter> router;
-    static float last_layout_w = 0;
-    static float last_layout_h = 0;
-    if (active_layout) {
-        if (!router || last_layout_w != active_layout->output.width || last_layout_h != active_layout->output.height) {
-            router.emplace(*active_layout);
-            router->ResetMouse(buttons);
-            last_layout_w = active_layout->output.width;
-            last_layout_h = active_layout->output.height;
-        }
-        const aoe2::input::Extent win_extent{static_cast<float>(GetScreenWidth()), static_cast<float>(GetScreenHeight())};
-        auto routed = router->RouteMouse(position.x, position.y, win_extent, buttons);
-        if (routed.point) {
-            const int32_t cursor_x = LoadGuestInt(rdram, kGuestCursorX);
-            const int32_t cursor_y = LoadGuestInt(rdram, kGuestCursorY);
-            aoe2::input::GuestPoint target{0.0f, 0.0f};
-            if (routed.point->region == aoe2::input::MapInputRegion::Map) {
-                target.x = routed.point->coordinates.x;
-                target.y = active_layout->map.y + routed.point->coordinates.y;
-            } else {
-                target = routed.point->coordinates;
+    try {
+        const PS2Runtime* runtime = g_presentation_runtime.load(std::memory_order_acquire);
+        auto active_layout = runtime ? aoe2::game_hooks::ActiveMapViewLayout(const_cast<PS2Runtime&>(*runtime))
+                                     : aoe2::game_hooks::ActiveMapViewLayout();
+        static std::optional<aoe2::input::MapInputRouter> router;
+        static float last_layout_w = 0;
+        static float last_layout_h = 0;
+        const Vector2 win = WindowDimensions();
+        if (active_layout) {
+            if (!router || last_layout_w != active_layout->output.width || last_layout_h != active_layout->output.height) {
+                router.emplace(*active_layout);
+                router->ResetMouse(buttons);
+                last_layout_w = active_layout->output.width;
+                last_layout_h = active_layout->output.height;
             }
-            LogPointer(position, target, cursor_x, cursor_y);
-            g_mouse_model.SteerTo(target.x - static_cast<float>(cursor_x),
-                                 target.y - static_cast<float>(cursor_y), routed.buttons);
+            const aoe2::input::Extent win_extent{win.x, win.y};
+            auto routed = router->RouteMouse(position.x, position.y, win_extent, buttons);
+            if (routed.point) {
+                const int32_t cursor_x = LoadGuestInt(rdram, kGuestCursorX);
+                const int32_t cursor_y = LoadGuestInt(rdram, kGuestCursorY);
+                aoe2::input::GuestPoint target{0.0f, 0.0f};
+                if (routed.point->region == aoe2::input::MapInputRegion::Map) {
+                    target.x = routed.point->coordinates.x;
+                    target.y = active_layout->map.y + routed.point->coordinates.y;
+                } else {
+                    target = routed.point->coordinates;
+                }
+                LogPointer(position, target, cursor_x, cursor_y);
+                g_mouse_model.SteerTo(target.x - static_cast<float>(cursor_x),
+                                     target.y - static_cast<float>(cursor_y), routed.buttons);
+                return;
+            }
+            g_mouse_model.SteerTo(0, 0, 0);
             return;
         }
-        g_mouse_model.SteerTo(0, 0, 0);
-        return;
-    }
-    router.reset();
+        router.reset();
 
-    const auto target = CurrentPresentation().ToLogical(position.x, position.y);
-    const int32_t cursor_x = LoadGuestInt(rdram, kGuestCursorX);
-    const int32_t cursor_y = LoadGuestInt(rdram, kGuestCursorY);
-    LogPointer(position, target, cursor_x, cursor_y);
-    g_mouse_model.SteerTo(target.x - static_cast<float>(cursor_x), target.y - static_cast<float>(cursor_y), buttons);
+        const auto target = CurrentPresentation().ToLogical(position.x, position.y);
+        const int32_t cursor_x = LoadGuestInt(rdram, kGuestCursorX);
+        const int32_t cursor_y = LoadGuestInt(rdram, kGuestCursorY);
+        LogPointer(position, target, cursor_x, cursor_y);
+        g_mouse_model.SteerTo(target.x - static_cast<float>(cursor_x), target.y - static_cast<float>(cursor_y), buttons);
+    } catch (const std::exception& e) {
+        std::cerr << "[host-mouse] exception in SteerGuestCursor: " << e.what() << std::endl;
+    } catch (...) {
+        std::cerr << "[host-mouse] unknown exception in SteerGuestCursor" << std::endl;
+    }
 }
 }  // namespace
 
 namespace aoe2::game_hooks::detail {
 void SampleHostMouse(uint8_t* rdram) {
-    if (aoe2::game_hooks::synthetic::Enabled()) return SampleSyntheticMouse();
+    try {
+        if (aoe2::game_hooks::synthetic::Enabled()) return SampleSyntheticMouse();
 #if defined(__SWITCH__)
-    static bool s_hid_mouse_init = false;
-    if (!s_hid_mouse_init) {
-        hidInitializeMouse();
-        hidInitializeTouchScreen();
-        s_hid_mouse_init = true;
-    }
-    HidMouseState mouse_states[1];
-    size_t mouse_count = hidGetMouseStates(mouse_states, 1);
-
-    HidTouchScreenState touch_states[1];
-    size_t touch_count = hidGetTouchScreenStates(touch_states, 1);
-
-    Vector2 position{0.0f, 0.0f};
-    uint32_t buttons = 0;
-    bool has_input = false;
-
-    if (touch_count > 0 && touch_states[0].count > 0) {
-        position.x = static_cast<float>(touch_states[0].touches[0].x);
-        position.y = static_cast<float>(touch_states[0].touches[0].y);
-        buttons |= aoe2::input::kMouseButtonLeft;
-        has_input = true;
-    } else if (mouse_count > 0) {
-        position.x = static_cast<float>(mouse_states[0].x);
-        position.y = static_cast<float>(mouse_states[0].y);
-        if (mouse_states[0].buttons & HidMouseButton_Left) buttons |= aoe2::input::kMouseButtonLeft;
-        if (mouse_states[0].buttons & HidMouseButton_Right) buttons |= aoe2::input::kMouseButtonRight;
-        if (mouse_states[0].buttons & HidMouseButton_Middle) buttons |= aoe2::input::kMouseButtonMiddle;
-        if (mouse_states[0].delta_x != 0 || mouse_states[0].delta_y != 0 || buttons != 0) {
-            has_input = true;
+        static bool s_hid_mouse_init = false;
+        if (!s_hid_mouse_init) {
+            hidInitializeMouse();
+            hidInitializeTouchScreen();
+            s_hid_mouse_init = true;
         }
-    }
+        HidMouseState mouse_states[1];
+        size_t mouse_count = hidGetMouseStates(mouse_states, 1);
 
-    if (!has_input && !g_has_last_position) return;
-    if (!has_input) position = g_last_position;
+        HidTouchScreenState touch_states[1];
+        size_t touch_count = hidGetTouchScreenStates(touch_states, 1);
 
-    g_mouse_model.SetConnected(true);
-    LogButtonChange(buttons);
-    if (rdram != nullptr) return SteerGuestCursor(rdram, position, buttons);
-    const Vector2 last = g_has_last_position ? g_last_position : position;
-    g_last_position = position;
-    g_has_last_position = true;
-    g_mouse_model.Submit(HostMouseReport{position.x - last.x, position.y - last.y, buttons, 0, 0.0f});
+        Vector2 position{0.0f, 0.0f};
+        uint32_t buttons = 0;
+        bool has_input = false;
+
+        if (touch_count > 0 && touch_states[0].count > 0) {
+            position.x = static_cast<float>(touch_states[0].touches[0].x);
+            position.y = static_cast<float>(touch_states[0].touches[0].y);
+            buttons |= aoe2::input::kMouseButtonLeft;
+            has_input = true;
+        } else if (mouse_count > 0) {
+            position.x = static_cast<float>(mouse_states[0].x);
+            position.y = static_cast<float>(mouse_states[0].y);
+            if (mouse_states[0].buttons & HidMouseButton_Left) buttons |= aoe2::input::kMouseButtonLeft;
+            if (mouse_states[0].buttons & HidMouseButton_Right) buttons |= aoe2::input::kMouseButtonRight;
+            if (mouse_states[0].buttons & HidMouseButton_Middle) buttons |= aoe2::input::kMouseButtonMiddle;
+            if (mouse_states[0].delta_x != 0 || mouse_states[0].delta_y != 0 || buttons != 0) {
+                has_input = true;
+            }
+        }
+
+        if (!has_input && !g_has_last_position) return;
+        if (!has_input) position = g_last_position;
+
+        g_mouse_model.SetConnected(true);
+        LogButtonChange(buttons);
+        const Vector2 last = g_has_last_position ? g_last_position : position;
+        g_last_position = position;
+        g_has_last_position = true;
+        if (rdram != nullptr) return SteerGuestCursor(rdram, position, buttons);
+        g_mouse_model.Submit(HostMouseReport{position.x - last.x, position.y - last.y, buttons, 0, 0.0f});
 #else
-    const Vector2 position = GetMousePosition();
-    const uint32_t buttons = HostButtons();
-    g_mouse_model.SetConnected(true);
-    LogButtonChange(buttons);
-    if (rdram != nullptr && IsCursorOnScreen()) return SteerGuestCursor(rdram, position, buttons);
-    const Vector2 last = g_has_last_position ? g_last_position : position;
-    g_last_position = position;
-    g_has_last_position = true;
-    g_mouse_model.Submit(HostMouseReport{position.x - last.x, position.y - last.y, buttons, 0, GetMouseWheelMove()});
+        const Vector2 position = GetMousePosition();
+        const uint32_t buttons = HostButtons();
+        g_mouse_model.SetConnected(true);
+        LogButtonChange(buttons);
+        const Vector2 last = g_has_last_position ? g_last_position : position;
+        g_last_position = position;
+        g_has_last_position = true;
+        if (rdram != nullptr && IsCursorOnScreen()) return SteerGuestCursor(rdram, position, buttons);
+        g_mouse_model.Submit(HostMouseReport{position.x - last.x, position.y - last.y, buttons, 0, GetMouseWheelMove()});
 #endif
+    } catch (const std::exception& e) {
+        std::cerr << "[host-mouse] exception in SampleHostMouse: " << e.what() << std::endl;
+    } catch (...) {
+        std::cerr << "[host-mouse] unknown exception in SampleHostMouse" << std::endl;
+    }
 }
 }  // namespace aoe2::game_hooks::detail
 
