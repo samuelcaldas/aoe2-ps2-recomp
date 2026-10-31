@@ -161,20 +161,43 @@ def follow_guest_event(
                     time.sleep(min(1.0, max(0.0, deadline - now)))
 
 
-def do_step(window: str, action: str, argument, settle: float, display: str) -> None:
-    """Execute a single scenario action on the window."""
+def is_screen_loading(display: str) -> bool:
+    """Check if the screen is currently black (< 2KB PNG) or absent."""
+    tmp_path = Path("/tmp/screen_check.png")
+    if capture_screenshot(tmp_path, display):
+        return tmp_path.stat().st_size < 2000
+    return True
+
+
+def wait_for_screen_ready(display: str, timeout: float = 90.0, settle_after: float = 2.0) -> bool:
+    """Wait until screen is rendered (not black), then allow settle_after for UI stabilization."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not is_screen_loading(display):
+            if settle_after > 0:
+                time.sleep(settle_after)
+            return True
+        time.sleep(1.0)
+    return False
+
+
+def do_step(display: str, action: str, argument, settle: float) -> None:
+    """Execute a single scenario action on the display / focused window."""
     env = {**os.environ, "DISPLAY": display}
+    win = find_window(display, timeout=5.0)
+    if win:
+        subprocess.run(["xdotool", "windowfocus", win], env=env)
     if action == "key":
-        subprocess.run(["xdotool", "keydown", "--window", window, str(argument)], env=env)
+        subprocess.run(["xdotool", "keydown", str(argument)], env=env)
         time.sleep(0.3)
-        subprocess.run(["xdotool", "keyup", "--window", window, str(argument)], env=env)
+        subprocess.run(["xdotool", "keyup", str(argument)], env=env)
     elif action == "click" and isinstance(argument, (tuple, list)):
         wx, wy = argument
-        subprocess.run(["xdotool", "mousemove", "--window", window, str(int(wx)), str(int(wy))], env=env)
+        subprocess.run(["xdotool", "mousemove", str(int(wx)), str(int(wy))], env=env)
         time.sleep(1.2)
-        subprocess.run(["xdotool", "mousedown", "--window", window, "1"], env=env)
+        subprocess.run(["xdotool", "mousedown", "1"], env=env)
         time.sleep(0.8)
-        subprocess.run(["xdotool", "mouseup", "--window", window, "1"], env=env)
+        subprocess.run(["xdotool", "mouseup", "1"], env=env)
     elif action == "wait":
         pass
     time.sleep(settle)
@@ -186,7 +209,8 @@ def drive_scenario(
     evidence_dir: Path,
     screenshots_dir: Path,
     display: str = DISPLAY_DEFAULT,
-    run_seconds: float = 300.0,
+    run_seconds: float = 600.0,
+    speed_factor: float = 2.5,
 ) -> dict:
     """Drive the given scenario, saving mode-tagged screenshots."""
     log_path = evidence_dir / "run.log"
@@ -199,7 +223,7 @@ def drive_scenario(
         "success": False,
     }
 
-    win = find_window(display, timeout=30.0)
+    win = find_window(display, timeout=45.0)
     if not win:
         sys.stderr.write(f"ERROR: Ryujinx window not found on {display}\n")
         return results
@@ -208,8 +232,9 @@ def drive_scenario(
     print(f"[{mode}] Focused Ryujinx window {win} on {display}", flush=True)
     win_w, win_h = WINDOW_SIZE
 
-    # Initial delay for guest startup
-    time.sleep(12.0)
+    # Wait for the initial screen to finish loading before first input
+    print(f"[{mode}] Waiting for initial guest screen to load...", flush=True)
+    wait_for_screen_ready(display, timeout=60.0, settle_after=5.0)
     boot_shot = screenshots_dir / f"switch-{mode}-boot.png"
     capture_screenshot(boot_shot, display)
     print(f"[{mode}] Captured {boot_shot.name}", flush=True)
@@ -220,7 +245,15 @@ def drive_scenario(
             wx, wy = to_window(argument, (win_w, win_h))
             scaled_arg = (int(wx), int(wy))
 
-        print(f"[{mode}] Step {name}: {action} {scaled_arg} (settle={settle}s)", flush=True)
+        # Scale settle times for emulator clock (~2.5x slower than desktop PC)
+        effective_settle = (settle * speed_factor) if settle else 0.0
+        print(f"[{mode}] Step {name}: {action} {scaled_arg} (effective_settle={effective_settle:.1f}s)", flush=True)
+
+        # Before clicks or keys, ensure the screen is ready and not black
+        if action in ("click", "key"):
+            if is_screen_loading(display):
+                print(f"[{mode}] Screen is loading; waiting for screen ready before {name}...", flush=True)
+                wait_for_screen_ready(display, timeout=90.0, settle_after=3.0)
 
         if action == "story-until":
             story_clicks = 0
@@ -228,23 +261,23 @@ def drive_scenario(
             def advance_story():
                 nonlocal story_clicks
                 story_clicks += 1
-                do_step(win, "click", scaled_arg, settle, display)
+                do_step(display, "click", scaled_arg, effective_settle)
                 shot = screenshots_dir / f"switch-{mode}-story-{story_clicks}.png"
                 capture_screenshot(shot, display)
                 print(f"[{mode}] Captured {shot.name}", flush=True)
 
             matched = follow_guest_event(
-                log_path, b"[game-tty] 4 e-txt", timeout=180.0, on_wait=advance_story
+                log_path, b"4 e-txt", timeout=300.0, on_wait=advance_story
             )
             if not matched:
-                sys.stderr.write(f"WARNING: [game-tty] 4 e-txt not reached before timeout\n")
+                sys.stderr.write(f"WARNING: 4 e-txt not reached before timeout\n")
         elif action == "map-until":
             map_clicks = 0
 
             def advance_map():
                 nonlocal map_clicks
                 map_clicks += 1
-                do_step(win, "click", scaled_arg, 12.0, display)
+                do_step(display, "click", scaled_arg, 12.0 * speed_factor)
                 shot = screenshots_dir / f"switch-{mode}-map-wait-{map_clicks}.png"
                 capture_screenshot(shot, display)
                 print(f"[{mode}] Captured {shot.name}", flush=True)
@@ -257,7 +290,13 @@ def drive_scenario(
             else:
                 sys.stderr.write(f"WARNING: [map-submit] not reached before timeout\n")
         else:
-            do_step(win, action, scaled_arg, settle, display)
+            do_step(display, action, scaled_arg, effective_settle)
+
+        # After navigation clicks that trigger transitions, wait for the destination screen to finish loading
+        if action == "click" and name in ("card-ok", "profile-confirm", "single-player", "campaigns", "wallace-marker", "scenario-1"):
+            print(f"[{mode}] Waiting for screen transition after {name}...", flush=True)
+            time.sleep(3.0)
+            wait_for_screen_ready(display, timeout=90.0, settle_after=3.0)
 
         step_shot = screenshots_dir / f"switch-{mode}-{name}.png"
         capture_screenshot(step_shot, display)
@@ -275,7 +314,8 @@ def main() -> int:
     parser.add_argument("--display", default=DISPLAY_DEFAULT, help="X11 display")
     parser.add_argument("--evidence", type=Path, default=REPO_ROOT / "build/switch-validation", help="evidence dir")
     parser.add_argument("--screenshots", type=Path, default=REPO_ROOT / ".playwright-mcp/switch", help="shots dir")
-    parser.add_argument("--run-seconds", type=float, default=300.0, help="timeout budget")
+    parser.add_argument("--run-seconds", type=float, default=600.0, help="timeout budget")
+    parser.add_argument("--speed-factor", type=float, default=2.5, help="settle sleep multiplier for emulator clock (default: 2.5)")
     args = parser.parse_args()
 
     results = drive_scenario(
@@ -285,6 +325,7 @@ def main() -> int:
         screenshots_dir=args.screenshots,
         display=args.display,
         run_seconds=args.run_seconds,
+        speed_factor=args.speed_factor,
     )
 
     summary_file = args.evidence / f"scenario-{args.mode}.json"
