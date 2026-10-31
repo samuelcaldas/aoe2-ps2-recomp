@@ -211,21 +211,12 @@ def send_pad_button(display: str, btn: str, duration: float = 0.25) -> None:
 
 def is_memory_card_busy(display: str) -> bool:
     """Check if memory card is still displaying '---KB' (busy dashes)."""
-    tmp_path = Path("/tmp/mc_check.png")
-    if not capture_screenshot(tmp_path, display):
+    txt = get_screen_text(display)
+    if "---kb" in txt:
         return True
-    try:
-        from PIL import Image
-
-        with Image.open(tmp_path) as im:
-            bright_pts = sum(
-                1
-                for x in range(775, 815)
-                if im.getpixel((x, 123))[0] > 180 and im.getpixel((x, 123))[1] > 140
-            )
-            return bright_pts >= 25
-    except Exception:
+    if "space left" in txt:
         return False
+    return False
 
 
 def wait_for_card_ready(display: str, timeout: float = 60.0, settle_after: float = 3.0) -> bool:
@@ -277,7 +268,6 @@ def follow_guest_event(
 
 def do_step(display: str, action: str, argument, settle: float, step_name: str = "") -> None:
     """Execute a scenario action via native controller buttons / arrows."""
-    # Step-name aware navigation using controller pad:
     if step_name in ("key-return-1", "key-return-2", "osk-letter-a"):
         send_pad_button(display, "cross", 0.3)
     elif step_name in ("osk-enter", "profile-name-enter"):
@@ -288,19 +278,59 @@ def do_step(display: str, action: str, argument, settle: float, step_name: str =
     elif step_name in ("profile-new-player", "profile-name-field", "profile-name-a", "profile-name-o", "profile-name-k"):
         send_pad_button(display, "cross", 0.3)
     elif step_name in ("profile-submit", "profile-confirm"):
+        # On New Player dialog, move down from Name field to buttons, then left to OK button, then Cross
+        for _ in range(3):
+            txt = get_screen_text(display)
+            if "new player" not in txt:
+                break
+            send_pad_button(display, "down", 0.3)
+            time.sleep(0.4)
+            send_pad_button(display, "left", 0.3)
+            time.sleep(0.4)
+            send_pad_button(display, "cross", 0.3)
+            time.sleep(1.5)
+        # Confirm save prompt (Yes is default/left)
         send_pad_button(display, "cross", 0.3)
-    elif step_name == "single-player":
+        time.sleep(2.0)
+        # Select player from list to load into main menu
         txt = get_screen_text(display)
-        if not ("campaign" in txt or "random map" in txt):
+        if "select player" in txt:
+            send_pad_button(display, "cross", 0.3)
+    elif step_name == "profile-settle":
+        # Make sure we reach the main menu
+        for _ in range(6):
+            txt = get_screen_text(display)
+            if "single player" in txt or "multiplayer" in txt:
+                print(f"[{display}] Main Menu reached!", flush=True)
+                break
+            if "new player" in txt:
+                send_pad_button(display, "down", 0.3)
+                time.sleep(0.4)
+                send_pad_button(display, "left", 0.3)
+                time.sleep(0.4)
+                send_pad_button(display, "cross", 0.3)
+            elif "select player" in txt:
+                send_pad_button(display, "cross", 0.3)
+            else:
+                send_pad_button(display, "cross", 0.3)
+            time.sleep(2.0)
+    elif step_name == "single-player":
+        for _ in range(3):
+            txt = get_screen_text(display)
+            if "campaign" in txt or "random map" in txt:
+                print(f"[native] Single Player submenu open!", flush=True)
+                break
             send_pad_button(display, "cross", 0.3)
             time.sleep(2.0)
             txt = get_screen_text(display)
-            if not ("campaign" in txt or "random map" in txt):
-                send_pad_button(display, "circle", 0.3)
-                time.sleep(1.0)
-                send_pad_button(display, "down", 0.3)
-                time.sleep(1.0)
-                send_pad_button(display, "cross", 0.3)
+            if "campaign" in txt or "random map" in txt:
+                break
+            send_pad_button(display, "circle", 0.3)
+            time.sleep(0.5)
+            send_pad_button(display, "down", 0.3)
+            time.sleep(0.5)
+            send_pad_button(display, "cross", 0.3)
+            time.sleep(2.0)
     elif step_name in ("campaigns", "wallace-marker", "scenario-1"):
         send_pad_button(display, "cross", 0.3)
     elif step_name in ("briefing", "briefing-next", "mission-loading", "brief-3", "brief-4", "brief-5", "mission", "mission-start"):
@@ -312,7 +342,6 @@ def do_step(display: str, action: str, argument, settle: float, step_name: str =
     elif action == "key":
         send_pad_button(display, str(argument), 0.3)
     elif action == "click":
-        # Fallback for clicks: send Cross button
         send_pad_button(display, "cross", 0.3)
     elif action == "wait":
         pass
