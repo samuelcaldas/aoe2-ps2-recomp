@@ -30,5 +30,8 @@ public:
 
     /// Compose immutable effective-RGBA palette pixels and complete legacy HUD bands; returns nullopt on validation failure without throwing.
     static std::optional<ComposedMapFrame> TryCompose(RgbaFrameView legacy, const MapFrameSnapshot& snapshot) noexcept;
+
+    /// Map-only native frame. Unimplemented HUD and menu regions remain black.
+    static std::optional<ComposedMapFrame> TryComposeNativeMap(const MapFrameSnapshot& snapshot) noexcept;
 };
 }
