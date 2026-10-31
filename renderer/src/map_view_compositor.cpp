@@ -169,6 +169,15 @@ std::optional<ComposedMapFrame> MapViewCompositor::TryCompose(RgbaFrameView lega
     PaintHud(*pixels, legacy, snapshot.layout);
     return ComposedMapFrame{std::move(pixels), width, height, width * 4};
 }
+std::optional<ComposedMapFrame> MapViewCompositor::TryComposeNativeMap(const MapFrameSnapshot& snapshot) noexcept {
+    if (!ValidateMapNoThrow(snapshot)) return std::nullopt;
+    const auto width = static_cast<uint32_t>(snapshot.layout.output.width);
+    const auto height = static_cast<uint32_t>(snapshot.layout.output.height);
+    auto pixels = std::make_shared<std::vector<uint8_t>>(uint64_t{width} * height * 4);
+    for (size_t i = 3; i < pixels->size(); i += 4) (*pixels)[i] = 255;
+    PaintMap(*pixels, snapshot);
+    return ComposedMapFrame{std::move(pixels), width, height, width * 4};
+}
 ComposedMapFrame MapViewCompositor::Compose(RgbaFrameView legacy, const MapFrameSnapshot& snapshot) {
     auto result = TryCompose(legacy, snapshot);
     if (!result) {
