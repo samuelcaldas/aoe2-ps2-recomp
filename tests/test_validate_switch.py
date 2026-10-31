@@ -69,9 +69,9 @@ class TestSwitchValidationScript(unittest.TestCase):
 
     def test_verdict_passes_only_with_progress_and_changing_real_frames(self):
         with tempfile.TemporaryDirectory() as directory:
-            shots = [str(Path(directory) / f"screen-{index}.png") for index in (1, 2)]
+            shots = [str(Path(directory) / f"screen-native-{index}.png") for index in (1, 2)]
             magick = FakeImageMagick(
-                {"screen-1.png": histogram(REAL_COLORS), "screen-2.png": histogram(REAL_COLORS)},
+                {"screen-native-1.png": histogram(REAL_COLORS), "screen-native-2.png": histogram(REAL_COLORS)},
                 metric="5000",
             )
             self.assertTrue(validation.evidence_passed(True, PROGRESSING_LOG, shots, magick))
@@ -80,9 +80,9 @@ class TestSwitchValidationScript(unittest.TestCase):
 
     def test_fallback_screenshots_fail_even_when_the_process_is_alive(self):
         with tempfile.TemporaryDirectory() as directory:
-            shots = [str(Path(directory) / f"screen-{index}.png") for index in (1, 2)]
+            shots = [str(Path(directory) / f"screen-native-{index}.png") for index in (1, 2)]
             magick = FakeImageMagick(
-                {"screen-1.png": histogram(FALLBACK_COLORS), "screen-2.png": histogram(FALLBACK_COLORS)}
+                {"screen-native-1.png": histogram(FALLBACK_COLORS), "screen-native-2.png": histogram(FALLBACK_COLORS)}
             )
             self.assertFalse(validation.evidence_passed(True, PROGRESSING_LOG, shots, magick))
 
@@ -99,6 +99,65 @@ class TestSwitchValidationScript(unittest.TestCase):
             with patch.object(validation, "NRO_PATH", "tools/validate_switch.py"):
                 # Should not raise PreflightError when binary exists, even if keys are absent
                 validation.check_preflight(keys_path=fake_keys)
+
+    def test_emulator_script_mode_tagging_and_configuration(self):
+        script_native = validation.emulator_script(run_seconds=60, mode="native")
+        self.assertIn("mode=native", script_native)
+        self.assertIn("export AOE2_MAP_VIEW=native", script_native)
+        self.assertIn("screen-native-", script_native)
+        self.assertIn("tools/drive_switch_scenario.py --mode native", script_native)
+
+        script_gs = validation.emulator_script(run_seconds=60, mode="gs")
+        self.assertIn("mode=legacy", script_gs)
+        self.assertIn("export AOE2_MAP_VIEW=legacy", script_gs)
+        self.assertIn("screen-gs-", script_gs)
+        self.assertIn("tools/drive_switch_scenario.py --mode gs", script_gs)
+
+    def test_native_mode_fails_if_prohibited_gs_fallback_occurs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            shots = [str(Path(directory) / f"screen-native-{i}.png") for i in (1, 2)]
+            magick = FakeImageMagick(
+                {"screen-native-1.png": histogram(REAL_COLORS), "screen-native-2.png": histogram(REAL_COLORS)},
+                metric="5000",
+            )
+            failing_log = PROGRESSING_LOG + "Native map view snapshot failed; runtime fallback to GS is prohibited in native mode\n"
+            self.assertFalse(validation.evidence_passed(True, failing_log, shots, magick, mode="native"))
+
+    def test_campaign_rejects_false_positive_if_map_not_reached(self):
+        with tempfile.TemporaryDirectory() as directory:
+            shots = [str(Path(directory) / f"screen-native-{index}.png") for index in (1, 2)]
+            magick = FakeImageMagick(
+                {"screen-native-1.png": histogram(REAL_COLORS), "screen-native-2.png": histogram(REAL_COLORS)},
+                metric="5000",
+            )
+            # Progressing log without [map-submit] and screenshots without map in filename
+            self.assertFalse(validation.evidence_passed(
+                True, PROGRESSING_LOG, shots, magick, scenario="campaign-auto"
+            ))
+
+            # Progressing log WITH [map-submit] should pass
+            map_log = PROGRESSING_LOG + "[map-submit] call=1 area=0x1000\n"
+            self.assertTrue(validation.evidence_passed(
+                True, map_log, shots, magick, scenario="campaign-auto"
+            ))
+
+            # Prohibited GS fallback fails even if [map-submit] was reached
+            prohibited_fallback_log = map_log + "Native map view snapshot failed; runtime fallback to GS is prohibited in native mode\n"
+            self.assertFalse(validation.evidence_passed(
+                True, prohibited_fallback_log, shots, magick, mode="native", scenario="campaign-auto"
+            ))
+
+    def test_rejects_screenshots_without_mode_tagging(self):
+        with tempfile.TemporaryDirectory() as directory:
+            shots = [str(Path(directory) / f"screen-{index}.png") for index in (1, 2)]
+            magick = FakeImageMagick(
+                {"screen-1.png": histogram(REAL_COLORS), "screen-2.png": histogram(REAL_COLORS)},
+                metric="5000",
+            )
+            # screen-1.png does not contain -native-
+            self.assertFalse(validation.evidence_passed(True, PROGRESSING_LOG, shots, magick, mode="native"))
+            # screen-1.png does not contain -gs-
+            self.assertFalse(validation.evidence_passed(True, PROGRESSING_LOG, shots, magick, mode="gs"))
 
 
 if __name__ == "__main__":
