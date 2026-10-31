@@ -255,14 +255,6 @@ void Wrapper(uint8_t *ram, R5900Context *ctx, PS2Runtime *runtime) {
   }
   if constexpr (Slot == 12 || Slot == 13)
     HandleDrawListAddYHook(ctx, *state, Slot);
-  if constexpr (Slot == 15) {
-    const uint32_t panel = getRegU32(ctx, 4);
-    state->originals[Slot](ram, ctx, runtime);
-    if (state->lease && panel && panel == state->relocation.panel) {
-      RecordMapPanelSubmission(ram, *state);
-    }
-    return;
-  }
   state->originals[Slot](ram, ctx, runtime);
   // Return may mean yield or tail dispatch. No completion cleanup or register
   // restoration.
@@ -398,7 +390,7 @@ bool IsMapActive(PS2Runtime &runtime) {
   auto found = states.find(&runtime);
   if (found == states.end())
     return false;
-  return found->second->relocation.panel != 0 || found->second->submissions > 0;
+  return found->second->relocation.panel != 0;
 }
 } // namespace aoe2::game_hooks::map_view
 

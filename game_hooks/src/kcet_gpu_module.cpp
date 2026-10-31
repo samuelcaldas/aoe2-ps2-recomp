@@ -23,9 +23,12 @@ void InstallNativeGpu(PS2Runtime& runtime) {
     const bool native = native_input::ReadSwitches().Enabled("gpu");
     if (native) {
         gpu::Install(runtime);
-        // No verified semantic HUD replacement exists yet. Preserve the complete
-        // guest frame and its input geometry instead of covering live controls.
+#if defined(__SWITCH__)
+        std::cout << "[aoe2] presentation: native map-only; menus and HUD unavailable\n";
+#else
+        // No verified semantic HUD replacement exists yet on other targets.
         std::cout << "[aoe2] presentation: guest framebuffer fallback; native HD HUD unavailable\n";
+#endif
     }
     if (diagnostics::Enabled()) {
         diagnostics::gpu_snapshot_count = 0;

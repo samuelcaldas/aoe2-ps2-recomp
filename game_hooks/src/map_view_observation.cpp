@@ -128,7 +128,9 @@ void RedirectNativeViewport(uint8_t* ram, R5900Context* ctx,
         return;
 
     const uint32_t exp = Word(ram, r.area + 0x40);
-    if (!exp) return;
+    // Other indexed surfaces, including the minimap, use the same flags.
+    // They must never redirect or publish the tracked playfield viewport.
+    if (!exp || vp != exp) return;
     Bytes(ram, exp, 0x9c);
     const uint32_t previous_height = Word(ram, exp + 0x38);
     const uint32_t previous_width = Word(ram, exp + 0x3c);
@@ -156,8 +158,8 @@ bool ValidateViewport(uint8_t* ram, R5900Context* ctx, const Relocation& r) {
     Bytes(ram, a1, 0x9c);
     if (!((Word(ram, vp+0x98) & 0x800) && !(Word(ram, a1+0x98) & 0x200))) return false;
     const uint32_t exp = Word(ram, r.area+0x40);
+    if (!exp || vp != exp) return false;
     if (r.base) {
-        if (!exp) return false;
         Bytes(ram, exp, 0x9c);
         LogViewportCheck(vp, exp, Word(ram, exp+0x3c), Word(ram, exp+0x38), Word(ram, exp+0x54));
         return Word(ram, exp+0x54) == r.base + r.layout.visible_offset &&

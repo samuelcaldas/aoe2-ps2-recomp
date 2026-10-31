@@ -13,6 +13,25 @@ namespace aoe2::game_hooks {
 MapViewSession::MapViewSession(PS2Runtime& runtime) {
     map_view::Install(runtime);
     runtime_ = &runtime;
+#if defined(__SWITCH__)
+    std::clog << "[native-presentation] map-only: menus and HUD are not implemented\n";
+    runtime.setNativeFrameProvider([&runtime]() -> std::optional<PS2OwnedPresentationFrame> {
+        auto snap = map_view::CaptureNative(runtime);
+        if (!snap || snap->indices.empty()) {
+            map_view::PublishComposedLayout(runtime, nullptr);
+            return std::nullopt;
+        }
+        renderer::MapFrameSnapshot frame;
+        frame.width = snap->width; frame.height = snap->height; frame.pitch = snap->pitch;
+        frame.indices = snap->indices; frame.layout = snap->layout;
+        for (size_t i = 0; i < 256; ++i)
+            for (size_t c = 0; c < 4; ++c) frame.palette[i][c] = snap->palette[i * 4 + c];
+        auto composed = renderer::MapViewCompositor::TryComposeNativeMap(frame);
+        if (!composed || !map_view::PublishComposedLayout(runtime, &*snap))
+            throw std::runtime_error("native map frame composition failed");
+        return PS2OwnedPresentationFrame{composed->pixels, composed->width, composed->height, composed->strideBytes};
+    });
+#endif
     runtime.setFrameCompositor([&runtime](PS2PresentationFrameView legacy) -> std::optional<PS2OwnedPresentationFrame> {
         auto snap = map_view::CaptureNative(runtime);
         if (!snap || snap->indices.empty() || snap->layout.output.width == 0) {
@@ -67,6 +86,9 @@ MapViewSession::~MapViewSession() { Close(); }
 
 void MapViewSession::Close() {
     if (!runtime_) return;
+#if defined(__SWITCH__)
+    runtime_->setNativeFrameProvider(nullptr);
+#endif
     runtime_->setFrameCompositor(nullptr);
     map_view::Teardown(*runtime_);
     runtime_ = nullptr;
