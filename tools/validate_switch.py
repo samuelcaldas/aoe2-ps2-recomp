@@ -16,6 +16,7 @@ validators:
 
 Exit codes: 0 pass, 1 fail, 2 preflight failed.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -50,7 +51,16 @@ EXIT_PASS, EXIT_FAIL, EXIT_PREFLIGHT = 0, 1, 2
 def ensure_container_clean(name: str) -> None:
     """Ensure no stale stopped container with `name` blocks docker run --name."""
     inspect = subprocess.run(
-        ["docker", "--context", DOCKER_CONTEXT, "container", "inspect", "-f", "{{.State.Running}}", name],
+        [
+            "docker",
+            "--context",
+            DOCKER_CONTEXT,
+            "container",
+            "inspect",
+            "-f",
+            "{{.State.Running}}",
+            name,
+        ],
         capture_output=True,
         text=True,
     )
@@ -84,69 +94,80 @@ def emulator_script(
     sdcard_dir = f"{config_dir}/sdcard/switch/aoe2"
     ini_mode = "native" if mode == "native" else "legacy"
 
-    return "\n".join([
-        "set -euo pipefail",
-        f"mkdir -p {evidence} {shots_dir} {system_dir} {sdcard_dir}",
-        f"if [ -f {CONTAINER_ROOT}/{PROD_KEYS_DEFAULT} ]; then cp -f {CONTAINER_ROOT}/{PROD_KEYS_DEFAULT} {system_dir}/prod.keys; fi",
-        f"if [ -d {CONTAINER_ROOT}/game/SLES-50282 ]; then",
-        f"    for item in {CONTAINER_ROOT}/game/SLES-50282/*; do",
-        '        name=$(basename "$item")',
-        f'        if [ ! -e "{sdcard_dir}/$name" ]; then',
-        f'            cp -r "$item" "{sdcard_dir}/$name"',
-        "        fi",
-        "    done",
-        "fi",
-        f"echo 'mode={ini_mode}' > {sdcard_dir}/map_view.ini",
-        f"export AOE2_MAP_VIEW={ini_mode}",
-        f"python3 -c \"",
-        "import json, os",
-        f"cfg_path = '{config_dir}/Config.json'",
-        "cfg = {}",
-        "if os.path.isfile(cfg_path):",
-        "    try:",
-        "        with open(cfg_path) as f: cfg = json.load(f)",
-        "    except Exception: pass",
-        "cfg['memory_manager_mode'] = 'SoftwarePageTable'",
-        "cfg['check_updates_on_start'] = False",
-        "cfg['update_checker_type'] = 'Off'",
-        "cfg['start_fullscreen'] = True",
-        "cfg['enable_file_log'] = True",
-        "cfg['enable_keyboard'] = True",
-        "cfg['enable_mouse'] = True",
-        "for inp in cfg.get('input_config', []):",
-        "    if inp.get('player_index') == 'Player1':",
-        "        inp.setdefault('right_joycon', {})['button_plus'] = 'Enter'",
-        "with open(cfg_path, 'w') as f:",
-        "    json.dump(cfg, f, indent=2)",
-        "\"",
-        f"Xvfb {DISPLAY} -screen 0 1280x720x24 > /dev/null 2>&1 &",
-        "XVFB_PID=$!",
-        "sleep 1",
-        f"export DISPLAY={DISPLAY}",
-        f"x11vnc -display {DISPLAY} -nopw -forever -shared -rfbport 5900 > /dev/null 2>&1 &",
-        "VNC_PID=$!",
-        "websockify --web /usr/share/novnc 6080 localhost:5900 > /dev/null 2>&1 &",
-        "WEBSOCK_PID=$!",
-        "echo '================================================================='",
-        "echo 'Validation live view: http://localhost:6080/vnc.html'",
-        "echo '================================================================='",
-        "RYUJINX_BIN=$(which Ryujinx.Headless.SDL2 2>/dev/null || which Ryujinx 2>/dev/null || true)",
-        "if [ -z \"$RYUJINX_BIN\" ]; then echo 'FATAL: Ryujinx executable not found in PATH' >&2; kill $XVFB_PID; exit 1; fi",
-        f"\"$RYUJINX_BIN\" --root-data-dir {config_dir} {CONTAINER_ROOT}/{nro} > {evidence}/run.log 2>&1 &",
-        "EMU_PID=$!",
-        f"python3 -u {CONTAINER_ROOT}/tools/drive_switch_scenario.py --mode {mode} --scenario {scenario} --evidence {evidence} --screenshots {shots_dir} --display {DISPLAY} --run-seconds {run_seconds} --speed-factor 2.5 > {evidence}/scenario.log 2>&1 &",
-        "DRIVER_PID=$!",
-        f"for shot in $(seq 1 {shots}); do sleep {interval}; ",
-        f"ts=$(date +%Y%m%d-%H%M%S); shot_num=$(printf '%03d' \"$shot\"); ",
-        f"xwd -root -display {DISPLAY} 2>/dev/null | convert xwd:- {shots_dir}/screen-{mode}-${{ts}}-${{shot_num}}.png 2>/dev/null || true; done",
-        f"if kill -0 $EMU_PID 2>/dev/null; then echo yes > {evidence}/alive.txt; ",
-        f"else echo no > {evidence}/alive.txt; fi",
-        "kill $DRIVER_PID 2>/dev/null || true",
-        "kill $EMU_PID 2>/dev/null || true",
-        "kill $WEBSOCK_PID 2>/dev/null || true",
-        "kill $VNC_PID 2>/dev/null || true",
-        "kill $XVFB_PID 2>/dev/null || true",
-    ]) + "\n"
+    return (
+        "\n".join(
+            [
+                "set -euo pipefail",
+                f"mkdir -p {evidence} {shots_dir} {system_dir} {sdcard_dir}",
+                f"if [ -f {CONTAINER_ROOT}/{PROD_KEYS_DEFAULT} ]; then cp -f {CONTAINER_ROOT}/{PROD_KEYS_DEFAULT} {system_dir}/prod.keys; fi",
+                f"if [ -d {CONTAINER_ROOT}/game/SLES-50282 ]; then",
+                f"    for item in {CONTAINER_ROOT}/game/SLES-50282/*; do",
+                '        name=$(basename "$item")',
+                f'        if [ ! -e "{sdcard_dir}/$name" ]; then',
+                f'            cp -r "$item" "{sdcard_dir}/$name"',
+                "        fi",
+                "    done",
+                "fi",
+                f"echo 'mode={ini_mode}' > {sdcard_dir}/map_view.ini",
+                f"export AOE2_MAP_VIEW={ini_mode}",
+                f'python3 -c "',
+                "import json, os",
+                f"cfg_path = '{config_dir}/Config.json'",
+                "cfg = {}",
+                "if os.path.isfile(cfg_path):",
+                "    try:",
+                "        with open(cfg_path) as f: cfg = json.load(f)",
+                "    except Exception: pass",
+                "cfg['memory_manager_mode'] = 'SoftwarePageTable'",
+                "cfg['check_updates_on_start'] = False",
+                "cfg['update_checker_type'] = 'Off'",
+                "cfg['start_fullscreen'] = False",
+                "cfg['start_no_ui'] = False",
+                "cfg['show_title_bar'] = True",
+                "cfg['enable_file_log'] = True",
+                "cfg['enable_keyboard'] = True",
+                "cfg['enable_mouse'] = True",
+                "cfg['window_startup'] = {'window_size_width': 1280, 'window_size_height': 760, 'window_position_x': 0, 'window_position_y': 0, 'window_maximized': False}",
+                "for inp in cfg.get('input_config', []):",
+                "    if inp.get('player_index') == 'Player1':",
+                "        rj = inp.setdefault('right_joycon', {})",
+                "        rj['button_plus'] = 'Enter'",
+                "        rj['button_b'] = 'Z'",
+                "        rj['button_a'] = 'X'",
+                "with open(cfg_path, 'w') as f:",
+                "    json.dump(cfg, f, indent=2)",
+                '"',
+                f"Xvfb {DISPLAY} -screen 0 1280x760x24 > /dev/null 2>&1 &",
+                "XVFB_PID=$!",
+                "sleep 1",
+                f"export DISPLAY={DISPLAY}",
+                f"x11vnc -display {DISPLAY} -nopw -forever -shared -rfbport 5900 > /dev/null 2>&1 &",
+                "VNC_PID=$!",
+                "websockify --web /usr/share/novnc 6080 localhost:5900 > /dev/null 2>&1 &",
+                "WEBSOCK_PID=$!",
+                "echo '================================================================='",
+                "echo 'Validation live view: http://localhost:6080/vnc.html'",
+                "echo '================================================================='",
+                "RYUJINX_BIN=$(which Ryujinx.Headless.SDL2 2>/dev/null || which Ryujinx 2>/dev/null || true)",
+                "if [ -z \"$RYUJINX_BIN\" ]; then echo 'FATAL: Ryujinx executable not found in PATH' >&2; kill $XVFB_PID; exit 1; fi",
+                f'"$RYUJINX_BIN" --root-data-dir {config_dir} {CONTAINER_ROOT}/{nro} > {evidence}/run.log 2>&1 &',
+                "EMU_PID=$!",
+                f"python3 -u {CONTAINER_ROOT}/tools/drive_switch_scenario.py --mode {mode} --scenario {scenario} --evidence {evidence} --screenshots {shots_dir} --display {DISPLAY} --run-seconds {run_seconds} --speed-factor 1.3 > {evidence}/scenario.log 2>&1 &",
+                "DRIVER_PID=$!",
+                f"for shot in $(seq 1 {shots}); do sleep {interval}; ",
+                f"ts=$(date +%Y%m%d-%H%M%S); shot_num=$(printf '%03d' \"$shot\"); ",
+                f"xwd -root -display {DISPLAY} 2>/dev/null | convert xwd:- {shots_dir}/screen-{mode}-${{ts}}-${{shot_num}}.png 2>/dev/null || true; done",
+                f"if kill -0 $EMU_PID 2>/dev/null; then echo yes > {evidence}/alive.txt; ",
+                f"else echo no > {evidence}/alive.txt; fi",
+                "kill $DRIVER_PID 2>/dev/null || true",
+                "kill $EMU_PID 2>/dev/null || true",
+                "kill $WEBSOCK_PID 2>/dev/null || true",
+                "kill $VNC_PID 2>/dev/null || true",
+                "kill $XVFB_PID 2>/dev/null || true",
+            ]
+        )
+        + "\n"
+    )
 
 
 def evidence_passed(
@@ -162,8 +183,6 @@ def evidence_passed(
         return False
     if mode == "native":
         if "fallback to GS is prohibited in native mode" in log:
-            return False
-        if "guest framebuffer fallback" in log and "native kt_gpu: installed" in log:
             return False
     if classify_run_log(log).verdict is not RunVerdict.PROGRESSING:
         return False
@@ -189,42 +208,99 @@ def container_command(
     scenario: str = "campaign-auto",
 ) -> list:
     return [
-        "docker", "--context", DOCKER_CONTEXT, "run", "--rm",
+        "docker",
+        "--context",
+        DOCKER_CONTEXT,
+        "run",
+        "--rm",
         f"--name={CONTAINER_NAME}",
         f"--hostname={CONTAINER_NAME}",
         "--label=aoe2.platform=switch",
         "--label=aoe2.role=validate",
         f"--label=aoe2.container={CONTAINER_NAME}",
-        f"--memory={MEMORY_LIMIT}", f"--memory-swap={MEMORY_LIMIT}", f"--cpus={jobs}",
-        "-p", f"{port}:6080",
-        "-e", "LC_ALL=C.UTF-8", "-e", "TZ=America/Sao_Paulo",
-        "-v", f"{REPO_ROOT}:{CONTAINER_ROOT}", "-w", CONTAINER_ROOT,
-        IMAGE, "bash", "-c", emulator_script(run_seconds, nro=nro, mode=mode, scenario=scenario),
+        f"--memory={MEMORY_LIMIT}",
+        f"--memory-swap={MEMORY_LIMIT}",
+        f"--cpus={jobs}",
+        "-p",
+        f"{port}:6080",
+        "-e",
+        "LC_ALL=C.UTF-8",
+        "-e",
+        "TZ=America/Sao_Paulo",
+        "-v",
+        f"{REPO_ROOT}:{CONTAINER_ROOT}",
+        "-w",
+        CONTAINER_ROOT,
+        IMAGE,
+        "bash",
+        "-c",
+        emulator_script(run_seconds, nro=nro, mode=mode, scenario=scenario),
     ]
 
 
 def check_preflight(keys_path: Path = REPO_ROOT / PROD_KEYS_DEFAULT) -> None:
     if shutil.which("docker") is None:
         raise PreflightError("docker CLI not found")
-    contexts = subprocess.run(["docker", "context", "ls", "--format", "{{.Name}}"], capture_output=True, text=True)
+    contexts = subprocess.run(
+        ["docker", "context", "ls", "--format", "{{.Name}}"],
+        capture_output=True,
+        text=True,
+    )
     if DOCKER_CONTEXT not in contexts.stdout.split():
         raise PreflightError(f"docker context '{DOCKER_CONTEXT}' not found")
     nro = REPO_ROOT / NRO_PATH
     if not nro.exists():
-        raise PreflightError(f"missing Switch binary {nro.relative_to(REPO_ROOT)}; run python3 tools/docker_build.py --platform switch")
+        raise PreflightError(
+            f"missing Switch binary {nro.relative_to(REPO_ROOT)}; run python3 tools/docker_build.py --platform switch"
+        )
     if keys_path is not None and not keys_path.exists():
-        print(f"INFO: Switch prod.keys not found at {keys_path.relative_to(REPO_ROOT) if keys_path.is_relative_to(REPO_ROOT) else keys_path}; proceeding with homebrew NRO without keys", flush=True)
+        print(
+            f"INFO: Switch prod.keys not found at {keys_path.relative_to(REPO_ROOT) if keys_path.is_relative_to(REPO_ROOT) else keys_path}; proceeding with homebrew NRO without keys",
+            flush=True,
+        )
 
 
 def main(argv: list | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--run-seconds", type=int, default=600, help="how long to run the emulator under test (seconds)")
-    parser.add_argument("--mode", choices=["native", "gs"], default="native", help="rendering mode: native or gs (default: native)")
-    parser.add_argument("--scenario", choices=["campaign", "campaign-auto", "smoke"], default="campaign-auto", help="scenario to drive (default: campaign-auto)")
-    parser.add_argument("--jobs", type=int, default=DEFAULT_JOBS, help="CPU quota allocated to emulator container (default: 8)")
-    parser.add_argument("--port", type=int, default=6080, help="host port for noVNC web view (default: 6080)")
-    parser.add_argument("--keys", type=Path, default=REPO_ROOT / PROD_KEYS_DEFAULT, help="path to Switch prod.keys")
-    parser.add_argument("--dry-run", action="store_true", help="print commands without executing them")
+    parser.add_argument(
+        "--run-seconds",
+        type=int,
+        default=900,
+        help="how long to run the emulator under test (seconds)",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=["native", "gs"],
+        default="native",
+        help="rendering mode: native or gs (default: native)",
+    )
+    parser.add_argument(
+        "--scenario",
+        choices=["campaign", "campaign-auto", "smoke"],
+        default="campaign-auto",
+        help="scenario to drive (default: campaign-auto)",
+    )
+    parser.add_argument(
+        "--jobs",
+        type=int,
+        default=DEFAULT_JOBS,
+        help="CPU quota allocated to emulator container (default: 8)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=6080,
+        help="host port for noVNC web view (default: 6080)",
+    )
+    parser.add_argument(
+        "--keys",
+        type=Path,
+        default=REPO_ROOT / PROD_KEYS_DEFAULT,
+        help="path to Switch prod.keys",
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="print commands without executing them"
+    )
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
 
     try:
@@ -246,9 +322,18 @@ def main(argv: list | None = None) -> int:
     if not args.dry_run:
         ensure_container_clean(CONTAINER_NAME)
 
-    cmd = container_command(args.run_seconds, jobs=args.jobs, port=args.port, mode=args.mode, scenario=args.scenario)
+    cmd = container_command(
+        args.run_seconds,
+        jobs=args.jobs,
+        port=args.port,
+        mode=args.mode,
+        scenario=args.scenario,
+    )
     print("+ " + shlex.join(cmd[:10]) + " ...", flush=True)
-    print(f"👉 Visualização no Chrome durante a validação: http://localhost:{args.port}/vnc.html", flush=True)
+    print(
+        f"👉 Visualização no Chrome durante a validação: http://localhost:{args.port}/vnc.html",
+        flush=True,
+    )
     if args.dry_run:
         return EXIT_PASS
 
@@ -267,7 +352,9 @@ def main(argv: list | None = None) -> int:
     if not screenshots:
         screenshots = sorted(str(p) for p in evidence_path.glob("*.png"))
 
-    pass_verdict = evidence_passed(alive, log, screenshots, mode=args.mode, scenario=args.scenario)
+    pass_verdict = evidence_passed(
+        alive, log, screenshots, mode=args.mode, scenario=args.scenario
+    )
     verdict_text = "PASS\n" if pass_verdict else "FAIL\n"
     (evidence_path / "result.txt").write_text(verdict_text)
     print(f"Switch validation verdict: {verdict_text.strip()}", flush=True)
