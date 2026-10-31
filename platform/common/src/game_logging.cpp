@@ -59,7 +59,9 @@ void initialize_game_logging() {
 #elif defined(__SWITCH__)
     // Route stderr / debug logs to svcOutputDebugString for capture by Ryujinx / nxlink
     consoleDebugInit(debugDevice_SVC);
-#endif
+    // Also redirect std::cout to std::cerr so standard stream output reaches debugDevice_SVC
+    std::cout.rdbuf(std::cerr.rdbuf());
+#else
     std::set_terminate([] {
         std::cerr << "[terminate] unhandled exception\n";
         try {
@@ -73,5 +75,6 @@ void initialize_game_logging() {
         }
         std::abort();
     });
+#endif
 }
 }

@@ -10,10 +10,9 @@
 set(GENERATED_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/generated/SLES-50282")
 include("${CMAKE_CURRENT_LIST_DIR}/Aoe2Runtime.cmake")
 
-if(NINTENDO_SWITCH)
-    set(AOE2_GENERATED_UNITY_BATCH 64 CACHE STRING "Generated units per unity translation unit (0 disables unity builds)")
-else()
-    set(AOE2_GENERATED_UNITY_BATCH 16 CACHE STRING "Generated units per unity translation unit (0 disables unity builds)")
+set(AOE2_GENERATED_UNITY_BATCH 16 CACHE STRING "Generated units per unity translation unit (0 disables unity builds)")
+if(NINTENDO_SWITCH AND AOE2_GENERATED_UNITY_BATCH EQUAL 16)
+    set(AOE2_GENERATED_UNITY_BATCH 64 CACHE STRING "Generated units per unity translation unit (0 disables unity builds)" FORCE)
 endif()
 set(AOE2_GENERATED_OPTIMIZATION "-O1" CACHE STRING "Optimization flag for generated code; higher levels multiply compile time")
 
@@ -209,8 +208,12 @@ if(AOE2_BUILD_GAME)
     if(NINTENDO_SWITCH)
         # Homebrew package; the runtime boots AOK.ELF and reads the disc from the
         # NRO's directory (sdmc:/switch/aoe2/), so the boot path stays relative.
+        # An embedded RomFS (even empty) is required so romfsInit() doesn't fail in Ryujinx HLE.
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/romfs_aoe2")
         nx_generate_nacp(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/aoe2_game.nacp"
             NAME "AoE II Recomp" AUTHOR "aoe2-ps2-recomp" VERSION "0.1.0")
-        nx_create_nro(aoe2_game NACP "${CMAKE_CURRENT_BINARY_DIR}/aoe2_game.nacp")
+        nx_create_nro(aoe2_game
+            NACP "${CMAKE_CURRENT_BINARY_DIR}/aoe2_game.nacp"
+            ROMFS "${CMAKE_CURRENT_BINARY_DIR}/romfs_aoe2")
     endif()
 endif()

@@ -2,6 +2,11 @@
 #include "map_view_module_private.hpp"
 #include <aoe2/renderer/map_view_compositor.hpp>
 #include "ps2_runtime.h"
+#include <exception>
+#include <iostream>
+#if defined(__SWITCH__)
+#include <switch.h>
+#endif
 
 namespace aoe2::game_hooks {
 
@@ -9,6 +14,9 @@ MapViewSession::MapViewSession(PS2Runtime& runtime) {
     map_view::Install(runtime);
     runtime_ = &runtime;
     runtime.setFrameCompositor([&runtime](PS2PresentationFrameView legacy) -> std::optional<PS2OwnedPresentationFrame> {
+#if defined(__SWITCH__)
+        svcOutputDebugString("[aoe2-switch] MapViewSession compositor callback ENTER\n", 53);
+#endif
         auto snap = map_view::CaptureNative(runtime);
         if (!snap || snap->indices.empty() || snap->layout.output.width == 0) {
             map_view::PublishComposedLayout(runtime, nullptr);
@@ -32,19 +40,18 @@ MapViewSession::MapViewSession(PS2Runtime& runtime) {
             std::span<const uint8_t>(legacy.pixels, PS2PresentationFrameBytes(legacy)),
             legacy.width, legacy.height, legacy.strideBytes
         };
-        try {
-            auto composed = renderer::MapViewCompositor::Compose(legacy_view, frame_snap);
-            if (!map_view::PublishComposedLayout(runtime, &*snap)) return std::nullopt;
-            return PS2OwnedPresentationFrame{
-                composed.pixels,
-                composed.width,
-                composed.height,
-                composed.strideBytes
-            };
-        } catch (...) {
+        auto composed = renderer::MapViewCompositor::TryCompose(legacy_view, frame_snap);
+        if (!composed) {
             map_view::PublishComposedLayout(runtime, nullptr);
             return std::nullopt;
         }
+        if (!map_view::PublishComposedLayout(runtime, &*snap)) return std::nullopt;
+        return PS2OwnedPresentationFrame{
+            composed->pixels,
+            composed->width,
+            composed->height,
+            composed->strideBytes
+        };
     });
 }
 

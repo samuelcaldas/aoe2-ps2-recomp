@@ -44,7 +44,11 @@ analysis/exploratory_fallback/
 *.gzf
 *.rep/
 
-# Recompilation outputs
+# Test outputs
+Testing/
+.playwright-mcp/pc/*.png
+!.playwright-mcp/pc/.gitkeep
+
 recomp/generated/
 recomp/build/
 generated/

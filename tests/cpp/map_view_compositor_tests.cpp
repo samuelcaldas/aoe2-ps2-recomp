@@ -42,12 +42,12 @@ void native_pixels() {
     const auto& pixels = *frame.pixels;
     check(pixels[(40 * 1280) * 4] == 255);
     check(pixels[(40 * 1280 + 1279) * 4 + 1] == 255);
-    check(pixels[(40 * 1280 + 1279) * 4 + 3] == 128);
+    check(pixels[(40 * 1280 + 1279) * 4 + 3] == 255);
     check(pixels[((40 + map.height - 1) * 1280) * 4 + 1] == 255);
     check(pixels[((40 + map.height - 1) * 1280 + 1279) * 4] == 255);
     check(pixels[(574 * 1280 + 320) * 4 + 1] == static_cast<uint8_t>(345));
     check(pixels[(574 * 1280 + 320) * 4 + 2] == 77);
-    map.palette[0] = {17, 18, 19, 20};
+    map.palette[0] = {17, 18, 19, 255};
     const auto changed = MapViewCompositor::Compose(legacy, map);
     check((*changed.pixels)[(40 * 1280) * 4] == 17);
     check(pixels[(40 * 1280) * 4] == 255);

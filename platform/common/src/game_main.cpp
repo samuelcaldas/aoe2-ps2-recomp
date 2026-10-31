@@ -2,22 +2,7 @@
 #include <string>
 #if defined(__SWITCH__)
 #include <switch.h>
-static void switch_terminate_handler() {
-    svcOutputDebugString("[FATAL-TERMINATE] std::terminate called!\n", 44);
-    std::exception_ptr p = std::current_exception();
-    if (p) {
-        try {
-            std::rethrow_exception(p);
-        } catch (const std::exception& e) {
-            std::string msg = std::string("[FATAL-TERMINATE] Exception: ") + e.what() + "\n";
-            svcOutputDebugString(msg.c_str(), msg.length());
-        } catch (...) {
-            svcOutputDebugString("[FATAL-TERMINATE] Unknown exception\n", 37);
-        }
-    } else {
-        svcOutputDebugString("[FATAL-TERMINATE] No active exception\n", 39);
-    }
-}
+extern "C" void switch_early_terminate(void) noexcept;
 #endif
 // Runner behavior adapted from the pinned PS2Recomp runner (GPL-3.0).
 #include "game_entry.hpp"
@@ -84,7 +69,7 @@ void use_disc_image(const std::filesystem::path& image) {
 int main(int count, char* arguments[]) {
 #if defined(__SWITCH__)
     svcOutputDebugString("[aoe2-switch] Entering main() BEFORE EVERYTHING\n", 48);
-    std::set_terminate(switch_terminate_handler);
+    std::set_terminate(switch_early_terminate);
     aoe2::platform::switch_env::SwitchPlatform::Instance().Initialize(count, arguments);
     svcOutputDebugString("[aoe2-switch] SwitchPlatform initialized.\n", 42);
 #endif

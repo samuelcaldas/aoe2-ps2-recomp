@@ -163,6 +163,16 @@ def execute(args: argparse.Namespace) -> int:
         return EXIT_MEMORY_GUARD
     if returncode == 0:
         print(f"BUILD OK; probe binary present: {PROBE_BINARY.is_file()}")
+        game_binary = BUILD_DIR / "aoe2_game"
+        diag_binary = REPO_ROOT / "build" / "docker-desktop-diagnostics" / "aoe2_game"
+        if game_binary.is_file():
+            diag_binary.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                if diag_binary.exists() or diag_binary.is_symlink():
+                    diag_binary.unlink()
+                os.link(game_binary, diag_binary)
+            except OSError:
+                pass
         return EXIT_OK
     return EXIT_BUILD_FAILED if run_classifier() == 0 else EXIT_CLASSIFIER
 

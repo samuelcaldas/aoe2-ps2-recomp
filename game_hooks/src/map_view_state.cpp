@@ -6,10 +6,12 @@ IndexedMapSurfaceLayout IndexedMapSurfaceLayout::Calculate(uint64_t width, uint6
     if (width == 0 || width > 1920 || height == 0 || height > 1080)
         throw std::invalid_argument("indexed map surface must fit 1920x1080");
     const uint64_t pitch = (width + 15u) & ~uint64_t{15u};
-    const uint64_t stride = 16u + pitch * (height + 10u) + 16u;
+    const uint64_t guard_rows_top = 5u;
+    const uint64_t guard_rows_bottom = 64u;
+    const uint64_t stride = 16u + pitch * (height + guard_rows_top + guard_rows_bottom) + 16u;
     if (stride * 2u > capacity)
         throw std::invalid_argument("indexed map surfaces exceed the exclusive arena");
-    return {static_cast<uint32_t>(pitch), static_cast<uint32_t>(16u + pitch * 5u),
+    return {static_cast<uint32_t>(pitch), static_cast<uint32_t>(16u + pitch * guard_rows_top),
             static_cast<uint32_t>(stride), static_cast<uint32_t>(stride * 2u)};
 }
 }

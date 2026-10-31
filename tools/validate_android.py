@@ -83,7 +83,9 @@ def emulator_script(run_seconds: int, interval: int = SCREENSHOT_INTERVAL) -> st
         "adb logcat -c",
         f"adb shell am start -n {PACKAGE}/android.app.NativeActivity",
         f"for shot in $(seq 1 {shots}); do sleep {interval}; "
-        f"adb exec-out screencap -p > {shots_dir}/screen-$(printf '%03d' \"$shot\").png; done",
+        f"ts=$(date +%Y%m%d-%H%M%S); shot_num=$(printf '%03d' \"$shot\"); "
+        f"adb exec-out screencap -p > {shots_dir}/screen-${{ts}}-${{shot_num}}.png; "
+        f"ln -sf screen-${{ts}}-${{shot_num}}.png {shots_dir}/screen-${{shot_num}}.png 2>/dev/null || true; done",
         f"adb logcat -d > {evidence}/logcat.txt",
         f"if adb shell pidof {PACKAGE} > /dev/null; then echo yes > {evidence}/alive.txt; "
         f"else echo no > {evidence}/alive.txt; fi",
@@ -144,7 +146,11 @@ def main(argv: list | None = None) -> int:
     logcat_file = evidence / "logcat.txt"
     alive = alive_file.is_file() and alive_file.read_text().strip() == "yes"
     logcat = logcat_file.read_text(errors="replace") if logcat_file.is_file() else ""
-    screenshots = sorted(str(path) for path in screenshots_path.glob("screen-*.png"))
+    screenshots = sorted(str(path) for path in screenshots_path.glob("screen-*.png") if not path.is_symlink())
+    if not screenshots:
+        screenshots = sorted(str(path) for path in screenshots_path.glob("screen-*.png"))
+    if not screenshots:
+        screenshots = sorted(str(path) for path in evidence.glob("screen-*.png") if not path.is_symlink())
     if not screenshots:
         screenshots = sorted(str(path) for path in evidence.glob("screen-*.png"))
     passed = evidence_passed(alive, logcat, screenshots)

@@ -108,6 +108,20 @@ class TestDockerBuildCommands(unittest.TestCase):
                 configure = next(command for command in commands if command[:2] == ["cmake", "-S"])
                 self.assertIn("-DPS2X_ENABLE_FUNCTION_LOG_TRACKER=OFF", configure)
 
+    def test_cmake_builds_use_debug_and_verbose_output(self):
+        for name, spec in (("desktop", docker_build.PLATFORMS["desktop"]),
+                           ("desktop-diagnostics", docker_build.DIAGNOSTIC_VARIANTS["desktop"]),
+                           ("switch", docker_build.PLATFORMS["switch"])):
+            with self.subTest(platform=name):
+                commands = [shlex.split(line) for line in build_script_for(spec).splitlines()]
+                configure = next(command for command in commands if command[:2] == ["cmake", "-S"])
+                build = next(command for command in commands if command[:2] == ["cmake", "--build"])
+                self.assertIn("-DCMAKE_BUILD_TYPE=Debug", configure)
+                self.assertNotIn("-DCMAKE_BUILD_TYPE=Release", configure)
+                self.assertIn("-v", build)
+        self.assertIn("-DAOE2_RUNTIME_DIAGNOSTICS=ON", build_script_for(docker_build.PLATFORMS["switch"]))
+        self.assertIn("--output-on-failure -V", docker_build.build_script(self.spec, jobs=1, test=True))
+
     def test_build_script_stages_hd_assets_before_configuring(self):
         script = docker_build.build_script(self.spec, jobs=6)
         stage = "python3 tools/stage_hd_assets.py --platform desktop"

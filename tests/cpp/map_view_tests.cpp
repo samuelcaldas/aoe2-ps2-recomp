@@ -1,4 +1,5 @@
 #include <aoe2/game_hooks/map_view_config.hpp>
+#include <sstream>
 #include <aoe2/game_hooks/map_view_state.hpp>
 #include <aoe2/renderer/map_view_layout.hpp>
 
@@ -25,6 +26,18 @@ void configuration() {
     check(ReadMapViewConfig("legacy", nullptr) == MapViewMode::Legacy);
     check(ReadMapViewConfig("relocation", nullptr) == MapViewMode::Relocation);
     check(ReadMapViewConfig("native", nullptr) == MapViewMode::Native);
+    {
+        std::istringstream config("# opt in only when requested\n  mode = native  \n");
+        check(ReadMapViewConfigFile(config) == MapViewMode::Native);
+    }
+    {
+        std::istringstream config(" # comment\n\nmode=relocation\n");
+        check(ReadMapViewConfigFile(config) == MapViewMode::Relocation);
+    }
+    {
+        std::istringstream config("# no override\n");
+        check(!ReadMapViewConfigFile(config));
+    }
     check(DefaultMapOutput(false, false) == std::pair<uint32_t, uint32_t>{640, 448});
     check(DefaultMapOutput(true, false) == std::pair<uint32_t, uint32_t>{1280, 720});
     check(DefaultMapOutput(true, true) == std::pair<uint32_t, uint32_t>{1920, 1080});
@@ -34,16 +47,27 @@ void configuration() {
     rejects([] { ReadMapViewConfig("native", "320x130"); });
     rejects([] { ReadMapViewConfig("legacy", "320x130"); });
     rejects([] { ReadMapViewConfig(nullptr, "320x130"); });
+    rejects([] {
+        std::istringstream config("mode=native\nmode=relocation\n");
+        ReadMapViewConfigFile(config);
+    });
+    rejects([] {
+        std::istringstream config("resolution=1920x1080\n");
+        ReadMapViewConfigFile(config);
+    });
 }
 void surfaces() {
     using aoe2::game_hooks::IndexedMapSurfaceLayout;
     const auto legacy = IndexedMapSurfaceLayout::Calculate(640, 262, 8u << 20);
     check(legacy.pitch == 640 && legacy.visible_offset == 16 + 5 * 640);
-    check(legacy.buffer_stride == 16 + 640 * 272 + 16);
+    check(legacy.buffer_stride == 16 + 640 * 331 + 16);
     const auto padded = IndexedMapSurfaceLayout::Calculate(641, 262, 8u << 20);
     check(padded.pitch == 656 && padded.visible_offset == 16 + 5 * 656);
     const auto maximum = IndexedMapSurfaceLayout::Calculate(1920, 1080, 8u << 20);
     check(maximum.total_bytes <= (8u << 20));
+    const auto native_1080p = IndexedMapSurfaceLayout::Calculate(1920, 708, 8u << 20);
+    check(native_1080p.buffer_stride == 16 + 1920 * 777 + 16);
+    check(native_1080p.total_bytes <= (8u << 20));
     rejects([] { IndexedMapSurfaceLayout::Calculate(1920, 1080, 1024); });
     rejects([] { IndexedMapSurfaceLayout::Calculate(0, 262, 8u << 20); });
     rejects([] { IndexedMapSurfaceLayout::Calculate(640, 0, 8u << 20); });

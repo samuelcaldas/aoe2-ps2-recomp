@@ -14,6 +14,14 @@ namespace aoe2::game_hooks::map_view {
 enum class Phase { LegacyRelocation, NativeEnlargement };
 inline constexpr Phase kPhase = Phase::NativeEnlargement;
 
+inline constexpr uint32_t kArenaAreaLinePtrsOffset = 0x400000u;
+inline constexpr uint32_t kArenaAreaLinePtrs2Offset = 0x402000u;
+inline constexpr uint32_t kArenaPanelLinePtrsOffset = 0x404000u;
+inline constexpr uint32_t kArenaVSpanArraysOffset = 0x410000u;
+inline constexpr uint32_t kArenaVSpanSlotStride = 0xA000u;
+inline constexpr size_t kArenaVSpanSlotCount = 16;
+inline constexpr uint32_t kMaxArenaScanlines = 2048u;
+
 struct Relocation {
     uint32_t panel = 0, area = 0, base = 0;
     uint32_t target_w = 640, target_h = 262;
@@ -32,8 +40,8 @@ struct Relocation {
     void begin(uint32_t p, uint32_t w, uint32_t h, uint32_t b, uint32_t capacity, uint64_t g,
                renderer::MapViewLayout mvl = {}) {
         clear();
-        if (w == 0 || w > 1920 || h == 0 || h > 917 || !p || !g || uint64_t(b) + capacity > 0x4000000)
-            throw std::invalid_argument("invalid lease or surface bounds (height must not exceed 917 rows)");
+        if (w == 0 || w > 1920 || h == 0 || h > kMaxArenaScanlines || !p || !g || uint64_t(b) + capacity > 0x4000000)
+            throw std::invalid_argument("invalid lease or surface bounds");
         layout = IndexedMapSurfaceLayout::Calculate(w, h, capacity);
         panel = p; base = b; generation = g;
         target_w = w; target_h = h;

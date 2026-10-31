@@ -26,6 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsdl2-2.0-0 \
     tzdata \
     procps \
+    xdotool \
  && rm -rf /var/lib/apt/lists/*
 
 # Install Ryujinx release archive or user-provided binary

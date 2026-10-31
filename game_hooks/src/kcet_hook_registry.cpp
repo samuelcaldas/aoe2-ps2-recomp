@@ -1,6 +1,7 @@
 #include <aoe2/game_hooks/kcet_handlers.hpp>
 #include <aoe2/game_hooks/kcet_hook_config.hpp>
 #include "game_overrides.h"
+#include "ps2_runtime_macros.h"
 
 #include <filesystem>
 #include <fstream>
@@ -16,6 +17,34 @@ int RegisterGeneratedOverlays(PS2Runtime& runtime);
 namespace {
 using aoe2::game_hooks::KcetHandlers;
 using aoe2::game_hooks::KcetHookConfig;
+
+// Fast-path native hook for the 5577-slot linear object allocator at 0x263650.
+// In the unoptimized recompiled binary, this 5577-iteration linear search was split across
+// 4 functions, incurring >22 million function dispatches through PS2Runtime during
+// FUN_0032f6b0 level data loading. This native implementation completes the search in microseconds.
+void FastFunc_0x263650(uint8_t* rdram, R5900Context* ctx, PS2Runtime* runtime) {
+    static bool s_announced = false;
+    if (!s_announced) {
+        std::cout << "[aoe2] fast-path entity allocator (0x263650) active" << std::endl;
+        s_announced = true;
+    }
+    const uint32_t base = GPR_U32(ctx, 4);
+    for (uint32_t i = 0; i < 5577; ++i) {
+        const uint32_t slot = base + i * 64;
+        if (slot + 0x3d < 0x04000000) {
+            const uint8_t flags = rdram[slot + 0x3d];
+            if ((flags & 0x08) == 0) {
+                rdram[slot + 0x3d] = flags | 0x08;
+                SET_GPR_U32(ctx, 2, slot); // $v0: allocated slot pointer
+                SET_GPR_U32(ctx, 4, slot); // $a0: slot pointer (delay slot behavior)
+                ctx->pc = GPR_U32(ctx, 31); // jr $ra
+                return;
+            }
+        }
+    }
+    SET_GPR_U32(ctx, 2, 0); // $v0 = NULL
+    ctx->pc = GPR_U32(ctx, 31); // jr $ra
+}
 
 KcetHandlers host_handlers() {
     KcetHandlers handlers;
@@ -88,6 +117,10 @@ void apply_kcet_hooks(PS2Runtime& runtime) {
 #if defined(__SWITCH__)
         svcOutputDebugString("[aoe2-switch] apply_aliases() SUCCESS\n", 38);
 #endif
+        // Fast-path allocator hook for mission entity loading
+        if (!runtime.replaceFunction(0x263650u, FastFunc_0x263650)) {
+            std::cerr << "[aoe2] Warning: failed to replace 0x263650 fast allocator\n";
+        }
         const int overlays = RegisterGeneratedOverlays(runtime);
 #if defined(__SWITCH__)
         svcOutputDebugString("[aoe2-switch] RegisterGeneratedOverlays() SUCCESS\n", 50);

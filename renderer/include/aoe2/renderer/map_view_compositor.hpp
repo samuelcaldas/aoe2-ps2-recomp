@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -26,5 +27,8 @@ class MapViewCompositor {
 public:
     /// Compose immutable effective-RGBA palette pixels and complete legacy HUD bands; throws for invalid bounds.
     static ComposedMapFrame Compose(RgbaFrameView legacy, const MapFrameSnapshot& snapshot);
+
+    /// Compose immutable effective-RGBA palette pixels and complete legacy HUD bands; returns nullopt on validation failure without throwing.
+    static std::optional<ComposedMapFrame> TryCompose(RgbaFrameView legacy, const MapFrameSnapshot& snapshot) noexcept;
 };
 }

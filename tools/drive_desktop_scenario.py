@@ -24,6 +24,8 @@ sys.path.insert(0, str(REPO_ROOT))
 from tools.presentation_geometry import to_window  # noqa: E402
 from tools.validate_desktop import (  # noqa: E402
     EVIDENCE_DIR,
+    OWNED_DISC_IMAGE,
+    OWNED_ELF,
     SCREENSHOT_DIR,
     capture_screenshot,
     game_command,
@@ -42,10 +44,17 @@ BOOT_TO_MENU = [
     ("key-return-2", "key", "Return", 5),
     ("osk-letter-a", "click", (176, 64), 4),
     ("osk-enter", "click", (470, 151), 4),
-    ("card-ok", "click", (251, 312), 10),
+    # The card screen can still be transitioning when the next click arrives,
+    # especially while concurrent debug builds compete for disk and CPU.
+    ("card-ok", "click", (251, 312), 35),
     ("profile-new-player", "click", (251, 350), 5),
     ("profile-name-field", "click", (335, 237), 3),
-    ("profile-name-text", "text", "AOK", 3),
+    # The PS2 name editor is an on-screen keyboard; xdotool text targets the
+    # host window and does not enter characters into the guest dialog.
+    ("profile-name-a", "click", (176, 64), 2),
+    ("profile-name-o", "click", (296, 95), 2),
+    ("profile-name-k", "click", (176, 95), 2),
+    ("profile-name-enter", "click", (500, 153), 3),
     ("profile-submit", "click", (245, 315), 5),
     ("profile-confirm", "click", (245, 315), 15),
     ("profile-settle", "wait", None, 15),
@@ -93,7 +102,10 @@ SCENARIOS["campaign-auto"] = SCENARIOS["campaign"][
     )
 ] + [
     ("story-complete", "story-until", (320, 224), 12),
-    ("map-submitted", "map-until", None, 180),
+    ("map-submitted", "map-until", (320, 224), 1200),
+    # Keep the guest alive after the first frame so delayed surface overruns,
+    # stale snapshots, and compositor failures are observable in the same run.
+    ("map-stability", "wait", None, 180),
 ]
 
 
@@ -200,24 +212,37 @@ def do_step(window: str, action: str, argument, settle: int) -> None:
 
 
 def follow_guest_event(
-    log_path: Path, marker: bytes, game: subprocess.Popen, timeout: float, on_wait=None
+    log_path: Path,
+    marker: bytes,
+    game: subprocess.Popen,
+    timeout: float,
+    on_wait=None,
+    max_interval_seconds: float = 12.0,
 ) -> bool:
     """Follow a growing diagnostic log, including markers split across reads."""
     deadline = time.monotonic() + timeout
     remainder = b""
+    last_action = time.monotonic()
     with log_path.open("rb") as source:
         while True:
-            chunk = source.read()
-            data = remainder + chunk
-            if marker in data:
-                return True
-            remainder = data[-(len(marker) - 1) :] if len(marker) > 1 else b""
+            chunk = source.read(64 * 1024)
+            if chunk:
+                data = remainder + chunk
+                if marker in data:
+                    return True
+                remainder = data[-(len(marker) - 1) :] if len(marker) > 1 else b""
             if game.poll() is not None or time.monotonic() >= deadline:
                 return False
-            if on_wait is None:
-                time.sleep(min(1.0, max(0.0, deadline - time.monotonic())))
+            now = time.monotonic()
+            if on_wait is not None:
+                if not chunk or (now - last_action >= max_interval_seconds):
+                    on_wait()
+                    last_action = time.monotonic()
+                else:
+                    time.sleep(0.05)
             else:
-                on_wait()
+                if not chunk:
+                    time.sleep(min(1.0, max(0.0, deadline - now)))
 
 
 def allow_ptrace() -> None:
@@ -268,6 +293,16 @@ def main(argv: list | None = None) -> int:
         "--keep-card", action="store_true", help="do not reset the memory-card root"
     )
     parser.add_argument(
+        "--card-root",
+        type=Path,
+        help="memory-card directory to use (defaults to the owned game card)",
+    )
+    parser.add_argument(
+        "--game-root",
+        type=Path,
+        help="isolated runtime root containing AOK.ELF and aoe2.iso",
+    )
+    parser.add_argument(
         "--binary",
         type=Path,
         help="game executable to run instead of the diagnostic build",
@@ -293,6 +328,15 @@ def main(argv: list | None = None) -> int:
         if shutil.which(tool) is None:
             sys.stderr.write(f"PREFLIGHT FAILED: {tool} missing\n")
             return 2
+    global CARD_ROOT
+    game_root = args.game_root.resolve() if args.game_root else OWNED_ELF.parent
+    elf_path = game_root / OWNED_ELF.name
+    disc_path = game_root / OWNED_DISC_IMAGE.name
+    if not elf_path.is_file():
+        parser.error(f"game ELF not found: {elf_path}")
+    if args.game_root and not disc_path.is_file():
+        parser.error(f"isolated game root is missing disc image: {disc_path}")
+    CARD_ROOT = args.card_root.resolve() if args.card_root else game_root / "mc0"
     if not args.keep_card:
         reset_card()
     EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
@@ -316,6 +360,9 @@ def main(argv: list | None = None) -> int:
             "AOE2_WINDOW_HEIGHT": str(win_h),
         }
         command = game_command()
+        command[1] = str(elf_path)
+        if len(command) > 2:
+            command[2] = str(disc_path if disc_path.is_file() else OWNED_DISC_IMAGE)
         if args.binary:
             command[0] = str(args.binary.resolve())
         game = subprocess.Popen(
@@ -323,6 +370,7 @@ def main(argv: list | None = None) -> int:
             stdout=log,
             stderr=subprocess.STDOUT,
             env=env,
+            cwd=game_root,
             preexec_fn=allow_ptrace,
         )
         time.sleep(BOOT_SECONDS)
@@ -330,7 +378,7 @@ def main(argv: list | None = None) -> int:
         run(["xdotool", "windowfocus", window])
         for name, action, argument, settle in SCENARIOS[args.scenario]:
             scaled_arg = argument
-            if action in ("click", "move", "story-until") and isinstance(
+            if action in ("click", "move", "story-until", "map-until") and isinstance(
                 argument, tuple
             ):
                 window_x, window_y = to_window(argument, (win_w, win_h))
@@ -353,7 +401,24 @@ def main(argv: list | None = None) -> int:
                     log_path, b"[game-tty] 4 e-txt", game, 300, advance_story
                 )
             elif action == "map-until":
-                matched = follow_guest_event(log_path, b"[map-submit]", game, settle)
+                clicks = 0
+
+                def advance_map() -> None:
+                    nonlocal clicks
+                    clicks += 1
+                    do_step(window, "click", scaled_arg, 12)
+                    print(
+                        capture_screenshot(
+                            f"{evidence_name}-map-wait-{clicks}.png", DISPLAY
+                        ),
+                        flush=True,
+                    )
+
+                # Narrative pages after the fourth text event still need input.
+                # Keep advancing until the renderer observes an actual map frame.
+                matched = follow_guest_event(
+                    log_path, b"[map-submit]", game, settle, advance_map
+                )
             else:
                 do_step(window, action, scaled_arg, settle)
                 matched = True
@@ -362,6 +427,8 @@ def main(argv: list | None = None) -> int:
                 sys.stderr.write(
                     f"guest event not observed during step {name}; see {log_path}\n"
                 )
+                if args.stacks and game.poll() is None:
+                    save_stacks(game.pid, evidence_name)
                 return 1
             if game.poll() is not None:
                 sys.stderr.write(f"game exited during step {name}\n")

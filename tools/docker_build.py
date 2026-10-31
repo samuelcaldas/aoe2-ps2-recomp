@@ -57,7 +57,7 @@ class PlatformSpec:
 def cmake_commands(*configure_args: str, targets: tuple = ("aoe2_game",)) -> tuple:
     configure = shlex.join(["cmake", "-S", CONTAINER_ROOT, "-B", "{build_dir}", "-G", "Ninja",
                             "-DPS2X_ENABLE_FUNCTION_LOG_TRACKER=OFF", *configure_args])
-    build = shlex.join(["cmake", "--build", "{build_dir}", "--target", *targets]) + " -j {jobs}"
+    build = shlex.join(["cmake", "--build", "{build_dir}", "--target", *targets, "-v"]) + " -j {jobs}"
     return (configure, build)
 
 
@@ -77,7 +77,7 @@ def with_hd_stage(platform: str, commands: tuple) -> tuple:
 
 def desktop_commands(*extra_configure: str) -> tuple:
     return with_hd_stage("desktop", cmake_commands(
-        "-DCMAKE_BUILD_TYPE=Release", "-DAOE2_BUILD_GAME=ON", "-DAOE2_BUILD_DESKTOP_PROBE=ON", *extra_configure,
+        "-DCMAKE_BUILD_TYPE=Debug", "-DAOE2_BUILD_GAME=ON", "-DAOE2_BUILD_DESKTOP_PROBE=ON", *extra_configure,
         targets=("aoe2_game", "desktop_runtime_probe", "aoe2_input_tests"),
     ))
 
@@ -89,7 +89,7 @@ DIAGNOSTIC_VARIANTS = {
         image="aoe2-build-desktop",
         build_dir="build/docker-desktop-diagnostics",
         commands=desktop_commands("-DAOE2_RUNTIME_DIAGNOSTICS=ON"),
-        test_commands=("ctest --test-dir {build_dir} --output-on-failure -R 'desktop_runtime_probe_init|input_tests'",),
+        test_commands=("ctest --test-dir {build_dir} --output-on-failure -V -R 'desktop_runtime_probe_init|input_tests'",),
     ),
 }
 
@@ -99,7 +99,7 @@ PLATFORMS = {
         image="aoe2-build-desktop",
         build_dir="build/docker-desktop",
         commands=desktop_commands(),
-        test_commands=("ctest --test-dir {build_dir} --output-on-failure -R 'desktop_runtime_probe_init|input_tests'",),
+        test_commands=("ctest --test-dir {build_dir} --output-on-failure -V -R 'desktop_runtime_probe_init|input_tests'",),
     ),
     "android": PlatformSpec(
         dockerfile="docker/android/Dockerfile",
@@ -120,7 +120,8 @@ PLATFORMS = {
         image="aoe2-build-switch",
         build_dir="build/docker-switch",
         commands=with_hd_stage("switch", cmake_commands(
-            "-DCMAKE_TOOLCHAIN_FILE=/opt/devkitpro/cmake/Switch.cmake", "-DCMAKE_BUILD_TYPE=Release",
+            "-DCMAKE_TOOLCHAIN_FILE=/opt/devkitpro/cmake/Switch.cmake", "-DCMAKE_BUILD_TYPE=Debug",
+            "-DAOE2_RUNTIME_DIAGNOSTICS=ON",
             "-DAOE2_BUILD_GAME=ON", "-DAOE2_DEFAULT_BOOT_ELF=AOK.ELF",
             "-DPLATFORM=SDL", "-DPS2X_ENABLE_FFMPEG=OFF",
             targets=("aoe2_game_nro",),

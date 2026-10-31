@@ -6,6 +6,19 @@ The objective is to implement native map viewport expansion for *Age of Empires 
 
 This plan continues the work already started across the dedicated fork `third_party/PS2Recomp` and the main repository on branch `native-map-reservation-2026-10-29`, strictly respecting all safety and validation gates.
 
+## Current Checkpoint (2026-10-30)
+
+- Desktop Debug diagnostics and Switch Debug builds both completed after the viewport descriptor fix; the Switch NRO was regenerated.
+- A 1080p campaign run reached the map and logged ten indexed-map submissions. The live watchpoint traced the prior canary overwrite to generated `entry_0021b1c0`, the byte-fill loop. The KCET descriptor contract is `height` at `+0x38` and `width` at `+0x3c`; the native rebind had written those dimensions in the opposite order, causing a 1920-row fill. The hook now writes and validates `708` at `+0x38` and `1920` at `+0x3c`. Subsequent submissions passed the arena canaries without the previous overrun.
+- The 1920×1080 composed screenshot has the expected HUD bands, but its map area remains black. Captured 1920×708 frames are dominated by palette index 255 (`RGBA 255,255,255,0`, transparent) and index 0 (`RGBA 0,0,0,128`, semi-transparent black); the few non-background colors seen on the first submission disappear after the camera is moved. This does not yet establish whether the remaining black view is fog/camera state or a rendering-path issue. The viewport bounds and memory safety are fixed; terrain output and expanded-view input parity remain unverified.
+- The compositor previously treated GS palette alpha `0x80` as host alpha 128 (half-transparent). The pinned GS CPU presenter converts GS alpha to host RGBA with `min(255, alpha*2)` and normalizes presented alpha to 255. `MapViewCompositor` now applies the same conversion and emits opaque host alpha for fully opaque map colors; this correction still needs a live 1080p visual check.
+- Desktop Diagnostics and Switch Debug builds pass with this alpha fix. The follow-up 1080p campaign capture reached a stable HUD and confirmed ten 1920×708 submissions with no canary or composition errors. The stable frame is still black; the minimap's player marker and viewport indicator are far apart, and later submissions contain only black index 0 and transparent index 255. A capture with the camera over revealed terrain is still required to distinguish camera/fog state from a remaining draw-path defect.
+- A follow-up 1080p run confirmed the map remains black after mission start. Clicking the minimap's player marker did not visibly recenter the viewport; the click opened the game's “Shortcut Menu” hint. The diagnostic runtime then stopped on a missing guest call target reached from `SMENU_CD.BIN`, before the relocation result could be assessed. This is a generated-function coverage issue, not a canary or compositor failure. Regenerating the function map requires Ghidra, but `GHIDRA_HOME` and `analyzeHeadless` are currently unavailable. No generated C++ or stubs were added.
+- The optional Switch `map_view.ini` mode parser remains opt-in. Compilation does not establish runtime rendering or input parity.
+- Gate 3 relocation parity and Gate 7 in-mission visual/input validation remain open. Keep native enlargement opt-in until a non-black live map and correct input routing are demonstrated.
+
+On Switch, place an optional `map_view.ini` beside `AOK.ELF` with one setting such as `mode=relocation` or `mode=native`. `AOE2_MAP_VIEW` remains the higher-priority override on hosts that provide process environment variables. No file means legacy rendering.
+
 ---
 
 ## Architectural Context & Gate Sequence

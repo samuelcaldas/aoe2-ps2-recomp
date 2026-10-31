@@ -26,6 +26,30 @@ class TestDesktopValidationPaths(unittest.TestCase):
         self.assertEqual(validation.SCREENSHOT_DIR.name, "pc")
         self.assertEqual(validation.SCREENSHOT_DIR.parent.name, ".playwright-mcp")
 
+    def test_capture_screenshot_adds_date_fingerprint(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            with patch.object(validation, "SCREENSHOT_DIR", tmp_path), \
+                 patch("subprocess.run") as mock_run:
+                mock_run.return_value = Mock(stdout=b"fake-xwd")
+                dest = validation.capture_screenshot("campaign-auto-map-submitted.png")
+                # Filename must have date fingerprint YYYYMMDD-HHMMSS
+                import re
+                self.assertTrue(re.search(r"campaign-auto-map-submitted-\d{8}-\d{6}(?:-\d+)?\.png$", dest.name))
+                # Canonical symlink/file must point to or match the fingerprinted file
+                canonical = tmp_path / "campaign-auto-map-submitted.png"
+                self.assertTrue(canonical.exists() or canonical.is_symlink())
+
+    def test_capture_screenshot_does_not_duplicate_fingerprint(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            with patch.object(validation, "SCREENSHOT_DIR", tmp_path), \
+                 patch("subprocess.run") as mock_run:
+                mock_run.return_value = Mock(stdout=b"fake-xwd")
+                already_stamped = "test-screen-20261030-193000.png"
+                dest = validation.capture_screenshot(already_stamped)
+                self.assertEqual(dest.name, already_stamped)
+
 
 class TestDesktopValidation(unittest.TestCase):
     def setUp(self):

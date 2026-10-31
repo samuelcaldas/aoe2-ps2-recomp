@@ -8,6 +8,7 @@
 #include <aoe2/game_hooks/map_view_config.hpp>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <mutex>
@@ -23,6 +24,28 @@ using namespace detail;
 // Capture owns its data; this mutex protects only publication and registry
 // access.
 std::unordered_map<PS2Runtime *, std::shared_ptr<State>> states;
+const char *ModeName(MapViewMode mode) {
+  switch (mode) {
+  case MapViewMode::Legacy: return "legacy";
+  case MapViewMode::Relocation: return "relocation";
+  case MapViewMode::Native: return "native";
+  }
+  return "invalid";
+}
+std::optional<MapViewMode> ConfiguredMode() {
+  const char *configured = std::getenv("AOE2_MAP_VIEW");
+  const char *diagnostic_override = std::getenv("AOE2_MAP_VIEW_OVERRIDE");
+  if (configured || diagnostic_override)
+    return ReadMapViewConfig(configured, diagnostic_override);
+#if defined(__SWITCH__)
+  const auto path = PS2Runtime::getIoPaths().elfDirectory / "map_view.ini";
+  std::ifstream file(path);
+  if (!file.is_open()) return std::nullopt;
+  return ReadMapViewConfigFile(file);
+#else
+  return std::nullopt;
+#endif
+}
 std::shared_ptr<State> Find(PS2Runtime *runtime) {
   std::lock_guard lock(mutex);
   auto found = states.find(runtime);
@@ -111,6 +134,12 @@ void Prepare(uint8_t *ram, R5900Context *ctx, PS2Runtime &runtime,
                          state.lease.capacity, state.lease.generation, layout);
   state.relocation.area = Word(ram, panel + 0x1c5c);
   InitializeArenaCanaries(ram, state.relocation);
+  std::clog << "[map-prepare] mode=" << ModeName(state.mode)
+            << " output=" << layout.output.width << 'x' << layout.output.height
+            << " target=" << width << 'x' << height << " panel=" << panel
+            << " bounds=" << Word(ram, panel + 0x14) << 'x'
+            << Word(ram, panel + 0x18) << " area=" << state.relocation.area
+            << " arena=" << state.lease.base << '\n';
 }
 void EnforceRedirectArgs(uint8_t *ram, R5900Context *ctx, size_t slot,
                          const Relocation &r) {
@@ -133,8 +162,13 @@ uint32_t ComputeRedirectBase(uint8_t *ram, R5900Context *ctx, size_t slot,
   EnforceRedirectArgs(ram, ctx, slot, r);
   uint32_t w_arg = getRegU32(ctx, slot == 1 ? 6 : 5);
   uint32_t h_arg = getRegU32(ctx, slot == 1 ? 7 : 6);
-  return r.redirect(entries[slot], getRegU32(ctx, 31), getRegU32(ctx, 16), area,
-                    w_arg, h_arg, true);
+  const uint32_t base = r.redirect(entries[slot], getRegU32(ctx, 31),
+                                    getRegU32(ctx, 16), area, w_arg, h_arg, true);
+  std::clog << "[map-redirect-result] slot=" << slot << " area=" << area
+            << " target=" << r.target_w << 'x' << r.target_h
+            << " passed=" << w_arg << 'x' << h_arg << " base=" << base
+            << " panel=" << r.panel << '\n';
+  return base;
 }
 void Redirect(uint8_t *ram, R5900Context *ctx, PS2Runtime &runtime,
               State &state, size_t slot) {
@@ -154,6 +188,10 @@ void Redirect(uint8_t *ram, R5900Context *ctx, PS2Runtime &runtime,
   uint32_t base = ComputeRedirectBase(ram, ctx, slot, r, area);
   if (!base)
     throw std::runtime_error("map relocation contract mismatch");
+  WriteWord(ram, area + 0x08, base);
+  WriteWord(ram, area + 0x68, base);
+  WriteWord(ram, area + 0x20, r.layout.pitch);
+  PrepareAreaLineTables(ram, r);
   const int reg = slot == 1 ? 10 : 8;
   ctx->r[reg] = _mm_insert_epi64(ctx->r[reg], static_cast<int64_t>(base), 0);
 }
@@ -201,13 +239,39 @@ void Wrapper(uint8_t *ram, R5900Context *ctx, PS2Runtime *runtime) {
       }
     }
   }
+  if constexpr (Slot == 7 || Slot == 8)
+    HandleAreaLineTableHook(ram, ctx, *state, Slot);
+  if constexpr (Slot == 9) {
+    if (HandleVSpanInitHook(ram, ctx, *state))
+      return;
+  }
+  if constexpr (Slot == 10) {
+    if (HandleVSpanResetHook(ram, ctx, *state))
+      return;
+  }
+  if constexpr (Slot == 11) {
+    if (HandlePanelRowTableHook(ram, ctx, *state))
+      return;
+  }
+  if constexpr (Slot == 12 || Slot == 13)
+    HandleDrawListAddYHook(ctx, *state, Slot);
+  if constexpr (Slot == 15) {
+    const uint32_t panel = getRegU32(ctx, 4);
+    state->originals[Slot](ram, ctx, runtime);
+    if (state->lease && panel && panel == state->relocation.panel) {
+      RecordMapPanelSubmission(ram, *state);
+    }
+    return;
+  }
   state->originals[Slot](ram, ctx, runtime);
   // Return may mean yield or tail dispatch. No completion cleanup or register
   // restoration.
 }
 constexpr std::array<PS2Runtime::RecompiledFunction, entries.size()> wrappers{
-    Wrapper<0>, Wrapper<1>, Wrapper<2>, Wrapper<3>,
-    Wrapper<4>, Wrapper<5>, Wrapper<6>};
+    Wrapper<0>,  Wrapper<1>,  Wrapper<2>,  Wrapper<3>,  Wrapper<4>,
+    Wrapper<5>,  Wrapper<6>,  Wrapper<7>,  Wrapper<8>,  Wrapper<9>,
+    Wrapper<10>, Wrapper<11>, Wrapper<12>, Wrapper<13>, Wrapper<14>,
+    Wrapper<15>};
 } // namespace
 void Teardown(PS2Runtime &runtime) {
   std::shared_ptr<State> state;
@@ -227,20 +291,21 @@ void Teardown(PS2Runtime &runtime) {
   state->relocation.clear();
 }
 void Install(PS2Runtime &runtime) {
-  const char *configured = std::getenv("AOE2_MAP_VIEW");
-  const auto mode =
-      ReadMapViewConfig(configured, std::getenv("AOE2_MAP_VIEW_OVERRIDE"));
+  const auto mode = ConfiguredMode();
   Teardown(runtime);
-  if (!configured)
+  if (!mode) {
+    std::clog << "[map-view-install] mode=disabled (legacy default)\n";
     return; // Default legacy has no hooks or arena overhead.
+  }
+  std::clog << "[map-view-install] mode=" << ModeName(*mode) << '\n';
   auto state = std::make_shared<State>();
-  state->mode = mode;
+  state->mode = *mode;
   for (size_t i = 0; i < entries.size(); ++i) {
     state->originals[i] = runtime.lookupFunction(entries[i]);
     if (!state->originals[i] || state->originals[i] == wrappers[i])
       throw std::runtime_error("map view original unavailable");
   }
-  if (mode == MapViewMode::Native || mode == MapViewMode::Relocation) {
+  if (*mode == MapViewMode::Native || *mode == MapViewMode::Relocation) {
     state->lease = runtime.claimMapArena(state.get());
     if (!state->lease)
       throw std::runtime_error("map arena already owned or unavailable");
