@@ -161,16 +161,30 @@ def follow_guest_event(
                     time.sleep(min(1.0, max(0.0, deadline - now)))
 
 
-def is_screen_loading(display: str) -> bool:
-    """Check if the screen is currently black (< 2KB PNG) or absent."""
+def get_screen_brightness(display: str) -> float:
+    """Return mean brightness of the screen (0.0 for pure black)."""
     tmp_path = Path("/tmp/screen_check.png")
     if capture_screenshot(tmp_path, display):
-        return tmp_path.stat().st_size < 2000
-    return True
+        res = subprocess.run(
+            f"convert {tmp_path} -format '%[mean]' info:",
+            shell=True,
+            capture_output=True,
+            text=True,
+        )
+        try:
+            return float(res.stdout.strip())
+        except ValueError:
+            pass
+    return 0.0
+
+
+def is_screen_loading(display: str) -> bool:
+    """Check if the screen is pure black (mean < 1.0)."""
+    return get_screen_brightness(display) < 1.0
 
 
 def wait_for_screen_ready(display: str, timeout: float = 90.0, settle_after: float = 2.0) -> bool:
-    """Wait until screen is rendered (not black), then allow settle_after for UI stabilization."""
+    """Wait until screen is rendered (not pure black), then allow settle_after for UI stabilization."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if not is_screen_loading(display):
@@ -232,12 +246,13 @@ def drive_scenario(
     print(f"[{mode}] Focused Ryujinx window {win} on {display}", flush=True)
     win_w, win_h = WINDOW_SIZE
 
-    # Wait for the initial screen to finish loading before first input
-    print(f"[{mode}] Waiting for initial guest screen to load...", flush=True)
-    wait_for_screen_ready(display, timeout=60.0, settle_after=5.0)
+    # Generous boot delay for guest emulator to initialize and reach title screen
+    print(f"[{mode}] Waiting for guest boot (30s)...", flush=True)
+    time.sleep(30.0)
+    wait_for_screen_ready(display, timeout=45.0, settle_after=3.0)
     boot_shot = screenshots_dir / f"switch-{mode}-boot.png"
     capture_screenshot(boot_shot, display)
-    print(f"[{mode}] Captured {boot_shot.name}", flush=True)
+    print(f"[{mode}] Captured {boot_shot.name} (brightness={get_screen_brightness(display):.1f})", flush=True)
 
     for name, action, argument, settle in steps:
         scaled_arg = argument
@@ -247,12 +262,12 @@ def drive_scenario(
 
         # Scale settle times for emulator clock (~2.5x slower than desktop PC)
         effective_settle = (settle * speed_factor) if settle else 0.0
-        print(f"[{mode}] Step {name}: {action} {scaled_arg} (effective_settle={effective_settle:.1f}s)", flush=True)
+        print(f"[{mode}] Step {name}: {action} {scaled_arg} (settle={effective_settle:.1f}s)", flush=True)
 
         # Before clicks or keys, ensure the screen is ready and not black
         if action in ("click", "key"):
             if is_screen_loading(display):
-                print(f"[{mode}] Screen is loading; waiting for screen ready before {name}...", flush=True)
+                print(f"[{mode}] Screen is in loading transition; waiting for render before {name}...", flush=True)
                 wait_for_screen_ready(display, timeout=90.0, settle_after=3.0)
 
         if action == "story-until":
@@ -292,15 +307,9 @@ def drive_scenario(
         else:
             do_step(display, action, scaled_arg, effective_settle)
 
-        # After navigation clicks that trigger transitions, wait for the destination screen to finish loading
-        if action == "click" and name in ("card-ok", "profile-confirm", "single-player", "campaigns", "wallace-marker", "scenario-1"):
-            print(f"[{mode}] Waiting for screen transition after {name}...", flush=True)
-            time.sleep(3.0)
-            wait_for_screen_ready(display, timeout=90.0, settle_after=3.0)
-
         step_shot = screenshots_dir / f"switch-{mode}-{name}.png"
         capture_screenshot(step_shot, display)
-        print(f"[{mode}] Captured {step_shot.name}", flush=True)
+        print(f"[{mode}] Captured {step_shot.name} (brightness={get_screen_brightness(display):.1f})", flush=True)
         results["completed_steps"].append(name)
 
     results["success"] = True

@@ -218,7 +218,7 @@ def check_preflight(keys_path: Path = REPO_ROOT / PROD_KEYS_DEFAULT) -> None:
 
 def main(argv: list | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--run-seconds", type=int, default=55, help="how long to run the emulator under test (seconds)")
+    parser.add_argument("--run-seconds", type=int, default=600, help="how long to run the emulator under test (seconds)")
     parser.add_argument("--mode", choices=["native", "gs"], default="native", help="rendering mode: native or gs (default: native)")
     parser.add_argument("--scenario", choices=["campaign", "campaign-auto", "smoke"], default="campaign-auto", help="scenario to drive (default: campaign-auto)")
     parser.add_argument("--jobs", type=int, default=DEFAULT_JOBS, help="CPU quota allocated to emulator container (default: 8)")
