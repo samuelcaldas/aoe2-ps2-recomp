@@ -65,6 +65,11 @@ public:
         }
         padUpdate(&s_switchPad);
         const uint64_t keys = padGetButtons(&s_switchPad);
+        static uint64_t s_previous_keys = 0;
+        if (keys != s_previous_keys) {
+            std::cerr << "[host-pad] switch buttons=0x" << std::hex << keys << std::dec << std::endl;
+            s_previous_keys = keys;
+        }
         const HidAnalogStickState lstick = padGetStickPos(&s_switchPad, 0);
         const HidAnalogStickState rstick = padGetStickPos(&s_switchPad, 1);
 

@@ -161,23 +161,30 @@ def wait_for_screen_ready(display: str, timeout: float = 90.0, settle_after: flo
     return False
 
 
-def get_screen_text(display: str) -> str:
-    """Return lowercase OCR text extracted from current screen."""
-    tmp_path = Path("/tmp/screen_ocr.png")
-    if not capture_screenshot(tmp_path, display):
+import re
+
+def get_emulator_fps(display: str) -> str:
+    """Read emulator FPS from Ryujinx window title."""
+    win = find_window(display, timeout=2.0)
+    if not win:
         return ""
-    try:
-        out = subprocess.check_output(
-            ["tesseract", str(tmp_path), "stdout", "--psm", "6"],
-            stderr=subprocess.DEVNULL,
-            timeout=5.0,
-        ).decode("utf-8", errors="ignore")
-        return out.lower()
-    except Exception:
-        return ""
+    res = subprocess.run(
+        ["xdotool", "getwindowname", win],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "DISPLAY": display},
+    )
+    title = res.stdout.strip()
+    match = re.search(r"FPS[:\s]+([0-9.]+)", title, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    match = re.search(r"([0-9.]+)\s*FPS", title, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    return ""
 
 
-def send_pad_button(display: str, btn: str, duration: float = 0.25) -> None:
+def send_pad_button(display: str, btn: str, duration: float = 0.35) -> None:
     """Send gamepad button / D-pad arrow to Ryujinx window."""
     env = {**os.environ, "DISPLAY": display}
     win = find_window(display, timeout=5.0)
@@ -197,38 +204,40 @@ def send_pad_button(display: str, btn: str, duration: float = 0.25) -> None:
     }
     key = btn_map.get(btn.lower(), btn)
     if win:
-        subprocess.run(["xdotool", "windowfocus", win], env=env)
-        subprocess.run(["xdotool", "keydown", "--window", win, key], env=env)
-        subprocess.run(["xdotool", "keydown", key], env=env)
-        time.sleep(duration)
-        subprocess.run(["xdotool", "keyup", "--window", win, key], env=env)
-        subprocess.run(["xdotool", "keyup", key], env=env)
-    else:
-        subprocess.run(["xdotool", "keydown", key], env=env)
-        time.sleep(duration)
-        subprocess.run(["xdotool", "keyup", key], env=env)
+        subprocess.run(["xdotool", "windowfocus", "--sync", win], env=env)
+    subprocess.run(["xdotool", "keydown", key], env=env)
+    time.sleep(duration)
+    subprocess.run(["xdotool", "keyup", key], env=env)
+
+
+def to_window_coords(point: tuple[float, float]) -> tuple[int, int]:
+    """Map logical 640x448 coordinates to Ryujinx 1280x760 window coordinates."""
+    wx, wy = to_window(point, (1280, 720))
+    # Account for 35px Ryujinx menu bar
+    return int(round(wx)), int(round(wy + 35))
+
+
+def do_click(display: str, wx: int, wy: int, duration: float = 0.4) -> None:
+    """Execute a mouse click at window coordinates on the display."""
+    env = {**os.environ, "DISPLAY": display}
+    win = find_window(display, timeout=5.0)
+    if win:
+        subprocess.run(["xdotool", "windowfocus", "--sync", win], env=env)
+    subprocess.run(["xdotool", "mousemove", str(wx), str(wy)], env=env)
+    time.sleep(0.6)
+    subprocess.run(["xdotool", "mousedown", "1"], env=env)
+    time.sleep(duration)
+    subprocess.run(["xdotool", "mouseup", "1"], env=env)
 
 
 def is_memory_card_busy(display: str) -> bool:
     """Check if memory card is still displaying '---KB' (busy dashes)."""
-    txt = get_screen_text(display)
-    if "---kb" in txt:
-        return True
-    if "space left" in txt:
-        return False
-    return False
+    return is_screen_loading(display)
 
 
 def wait_for_card_ready(display: str, timeout: float = 60.0, settle_after: float = 3.0) -> bool:
-    """Wait until memory card check completes (not showing '---KB')."""
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if not is_memory_card_busy(display):
-            if settle_after > 0:
-                time.sleep(settle_after)
-            return True
-        time.sleep(1.0)
-    return False
+    """Wait until memory card check completes."""
+    return wait_for_screen_ready(display, timeout=timeout, settle_after=settle_after)
 
 
 def follow_guest_event(
@@ -256,93 +265,159 @@ def follow_guest_event(
             if now >= deadline:
                 return False
             if on_wait is not None:
-                if not chunk or (now - last_action >= max_interval_seconds):
+                if now - last_action >= max_interval_seconds:
                     on_wait()
                     last_action = time.monotonic()
                 else:
-                    time.sleep(0.05)
+                    time.sleep(min(0.2, max(0.0, deadline - now)))
             else:
                 if not chunk:
                     time.sleep(min(1.0, max(0.0, deadline - now)))
 
 
-def do_step(display: str, action: str, argument, settle: float, step_name: str = "") -> None:
-    """Execute a scenario action via native controller buttons / arrows."""
-    if step_name in ("key-return-1", "key-return-2", "osk-letter-a"):
-        send_pad_button(display, "cross", 0.3)
-    elif step_name in ("osk-enter", "profile-name-enter"):
-        send_pad_button(display, "start", 0.3)
+def do_step(display: str, action: str, argument, settle: float, step_name: str = "", log_path: Path | None = None) -> None:
+    """Execute a scenario action via native controller buttons / arrows and calibrated clicks."""
+    env = {**os.environ, "DISPLAY": display}
+    win = find_window(display, timeout=5.0)
+    if win:
+        subprocess.run(["xdotool", "windowfocus", "--sync", win], env=env)
+
+    if step_name in ("key-return-1", "key-return-2"):
+        send_pad_button(display, "start", 0.35)
+        time.sleep(0.5)
+        send_pad_button(display, "cross", 0.35)
+    elif step_name in ("osk-letter-a", "osk-enter"):
+        time.sleep(0.5)
+        send_pad_button(display, "start", 0.35)
     elif step_name == "card-ok":
-        wait_for_card_ready(display, timeout=45.0, settle_after=2.0)
-        send_pad_button(display, "cross", 0.3)
-    elif step_name in ("profile-new-player", "profile-name-field", "profile-name-a", "profile-name-o", "profile-name-k"):
-        send_pad_button(display, "cross", 0.3)
-    elif step_name in ("profile-submit", "profile-confirm"):
-        # On New Player dialog, move down from Name field to buttons, then left to OK button, then Cross
-        for _ in range(3):
-            txt = get_screen_text(display)
-            if "new player" not in txt:
-                break
-            send_pad_button(display, "down", 0.3)
-            time.sleep(0.4)
-            send_pad_button(display, "left", 0.3)
-            time.sleep(0.4)
-            send_pad_button(display, "cross", 0.3)
-            time.sleep(1.5)
-        # Confirm save prompt (Yes is default/left)
-        send_pad_button(display, "cross", 0.3)
+        wait_for_screen_ready(display, timeout=45.0, settle_after=2.0)
+        # Select Player list is shown with "1. New Player" highlighted.
+        time.sleep(1.0)
+        wx, wy = to_window_coords((251, 312))
+        do_click(display, wx, wy, 0.4)
+        time.sleep(0.5)
+        send_pad_button(display, "cross", 0.4)
+    elif step_name == "profile-new-player":
+        # New Player button / dialog
+        time.sleep(1.5)
+        wx, wy = to_window_coords((251, 350))
+        do_click(display, wx, wy, 0.4)
+        time.sleep(0.5)
+        send_pad_button(display, "cross", 0.4)
+    elif step_name == "profile-name-field":
+        # Click Name text field to open OSK
+        time.sleep(1.5)
+        wx, wy = to_window_coords((335, 237))
+        do_click(display, wx, wy, 0.4)
+        time.sleep(0.5)
+        send_pad_button(display, "cross", 0.4)
         time.sleep(2.0)
-        # Select player from list to load into main menu
-        txt = get_screen_text(display)
-        if "select player" in txt:
-            send_pad_button(display, "cross", 0.3)
-    elif step_name == "profile-settle":
-        # Make sure we reach the main menu
-        for _ in range(6):
-            txt = get_screen_text(display)
-            if "single player" in txt or "multiplayer" in txt:
-                print(f"[{display}] Main Menu reached!", flush=True)
-                break
-            if "new player" in txt:
-                send_pad_button(display, "down", 0.3)
-                time.sleep(0.4)
-                send_pad_button(display, "left", 0.3)
-                time.sleep(0.4)
-                send_pad_button(display, "cross", 0.3)
-            elif "select player" in txt:
-                send_pad_button(display, "cross", 0.3)
-            else:
-                send_pad_button(display, "cross", 0.3)
-            time.sleep(2.0)
-    elif step_name == "single-player":
+        # Type character 'a' (cursor starts at Row 1, Col 1 'a')
+        send_pad_button(display, "cross", 0.4)
+        time.sleep(0.4)
+        # Navigate down 3 rows and right 3 columns to hit ENTER on the OSK
         for _ in range(3):
-            txt = get_screen_text(display)
-            if "campaign" in txt or "random map" in txt:
-                print(f"[native] Single Player submenu open!", flush=True)
-                break
-            send_pad_button(display, "cross", 0.3)
-            time.sleep(2.0)
-            txt = get_screen_text(display)
-            if "campaign" in txt or "random map" in txt:
-                break
-            send_pad_button(display, "circle", 0.3)
-            time.sleep(0.5)
             send_pad_button(display, "down", 0.3)
-            time.sleep(0.5)
-            send_pad_button(display, "cross", 0.3)
-            time.sleep(2.0)
-    elif step_name in ("campaigns", "wallace-marker", "scenario-1"):
-        send_pad_button(display, "cross", 0.3)
-    elif step_name in ("briefing", "briefing-next", "mission-loading", "brief-3", "brief-4", "brief-5", "mission", "mission-start"):
-        send_pad_button(display, "cross", 0.3)
+            time.sleep(0.2)
+        for _ in range(3):
+            send_pad_button(display, "right", 0.3)
+            time.sleep(0.2)
+        send_pad_button(display, "cross", 0.4)
+        time.sleep(1.5)
+    elif step_name in ("profile-name-a", "profile-name-o", "profile-name-k"):
+        time.sleep(0.5)
+    elif step_name == "profile-name-enter":
+        time.sleep(1.5)
+    elif step_name == "profile-submit":
+        # Screen is back on New Player dialog with Name: [ a ] (screen-native-*-047.png).
+        # Submit the dialog by clicking [ OK ] directly at (245, 315) -> (535, 541).
+        time.sleep(1.0)
+        wx, wy = to_window_coords((245, 315))
+        do_click(display, wx, wy, 0.4)
+        time.sleep(0.8)
+        # Send Return key as secondary confirmation
+        subprocess.run(["xdotool", "key", "Return"], env=env)
+        time.sleep(1.0)
+    elif step_name == "profile-confirm":
+        # "Save to Memory Card? [Yes] [No]" prompt
+        time.sleep(1.5)
+        wx, wy = to_window_coords((245, 315))
+        do_click(display, wx, wy, 0.4)
+        time.sleep(0.5)
+        send_pad_button(display, "cross", 0.4)
+        time.sleep(1.0)
+    elif step_name == "profile-settle":
+        # Return to Select Player list with player "1. a" selected. Click and Cross to enter Main Menu.
+        time.sleep(2.0)
+        wx, wy = to_window_coords((251, 312))
+        do_click(display, wx, wy, 0.4)
+        time.sleep(0.5)
+        send_pad_button(display, "cross", 0.4)
+        time.sleep(3.0)
+    elif step_name == "single-player":
+        # Main Menu -> Single Player
+        wait_for_screen_ready(display, timeout=30.0, settle_after=2.0)
+        wx, wy = 890, 172
+        do_click(display, wx, wy, 0.4)
+        time.sleep(0.5)
+        send_pad_button(display, "cross", 0.4)
+        time.sleep(2.0)
+    elif step_name == "campaigns":
+        # Single Player -> Campaigns
+        wait_for_screen_ready(display, timeout=30.0, settle_after=2.0)
+        wx, wy = 890, 168
+        do_click(display, wx, wy, 0.4)
+        time.sleep(0.5)
+        send_pad_button(display, "cross", 0.4)
+        time.sleep(2.0)
+    elif step_name == "wallace-marker":
+        # Campaigns -> William Wallace
+        wait_for_screen_ready(display, timeout=30.0, settle_after=2.0)
+        wx, wy = to_window_coords((221, 77))
+        do_click(display, wx, wy, 0.4)
+        time.sleep(0.5)
+        send_pad_button(display, "cross", 0.4)
+        time.sleep(0.5)
+        send_pad_button(display, "start", 0.4)
+        time.sleep(2.0)
+    elif step_name == "scenario-1":
+        # Scenario 1 -> Start
+        wait_for_screen_ready(display, timeout=30.0, settle_after=2.0)
+        wx, wy = to_window_coords((183, 57))
+        do_click(display, wx, wy, 0.4)
+        time.sleep(0.5)
+        send_pad_button(display, "cross", 0.4)
+        time.sleep(0.5)
+        send_pad_button(display, "start", 0.4)
+        time.sleep(5.0)
+    elif step_name in (
+        "briefing",
+        "briefing-next",
+        "mission-loading",
+        "brief-3",
+        "brief-4",
+        "brief-5",
+        "mission",
+        "mission-start",
+    ):
+        time.sleep(1.0)
+        send_pad_button(display, "cross", 0.4)
+        time.sleep(0.5)
+        send_pad_button(display, "start", 0.4)
     elif step_name.startswith("story-advance"):
-        send_pad_button(display, "cross", 0.3)
+        time.sleep(0.5)
+        send_pad_button(display, "cross", 0.4)
+        time.sleep(0.5)
+        send_pad_button(display, "start", 0.4)
     elif action == "pad":
-        send_pad_button(display, str(argument), 0.3)
+        send_pad_button(display, str(argument), 0.35)
     elif action == "key":
-        send_pad_button(display, str(argument), 0.3)
+        send_pad_button(display, str(argument), 0.35)
     elif action == "click":
-        send_pad_button(display, "cross", 0.3)
+        if isinstance(argument, (tuple, list)):
+            wx, wy = to_window_coords(argument)
+            do_click(display, wx, wy, 0.4)
+        send_pad_button(display, "cross", 0.4)
     elif action == "wait":
         pass
     time.sleep(settle)
@@ -400,6 +475,7 @@ def drive_scenario(
                 story_clicks += 1
                 send_pad_button(display, "cross", 0.3)
                 send_pad_button(display, "start", 0.3)
+                do_click(display, 655, 395, 0.2)
                 shot = screenshots_dir / f"switch-{mode}-story-{story_clicks}.png"
                 capture_screenshot(shot, display)
                 print(f"[{mode}] Captured {shot.name}", flush=True)
@@ -431,7 +507,7 @@ def drive_scenario(
             else:
                 sys.stderr.write(f"WARNING: [map-submit] not reached before timeout\n")
         else:
-            do_step(display, action, argument, effective_settle, step_name=name)
+            do_step(display, action, argument, effective_settle, step_name=name, log_path=log_path)
             if name == "profile-settle":
                 wait_for_screen_ready(display, timeout=45.0, settle_after=4.0)
             elif name == "map-stability":
@@ -446,7 +522,9 @@ def drive_scenario(
 
         step_shot = screenshots_dir / f"switch-{mode}-{name}.png"
         capture_screenshot(step_shot, display)
-        print(f"[{mode}] Captured {step_shot.name} (brightness={get_screen_brightness(display):.1f})", flush=True)
+        fps = get_emulator_fps(display)
+        fps_info = f" | Emulator FPS: {fps}" if fps else ""
+        print(f"[{mode}] Captured {step_shot.name} (brightness={get_screen_brightness(display):.1f}{fps_info})", flush=True)
         results["completed_steps"].append(name)
 
     results["success"] = results.get("map_submitted", False) if scenario_name in ("campaign", "campaign-auto") else True

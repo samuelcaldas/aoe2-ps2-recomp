@@ -166,7 +166,9 @@ def emulator_script(
                 "DRIVER_PID=$!",
                 f"for shot in $(seq 1 {shots}); do sleep {interval}; ",
                 f"ts=$(date +%Y%m%d-%H%M%S); shot_num=$(printf '%03d' \"$shot\"); ",
-                f"xwd -root -display {DISPLAY} 2>/dev/null | convert xwd:- {shots_dir}/screen-{mode}-${{ts}}-${{shot_num}}.png 2>/dev/null || true; done",
+                f"xwd -root -display {DISPLAY} 2>/dev/null | convert xwd:- {shots_dir}/screen-{mode}-${{ts}}-${{shot_num}}.png 2>/dev/null || true; ",
+                'if ! kill -0 $DRIVER_PID 2>/dev/null; then echo "Driver process finished; ending capture loop."; sleep 2; break; fi; ',
+                "done",
                 f"if kill -0 $EMU_PID 2>/dev/null; then echo yes > {evidence}/alive.txt; ",
                 f"else echo no > {evidence}/alive.txt; fi",
                 "kill $DRIVER_PID 2>/dev/null || true",
@@ -192,7 +194,9 @@ def evidence_passed(
     if not alive:
         return False
     if mode == "native":
-        if "fallback to GS is prohibited in native mode" in log:
+        if ("fallback to GS is prohibited in native mode" in log
+                or "presentation: guest framebuffer fallback" in log
+                or "GS::latchHostPresentationFrame" in log):
             return False
     if classify_run_log(log).verdict is not RunVerdict.PROGRESSING:
         return False
@@ -202,12 +206,10 @@ def evidence_passed(
     if frames.real_frames < 2 or not frames.changed:
         return False
     if scenario in ("campaign", "campaign-auto"):
-        has_map_submit = "[map-submit]" in log
-        has_map_screenshot = any("map" in s and f"-{mode}-" in s for s in screenshots)
-        if not (has_map_submit or has_map_screenshot):
-            return False
-        if mode == "native" and not has_map_submit:
-            return False
+        # A log marker, a filename, and changing pixels cannot establish that
+        # the actual mission map is visible. Campaign acceptance requires
+        # visual inspection; do not report an automated PASS on that basis.
+        return False
     return True
 
 

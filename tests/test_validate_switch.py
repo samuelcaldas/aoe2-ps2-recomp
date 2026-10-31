@@ -135,9 +135,9 @@ class TestSwitchValidationScript(unittest.TestCase):
                 True, PROGRESSING_LOG, shots, magick, scenario="campaign-auto"
             ))
 
-            # Progressing log WITH [map-submit] should pass
+            # A map marker and changing frames do not prove a visible map.
             map_log = PROGRESSING_LOG + "[map-submit] call=1 area=0x1000\n"
-            self.assertTrue(validation.evidence_passed(
+            self.assertFalse(validation.evidence_passed(
                 True, map_log, shots, magick, scenario="campaign-auto"
             ))
 
@@ -146,6 +146,14 @@ class TestSwitchValidationScript(unittest.TestCase):
             self.assertFalse(validation.evidence_passed(
                 True, prohibited_fallback_log, shots, magick, mode="native", scenario="campaign-auto"
             ))
+
+    def test_native_rejects_observed_guest_framebuffer_and_gs_paths(self):
+        shots = [f"screen-native-{index}.png" for index in (1, 2)]
+        magick = FakeImageMagick(
+            {name: histogram(REAL_COLORS) for name in shots}, metric="5000"
+        )
+        for marker in ("presentation: guest framebuffer fallback", "GS::latchHostPresentationFrame"):
+            self.assertFalse(validation.evidence_passed(True, PROGRESSING_LOG + marker, shots, magick))
 
     def test_rejects_screenshots_without_mode_tagging(self):
         with tempfile.TemporaryDirectory() as directory:
