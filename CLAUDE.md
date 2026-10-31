@@ -1,12 +1,57 @@
-# CLAUDE.md
+# Repository Guidelines
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 `AGENTS.md` and `GEMINI.md` are symlinks to this file — edits here apply to all agents.
 
+## Contributor Quick Reference
+
+### Project structure
+
+The C++20 host code is organized by subsystem: `core/`, `runtime/`, `input/`,
+`renderer/`, device modules such as `pad/` and `gpu/`, and platform code under
+`platform/`. Game-specific replacements live in `game_hooks/`. Python tooling
+is in `tools/`; Python tests are in `tests/` and C++ tests in `tests/cpp/`.
+Documentation is indexed by `docs/README.md`. Owned game files and generated
+code are local, ignored artifacts; the provenance rules below govern them.
+
+### Build and test
+
+Run commands from the repository root. Use Debug builds and verbose output:
+
+```bash
+python3 -m unittest discover -s tests
+python3 -m unittest tests.test_validate_switch
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+cmake --build build -v
+ctest --test-dir build --output-on-failure -V
+python3 tools/docker_build.py --platform switch
+python3 tools/validate_switch.py --mode native --scenario campaign-auto
+```
+
+The first two commands run Python tests; CMake and CTest build and test the host
+scaffolding. The final commands build and inspect Switch in Docker. Switch builds
+already enable runtime diagnostics; the `--diagnostics` flag is desktop-only.
+Use `python3 tools/run_desktop_probe_build.py --jobs N` for the full desktop
+recompilation probe. Record build and validation logs as described below.
+
+### Style, tests, and reviews
+
+Follow `.editorconfig`: four spaces by default, two for JSON/YAML, UTF-8 and LF.
+No linter is configured. Match existing C++ namespaces and Python naming; name
+Python test modules `test_*.py`. Add focused tests for behavior changes and run
+the relevant test suite. Recent commits use Conventional Commit subjects, such
+as `fix(switch): record navigation diagnostics`. Pull requests should explain
+the behavior change, list validation and limitations, link relevant issues, and
+include screenshots when evaluating visible output. Do not claim gameplay or
+native rendering from a log marker alone; inspect the actual frames.
+
+For the current Switch navigation and rendering limitations, see
+[`docs/switch-manual-navigation-checkpoint.md`](docs/switch-manual-navigation-checkpoint.md).
+
 ## What this is & Project Philosophy
 
-Bootstrap foundation for a native static-recompilation port of *Age of Empires II: The Age of Kings*, PS2 PAL (`SLES-50282`, `AOK.ELF`, SHA-1 `f478e19f2059d52899b691483ef5c7522e30e17c`). Primary target: Nintendo Switch homebrew (libnx + deko3d). Bring-up order: desktop Linux x86-64 (validation host) → ARM64 portability gate → Switch. Nothing is playable yet. The full recompilation compiles and links on desktop x86-64: all generated units plus the pinned upstream PS2Recomp runtime build `desktop_runtime_probe` (see `docs/desktop-runtime-probe.md` §6), which has never executed guest code. It initializes headless (memory, subsystems, ELF load, entry point resolved; `ctest -R desktop_runtime_probe_init`) without calling `run()`. Next milestone: the ELF loads code overlays from disc at run time (eight executable PT_LOAD segments with `filesz = 0`, see `docs/desktop-runtime-probe.md` §7.1); identify them and recompile them through the same guarded pipeline — **without adding game-specific stubs**. Build it only with `python3 tools/run_desktop_probe_build.py --jobs N` (memory-capped systemd scope, C locale).
+Bootstrap foundation for a native static-recompilation port of *Age of Empires II: The Age of Kings*, PS2 PAL (`SLES-50282`, `AOK.ELF`, SHA-1 `f478e19f2059d52899b691483ef5c7522e30e17c`). Primary target: Nintendo Switch homebrew. Bring-up proceeds through desktop Linux x86-64 and ARM64 validation. Playable gameplay is not established. The desktop initialization probe loads the ELF and resolves its entry point without calling `run()`; separate game-runtime runs have executed guest code. The ELF also loads code overlays from disc at runtime (see `docs/desktop-runtime-probe.md` §7.1). Preserve the guarded generation pipeline without adding game-specific stubs. Build the full desktop probe only with `python3 tools/run_desktop_probe_build.py --jobs N` (memory-capped systemd scope, C locale).
 
 ### 1. Why PS2 Recompilation instead of PC Decompilation?
 - **Console-Native Architecture & Binary Structure**: The PS2 port was engineered by KCET (Konami Computer Entertainment Tokyo). The binary is a self-contained, statically-linked MIPS ELF (`AOK.ELF`) with a clean abstraction layer (the `kt_*` hardware libraries for graphics, sound, file I/O, memory card, and peripherals). Unlike the 1999 PC Win32 release—which is tightly bound to legacy DirectDraw, Win32 message loops, legacy GDI, DirectPlay, and x86 inline assembly—the PS2 codebase was already structured for a closed console runtime.
@@ -56,7 +101,7 @@ All bring-up, compilation, and testing across all platforms MUST use **Debug bui
 - **Debug Build Mandate**: Always compile with `-DCMAKE_BUILD_TYPE=Debug` (or `--diagnostics` / `assembleDebug`). Never use uninstrumented release builds for bring-up or troubleshooting. Debug symbols (`-g`), assertions (`assert()` active; never `-DNDEBUG`), and stack traces must be preserved so crashes, illegal memory access, or missing functions fail fast and are immediately diagnosable.
 - **High Output & Verbosity**:
   - Build verbosity: Always pass `-v` to `cmake --build` / `ninja` and use `ctest --output-on-failure -V` (verbose mode).
-  - Runtime diagnostics: Pass `--diagnostics` (`-DAOE2_RUNTIME_DIAGNOSTICS=ON`) to enable aggressive PS2Recomp runtime logging (`PS2X_ENABLE_AGRESSIVE_LOGS=ON`), IOP RPC traces (`PS2X_ENABLE_IOP_RPC_TRACE=ON`), EE DECI2 TTY output (`AOE2_GAME_TTY=ON`), and `StopOnMissingFunction`.
+  - Runtime diagnostics: Enable `-DAOE2_RUNTIME_DIAGNOSTICS=ON` for aggressive PS2Recomp runtime logging (`PS2X_ENABLE_AGRESSIVE_LOGS=ON`), IOP RPC traces (`PS2X_ENABLE_IOP_RPC_TRACE=ON`), EE DECI2 TTY output (`AOE2_GAME_TTY=ON`), and `StopOnMissingFunction`. The Docker build script accepts `--diagnostics` for desktop; Switch builds enable diagnostics without that flag.
   - Rich trace variables: Utilize runtime environment variables for high output capture:
     - `AOE2_CALL_TRACE_FIRST=N`: Log first N calls per guest function (default 3).
     - `AOE2_CALL_TRACE_MEM=1`: Hex dump 16 bytes at `$a0` arguments.
@@ -70,7 +115,7 @@ Pipeline: user-owned `AOK.ELF` → Ghidra headless (`MIPS:LE:64:64-32addr`) + PS
 Layers (C++ namespaces `aoe2::<layer>`, headers under `<layer>/include/aoe2/<layer>/`, all compiled into the single static lib `aoe2_interfaces` in `CMakeLists.txt`):
 - `core/` — single source of truth for target metadata. `core/target.py` (`SINGLE_TARGET`) is imported by every Python tool; `core/include/aoe2/core/target.hpp` mirrors it for C++. Keep both in sync. No host OS dependencies.
 - `runtime/` — `GuestMemory` (64 MiB EE RAM) and the abstract `PlatformServices` (logging, clock).
-- `platform/desktop/` — concrete `PlatformServices` + `ActionRecorderInputSink`; `src/main.cpp` is the `aoe2_smoke_test` ctest executable. Future `platform/switch/`.
+- `platform/desktop/` — concrete `PlatformServices` + `ActionRecorderInputSink`; `src/main.cpp` is the `aoe2_smoke_test` ctest executable. `platform/switch/` and `platform/android/` contain target integration.
 - `input/` — platform-neutral `ActionType`/`ActionEvent`/`InputSink`. The PS2 game supports a USB mouse; on Switch handheld it is replaced by the touchscreen: `TouchGestureTranslator` (+ `SurfaceMapping`, host → 640x448 guest logical pixels) turns touches into pointer actions, and `GuestMouseAdapter` folds them into the per-frame mouse state the recompiled game polls. Docked, a USB mouse and keyboard on the dock mirror the PS2 peripherals: `UsbMouseTranslator` (relative reports → the same pointer actions) and `GuestKeyboardAdapter` (USB HID boot-protocol reports); `SourcesFor(OperationMode)` picks the sources per mode. No USB/IOP/SIF emulation (see `docs/architecture.md` §6). Replacements hook the game's KCET hardware layer (`kt_mouse`, `kt_keybd`, `kt_gpu`, ...) via runtime function replacement, with guest addresses resolved into ignored files — see `docs/adr/0001-kcet-boundary-replacement.md`.
 - `renderer/` — `IRenderer` + `NullRenderer` (headless). Design mandate: replace rendering at the high level (sprite/tile/UI draws mapped to `IRenderer`), **not** low-level GS emulation.
 - `tools/` — Python 3 stdlib-only, fail-fast scripts; each resolves `REPO_ROOT` and inserts it into `sys.path` to import `core.target`.
