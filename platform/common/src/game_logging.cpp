@@ -61,6 +61,19 @@ void initialize_game_logging() {
     consoleDebugInit(debugDevice_SVC);
     // Also redirect std::cout to std::cerr so standard stream output reaches debugDevice_SVC
     std::cout.rdbuf(std::cerr.rdbuf());
+    std::set_terminate([] {
+        std::cerr << "[terminate] unhandled exception\n";
+        try {
+            if (const auto error = std::current_exception()) std::rethrow_exception(error);
+        } catch (const std::system_error& error) {
+            std::cerr << "[terminate] system_error " << error.code() << ": " << error.what() << '\n';
+        } catch (const std::exception& error) {
+            std::cerr << "[terminate] exception: " << error.what() << '\n';
+        } catch (...) {
+            std::cerr << "[terminate] non-standard exception\n";
+        }
+        std::abort();
+    });
 #else
     std::set_terminate([] {
         std::cerr << "[terminate] unhandled exception\n";

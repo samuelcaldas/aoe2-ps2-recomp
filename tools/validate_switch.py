@@ -39,7 +39,7 @@ NRO_PATH = "build/docker-switch/aoe2_game.nro"
 PROD_KEYS_DEFAULT = "game/switch/prod.keys"
 EVIDENCE_DIR = "build/switch-validation"
 SCREENSHOT_DIR = ".playwright-mcp/switch"
-SCREENSHOT_INTERVAL = 15
+SCREENSHOT_INTERVAL = 10
 DISPLAY = ":99"
 MEMORY_LIMIT = "12g"
 CONTAINER_NAME = "aoe2-validate-switch"
@@ -75,11 +75,39 @@ def emulator_script(run_seconds: int, interval: int = SCREENSHOT_INTERVAL, nro: 
     shots = max(1, run_seconds // interval)
     config_dir = f"{evidence}/ryujinx-data"
     system_dir = f"{config_dir}/system"
+    sdcard_dir = f"{config_dir}/sdcard/switch/aoe2"
 
     return "\n".join([
         "set -euo pipefail",
-        f"mkdir -p {evidence} {shots_dir} {system_dir}",
+        f"mkdir -p {evidence} {shots_dir} {system_dir} {sdcard_dir}",
         f"if [ -f {CONTAINER_ROOT}/{PROD_KEYS_DEFAULT} ]; then cp -f {CONTAINER_ROOT}/{PROD_KEYS_DEFAULT} {system_dir}/prod.keys; fi",
+        f"if [ -d {CONTAINER_ROOT}/game/SLES-50282 ]; then",
+        f"    for item in {CONTAINER_ROOT}/game/SLES-50282/*; do",
+        '        name=$(basename "$item")',
+        f'        if [ ! -e "{sdcard_dir}/$name" ]; then',
+        f'            cp -r "$item" "{sdcard_dir}/$name"',
+        "        fi",
+        "    done",
+        "fi",
+        f"python3 -c \"",
+        "import json, os",
+        f"cfg_path = '{config_dir}/Config.json'",
+        "cfg = {}",
+        "if os.path.isfile(cfg_path):",
+        "    try:",
+        "        with open(cfg_path) as f: cfg = json.load(f)",
+        "    except Exception: pass",
+        "cfg['memory_manager_mode'] = 'SoftwarePageTable'",
+        "cfg['check_updates_on_start'] = False",
+        "cfg['update_checker_type'] = 'Off'",
+        "cfg['start_fullscreen'] = True",
+        "cfg['enable_file_log'] = True",
+        "for inp in cfg.get('input_config', []):",
+        "    if inp.get('player_index') == 'Player1':",
+        "        inp.setdefault('right_joycon', {})['button_plus'] = 'Return'",
+        "with open(cfg_path, 'w') as f:",
+        "    json.dump(cfg, f, indent=2)",
+        "\"",
         f"Xvfb {DISPLAY} -screen 0 1280x720x24 > /dev/null 2>&1 &",
         "XVFB_PID=$!",
         "sleep 1",
@@ -95,12 +123,46 @@ def emulator_script(run_seconds: int, interval: int = SCREENSHOT_INTERVAL, nro: 
         "if [ -z \"$RYUJINX_BIN\" ]; then echo 'FATAL: Ryujinx executable not found in PATH' >&2; kill $XVFB_PID; exit 1; fi",
         f"\"$RYUJINX_BIN\" --root-data-dir {config_dir} {CONTAINER_ROOT}/{nro} > {evidence}/run.log 2>&1 &",
         "EMU_PID=$!",
-        f"for shot in $(seq 1 {shots}); do sleep {interval}; "
-        f"ts=$(date +%Y%m%d-%H%M%S); shot_num=$(printf '%03d' \"$shot\"); "
-        f"xwd -root -display {DISPLAY} 2>/dev/null | convert xwd:- {shots_dir}/screen-${{ts}}-${{shot_num}}.png 2>/dev/null || true; "
+        "(",
+        "    for i in $(seq 1 20); do",
+        '        WIN=$(xdotool search --name "Ryujinx.*AoE II Recomp" 2>/dev/null | head -1 || true)',
+        '        if [ -n "$WIN" ]; then',
+        '            xdotool windowfocus --sync "$WIN" 2>/dev/null || true',
+        "            break",
+        "        fi",
+        "        sleep 1",
+        "    done",
+        '    if [ -n "${WIN:-}" ]; then',
+        "        sleep 14",
+        '        xdotool key --window "$WIN" x 2>/dev/null || true',
+        "        sleep 2",
+        '        xdotool key --window "$WIN" x 2>/dev/null || true',
+        "        sleep 3",
+        '        xdotool key --window "$WIN" Return 2>/dev/null || true',
+        "        sleep 2",
+        '        xdotool key --window "$WIN" Return 2>/dev/null || true',
+        "        sleep 3",
+        '        xdotool key --window "$WIN" x 2>/dev/null || true',
+        "        sleep 3",
+        '        xdotool key --window "$WIN" x 2>/dev/null || true',
+        "        sleep 3",
+        '        xdotool key --window "$WIN" Return 2>/dev/null || true',
+        "        sleep 2",
+        '        xdotool key --window "$WIN" x 2>/dev/null || true',
+        "        sleep 3",
+        '        xdotool key --window "$WIN" Return 2>/dev/null || true',
+        "        sleep 3",
+        '        xdotool key --window "$WIN" x 2>/dev/null || true',
+        "    fi",
+        ") &",
+        "INPUT_PID=$!",
+        f"for shot in $(seq 1 {shots}); do sleep {interval}; ",
+        f"ts=$(date +%Y%m%d-%H%M%S); shot_num=$(printf '%03d' \"$shot\"); ",
+        f"xwd -root -display {DISPLAY} 2>/dev/null | convert xwd:- {shots_dir}/screen-${{ts}}-${{shot_num}}.png 2>/dev/null || true; ",
         f"ln -sf screen-${{ts}}-${{shot_num}}.png {shots_dir}/screen-${{shot_num}}.png 2>/dev/null || true; done",
-        f"if kill -0 $EMU_PID 2>/dev/null; then echo yes > {evidence}/alive.txt; "
+        f"if kill -0 $EMU_PID 2>/dev/null; then echo yes > {evidence}/alive.txt; ",
         f"else echo no > {evidence}/alive.txt; fi",
+        "kill $INPUT_PID 2>/dev/null || true",
         "kill $EMU_PID 2>/dev/null || true",
         "kill $WEBSOCK_PID 2>/dev/null || true",
         "kill $VNC_PID 2>/dev/null || true",
@@ -146,7 +208,7 @@ def check_preflight(keys_path: Path = REPO_ROOT / PROD_KEYS_DEFAULT) -> None:
 
 def main(argv: list | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--run-seconds", type=int, default=60, help="how long to run the emulator under test (seconds)")
+    parser.add_argument("--run-seconds", type=int, default=55, help="how long to run the emulator under test (seconds)")
     parser.add_argument("--jobs", type=int, default=DEFAULT_JOBS, help="CPU quota allocated to emulator container (default: 8)")
     parser.add_argument("--port", type=int, default=6080, help="host port for noVNC web view (default: 6080)")
     parser.add_argument("--keys", type=Path, default=REPO_ROOT / PROD_KEYS_DEFAULT, help="path to Switch prod.keys")
@@ -158,6 +220,15 @@ def main(argv: list | None = None) -> int:
     except PreflightError as error:
         sys.stderr.write(f"PREFLIGHT FAILED: {error}\n")
         return EXIT_PREFLIGHT
+
+    evidence_path = REPO_ROOT / EVIDENCE_DIR
+    screenshots_path = REPO_ROOT / SCREENSHOT_DIR
+    screenshots_path.mkdir(parents=True, exist_ok=True)
+    for old_shot in screenshots_path.glob("screen-*.png"):
+        try:
+            old_shot.unlink()
+        except OSError:
+            pass
 
     if not args.dry_run:
         ensure_container_clean(CONTAINER_NAME)

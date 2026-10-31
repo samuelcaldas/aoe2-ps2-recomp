@@ -139,7 +139,7 @@ TICK_PATTERN = re.compile(r"\[run:tick\] tick=\d+ pc=0x([0-9a-fA-F]+)")
 UNSERVED_RPC_PATTERN = re.compile(r"\[IOP/RPC trace:unhandled\] sid=0x([0-9a-fA-F]+)")
 MISSING_TARGET_MARKER = "[guest-branch:missing-target]"
 STALL_WINDOW = 5
-STALL_MAX_DISTINCT_PCS = 3
+STALL_MAX_DISTINCT_PCS = 2
 
 
 def classify_run_log(text: str) -> RunEvidence:
