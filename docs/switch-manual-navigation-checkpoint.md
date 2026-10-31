@@ -1,5 +1,19 @@
 # Switch manual navigation checkpoint
 
+The Switch runtime now prohibits GS framebuffer presentation and accepts
+host-owned native frames. An experimental producer converts captured native
+map snapshots without a GS framebuffer; its menu and HUD regions are black,
+and no real Switch map frame has yet been validated. When no native snapshot
+is available, presentation is black. Native menu and HUD producers are still
+required. The run described below predates this change.
+
+The guest's `func_0021A960` receives source and destination rectangles and a
+source viewport before it emits drawing commands. The owner's decompilation
+(`src/render/render_viewport_21a960.cpp`) documents this boundary. It is a
+candidate for native interface composition, but texture formats, palettes,
+clipping, ordering, fills, text and frame boundaries have not been validated;
+intercepting it alone must not be described as complete menu or HUD support.
+
 2026-10-31. This is an incomplete investigation, not a gameplay pass. The
 existing NRO (`build/docker-switch/aoe2_game.nro`, SHA-256
 `5899b2d51d76ba2a3835e7771deb1ac0e3c08d2ef5bdfef055d2f6818f1adb0a`)

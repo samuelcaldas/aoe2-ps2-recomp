@@ -8,6 +8,24 @@ This plan continues the work already started across the dedicated fork `third_pa
 
 ## Current Checkpoint (2026-10-30)
 
+### Follow-up: submission identity and timing (2026-10-31)
+
+The later `scenario-campaign-auto.log` does not establish a playfield upload:
+its 394×198 indexed viewport is the minimap, while the tracked map-area
+viewport is a different object. The observer previously redirected the map
+viewport and captured its buffer when the minimap was submitted. It also
+captured after a guest function returned to C++, which can be a scheduler yield
+rather than completion. These false captures have been removed; viewport
+redirection and capture now require the submitted object to match the tracked
+playfield viewport. A focused host test covers the minimap case. This does not
+yet prove the game submits or draws the expanded playfield, nor that the black
+view is fixed. Re-run the mission with the corrected hooks and inspect actual
+terrain pixels before claiming acceptance. Switch GS presentation is disabled;
+an experimental native map-only frame provider exists, but independent native
+menu and HUD presentation must also be implemented and validated.
+At mission start, unexplored terrain may correctly be black; acceptance must
+show the hero and the revealed terrain surrounding that starting position.
+
 - Desktop Debug diagnostics and Switch Debug builds both completed after the viewport descriptor fix; the Switch NRO was regenerated.
 - A 1080p campaign run reached the map and logged ten indexed-map submissions. The live watchpoint traced the prior canary overwrite to generated `entry_0021b1c0`, the byte-fill loop. The KCET descriptor contract is `height` at `+0x38` and `width` at `+0x3c`; the native rebind had written those dimensions in the opposite order, causing a 1920-row fill. The hook now writes and validates `708` at `+0x38` and `1920` at `+0x3c`. Subsequent submissions passed the arena canaries without the previous overrun.
 - The 1920×1080 composed screenshot has the expected HUD bands, but its map area remains black. Captured 1920×708 frames are dominated by palette index 255 (`RGBA 255,255,255,0`, transparent) and index 0 (`RGBA 0,0,0,128`, semi-transparent black); the few non-background colors seen on the first submission disappear after the camera is moved. This does not yet establish whether the remaining black view is fog/camera state or a rendering-path issue. The viewport bounds and memory safety are fixed; terrain output and expanded-view input parity remain unverified.
