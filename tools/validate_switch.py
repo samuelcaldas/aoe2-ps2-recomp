@@ -68,7 +68,13 @@ class PreflightError(RuntimeError):
     """Raised when a prerequisite for the Switch validation is missing."""
 
 
-def emulator_script(run_seconds: int, interval: int = SCREENSHOT_INTERVAL, nro: str = NRO_PATH) -> str:
+def emulator_script(
+    run_seconds: int,
+    interval: int = SCREENSHOT_INTERVAL,
+    nro: str = NRO_PATH,
+    mode: str = "native",
+    scenario: str = "campaign-auto",
+) -> str:
     """Shell script run inside the container; writes raw evidence for the host to judge."""
     evidence = f"{CONTAINER_ROOT}/{EVIDENCE_DIR}"
     shots_dir = f"{CONTAINER_ROOT}/{SCREENSHOT_DIR}"
@@ -76,6 +82,7 @@ def emulator_script(run_seconds: int, interval: int = SCREENSHOT_INTERVAL, nro: 
     config_dir = f"{evidence}/ryujinx-data"
     system_dir = f"{config_dir}/system"
     sdcard_dir = f"{config_dir}/sdcard/switch/aoe2"
+    ini_mode = "native" if mode == "native" else "legacy"
 
     return "\n".join([
         "set -euo pipefail",
@@ -89,6 +96,8 @@ def emulator_script(run_seconds: int, interval: int = SCREENSHOT_INTERVAL, nro: 
         "        fi",
         "    done",
         "fi",
+        f"echo 'mode={ini_mode}' > {sdcard_dir}/map_view.ini",
+        f"export AOE2_MAP_VIEW={ini_mode}",
         f"python3 -c \"",
         "import json, os",
         f"cfg_path = '{config_dir}/Config.json'",
@@ -102,9 +111,11 @@ def emulator_script(run_seconds: int, interval: int = SCREENSHOT_INTERVAL, nro: 
         "cfg['update_checker_type'] = 'Off'",
         "cfg['start_fullscreen'] = True",
         "cfg['enable_file_log'] = True",
+        "cfg['enable_keyboard'] = True",
+        "cfg['enable_mouse'] = True",
         "for inp in cfg.get('input_config', []):",
         "    if inp.get('player_index') == 'Player1':",
-        "        inp.setdefault('right_joycon', {})['button_plus'] = 'Return'",
+        "        inp.setdefault('right_joycon', {})['button_plus'] = 'Enter'",
         "with open(cfg_path, 'w') as f:",
         "    json.dump(cfg, f, indent=2)",
         "\"",
@@ -123,45 +134,14 @@ def emulator_script(run_seconds: int, interval: int = SCREENSHOT_INTERVAL, nro: 
         "if [ -z \"$RYUJINX_BIN\" ]; then echo 'FATAL: Ryujinx executable not found in PATH' >&2; kill $XVFB_PID; exit 1; fi",
         f"\"$RYUJINX_BIN\" --root-data-dir {config_dir} {CONTAINER_ROOT}/{nro} > {evidence}/run.log 2>&1 &",
         "EMU_PID=$!",
-        "(",
-        "    for i in $(seq 1 20); do",
-        '        WIN=$(xdotool search --name "Ryujinx.*AoE II Recomp" 2>/dev/null | head -1 || true)',
-        '        if [ -n "$WIN" ]; then',
-        '            xdotool windowfocus --sync "$WIN" 2>/dev/null || true',
-        "            break",
-        "        fi",
-        "        sleep 1",
-        "    done",
-        '    if [ -n "${WIN:-}" ]; then',
-        "        sleep 14",
-        '        xdotool key --window "$WIN" x 2>/dev/null || true',
-        "        sleep 2",
-        '        xdotool key --window "$WIN" x 2>/dev/null || true',
-        "        sleep 3",
-        '        xdotool key --window "$WIN" Return 2>/dev/null || true',
-        "        sleep 2",
-        '        xdotool key --window "$WIN" Return 2>/dev/null || true',
-        "        sleep 3",
-        '        xdotool key --window "$WIN" x 2>/dev/null || true',
-        "        sleep 3",
-        '        xdotool key --window "$WIN" x 2>/dev/null || true',
-        "        sleep 3",
-        '        xdotool key --window "$WIN" Return 2>/dev/null || true',
-        "        sleep 2",
-        '        xdotool key --window "$WIN" x 2>/dev/null || true',
-        "        sleep 3",
-        '        xdotool key --window "$WIN" Return 2>/dev/null || true',
-        "        sleep 3",
-        '        xdotool key --window "$WIN" x 2>/dev/null || true',
-        "    fi",
-        ") &",
-        "INPUT_PID=$!",
+        f"python3 -u {CONTAINER_ROOT}/tools/drive_switch_scenario.py --mode {mode} --scenario {scenario} --evidence {evidence} --screenshots {shots_dir} --display {DISPLAY} --run-seconds {run_seconds} > {evidence}/scenario.log 2>&1 &",
+        "DRIVER_PID=$!",
         f"for shot in $(seq 1 {shots}); do sleep {interval}; ",
         f"ts=$(date +%Y%m%d-%H%M%S); shot_num=$(printf '%03d' \"$shot\"); ",
-        f"xwd -root -display {DISPLAY} 2>/dev/null | convert xwd:- {shots_dir}/screen-${{ts}}-${{shot_num}}.png 2>/dev/null || true; done",
+        f"xwd -root -display {DISPLAY} 2>/dev/null | convert xwd:- {shots_dir}/screen-{mode}-${{ts}}-${{shot_num}}.png 2>/dev/null || true; done",
         f"if kill -0 $EMU_PID 2>/dev/null; then echo yes > {evidence}/alive.txt; ",
         f"else echo no > {evidence}/alive.txt; fi",
-        "kill $INPUT_PID 2>/dev/null || true",
+        "kill $DRIVER_PID 2>/dev/null || true",
         "kill $EMU_PID 2>/dev/null || true",
         "kill $WEBSOCK_PID 2>/dev/null || true",
         "kill $VNC_PID 2>/dev/null || true",
@@ -169,14 +149,45 @@ def emulator_script(run_seconds: int, interval: int = SCREENSHOT_INTERVAL, nro: 
     ]) + "\n"
 
 
-def evidence_passed(alive: bool, log: str, screenshots: list, executor=run_command) -> bool:
-    """Same verdict rules as the desktop and Android validators: alive, progressing guest, changing real frames."""
-    progressing = classify_run_log(log).verdict is RunVerdict.PROGRESSING
+def evidence_passed(
+    alive: bool,
+    log: str,
+    screenshots: list,
+    executor=run_command,
+    mode: str = "native",
+    scenario: str = "smoke",
+) -> bool:
+    """Same verdict rules as desktop/Android validators, plus mode and map checks."""
+    if not alive:
+        return False
+    if mode == "native":
+        if "fallback to GS is prohibited in native mode" in log:
+            return False
+        if "guest framebuffer fallback" in log and "native kt_gpu: installed" in log:
+            return False
+    if classify_run_log(log).verdict is not RunVerdict.PROGRESSING:
+        return False
+    if screenshots and not any(f"-{mode}-" in s for s in screenshots):
+        return False
     frames = analyze_frames(screenshots, executor)
-    return alive and progressing and frames.real_frames >= 2 and frames.changed
+    if frames.real_frames < 2 or not frames.changed:
+        return False
+    if scenario in ("campaign", "campaign-auto"):
+        has_map_submit = "[map-submit]" in log
+        has_map_screenshot = any("map" in s and f"-{mode}-" in s for s in screenshots)
+        if not (has_map_submit or has_map_screenshot):
+            return False
+    return True
 
 
-def container_command(run_seconds: int, jobs: int = DEFAULT_JOBS, nro: str = NRO_PATH, port: int = 6080) -> list:
+def container_command(
+    run_seconds: int,
+    jobs: int = DEFAULT_JOBS,
+    nro: str = NRO_PATH,
+    port: int = 6080,
+    mode: str = "native",
+    scenario: str = "campaign-auto",
+) -> list:
     return [
         "docker", "--context", DOCKER_CONTEXT, "run", "--rm",
         f"--name={CONTAINER_NAME}",
@@ -188,7 +199,7 @@ def container_command(run_seconds: int, jobs: int = DEFAULT_JOBS, nro: str = NRO
         "-p", f"{port}:6080",
         "-e", "LC_ALL=C.UTF-8", "-e", "TZ=America/Sao_Paulo",
         "-v", f"{REPO_ROOT}:{CONTAINER_ROOT}", "-w", CONTAINER_ROOT,
-        IMAGE, "bash", "-c", emulator_script(run_seconds, nro=nro),
+        IMAGE, "bash", "-c", emulator_script(run_seconds, nro=nro, mode=mode, scenario=scenario),
     ]
 
 
@@ -208,6 +219,8 @@ def check_preflight(keys_path: Path = REPO_ROOT / PROD_KEYS_DEFAULT) -> None:
 def main(argv: list | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--run-seconds", type=int, default=55, help="how long to run the emulator under test (seconds)")
+    parser.add_argument("--mode", choices=["native", "gs"], default="native", help="rendering mode: native or gs (default: native)")
+    parser.add_argument("--scenario", choices=["campaign", "campaign-auto", "smoke"], default="campaign-auto", help="scenario to drive (default: campaign-auto)")
     parser.add_argument("--jobs", type=int, default=DEFAULT_JOBS, help="CPU quota allocated to emulator container (default: 8)")
     parser.add_argument("--port", type=int, default=6080, help="host port for noVNC web view (default: 6080)")
     parser.add_argument("--keys", type=Path, default=REPO_ROOT / PROD_KEYS_DEFAULT, help="path to Switch prod.keys")
@@ -223,16 +236,17 @@ def main(argv: list | None = None) -> int:
     evidence_path = REPO_ROOT / EVIDENCE_DIR
     screenshots_path = REPO_ROOT / SCREENSHOT_DIR
     screenshots_path.mkdir(parents=True, exist_ok=True)
-    for old_shot in screenshots_path.glob("screen-*.png"):
-        try:
-            old_shot.unlink()
-        except OSError:
-            pass
+    for pattern in ("screen-*.png", "switch-*.png"):
+        for old_shot in screenshots_path.glob(pattern):
+            try:
+                old_shot.unlink()
+            except OSError:
+                pass
 
     if not args.dry_run:
         ensure_container_clean(CONTAINER_NAME)
 
-    cmd = container_command(args.run_seconds, jobs=args.jobs, port=args.port)
+    cmd = container_command(args.run_seconds, jobs=args.jobs, port=args.port, mode=args.mode, scenario=args.scenario)
     print("+ " + shlex.join(cmd[:10]) + " ...", flush=True)
     print(f"👉 Visualização no Chrome durante a validação: http://localhost:{args.port}/vnc.html", flush=True)
     if args.dry_run:
@@ -249,11 +263,11 @@ def main(argv: list | None = None) -> int:
     log_file = evidence_path / "run.log"
     alive = alive_file.read_text().strip() == "yes" if alive_file.exists() else False
     log = log_file.read_text(errors="replace") if log_file.exists() else ""
-    screenshots = sorted(str(p) for p in screenshots_path.glob("screen-*.png"))
+    screenshots = sorted(str(p) for p in screenshots_path.glob("*.png"))
     if not screenshots:
-        screenshots = sorted(str(p) for p in evidence_path.glob("screen-*.png"))
+        screenshots = sorted(str(p) for p in evidence_path.glob("*.png"))
 
-    pass_verdict = evidence_passed(alive, log, screenshots)
+    pass_verdict = evidence_passed(alive, log, screenshots, mode=args.mode, scenario=args.scenario)
     verdict_text = "PASS\n" if pass_verdict else "FAIL\n"
     (evidence_path / "result.txt").write_text(verdict_text)
     print(f"Switch validation verdict: {verdict_text.strip()}", flush=True)
