@@ -36,9 +36,10 @@ class TestDesktopValidationPaths(unittest.TestCase):
                 # Filename must have date fingerprint YYYYMMDD-HHMMSS
                 import re
                 self.assertTrue(re.search(r"campaign-auto-map-submitted-\d{8}-\d{6}(?:-\d+)?\.png$", dest.name))
-                # Canonical symlink/file must point to or match the fingerprinted file
+                # Only the original fingerprinted image exists, no symlink
                 canonical = tmp_path / "campaign-auto-map-submitted.png"
-                self.assertTrue(canonical.exists() or canonical.is_symlink())
+                self.assertFalse(canonical.exists())
+                self.assertFalse(canonical.is_symlink())
 
     def test_capture_screenshot_does_not_duplicate_fingerprint(self):
         with tempfile.TemporaryDirectory() as tmpdir:

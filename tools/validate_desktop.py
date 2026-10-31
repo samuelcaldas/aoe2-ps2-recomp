@@ -115,7 +115,6 @@ def passed(summary: RunSummary, still_running: bool, frames: FrameSeries) -> boo
 def capture_screenshot(name: str, display: str = DISPLAY) -> Path:
     from datetime import datetime
     import re
-    import shutil
 
     p = Path(name)
     stem = p.stem
@@ -137,19 +136,6 @@ def capture_screenshot(name: str, display: str = DISPLAY) -> Path:
     destination.parent.mkdir(parents=True, exist_ok=True)
     xwd = subprocess.run(["xwd", "-root", "-display", display], capture_output=True, check=True)
     subprocess.run(["convert", "xwd:-", str(destination)], input=xwd.stdout, capture_output=True, check=True)
-
-    # Maintain canonical symlink (or copy) to latest un-fingerprinted filename for convenience
-    canonical_stem = re.sub(r"-\d{8}-\d{6}(?:-\d+)?$", "", stem)
-    canonical = SCREENSHOT_DIR / p.parent / f"{canonical_stem}{ext}"
-    try:
-        if canonical.is_symlink() or canonical.exists():
-            canonical.unlink(missing_ok=True)
-        canonical.symlink_to(destination.name)
-    except OSError:
-        try:
-            shutil.copyfile(destination, canonical)
-        except Exception:
-            pass
 
     return destination
 

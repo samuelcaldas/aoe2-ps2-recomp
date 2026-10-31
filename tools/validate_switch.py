@@ -158,8 +158,7 @@ def emulator_script(run_seconds: int, interval: int = SCREENSHOT_INTERVAL, nro: 
         "INPUT_PID=$!",
         f"for shot in $(seq 1 {shots}); do sleep {interval}; ",
         f"ts=$(date +%Y%m%d-%H%M%S); shot_num=$(printf '%03d' \"$shot\"); ",
-        f"xwd -root -display {DISPLAY} 2>/dev/null | convert xwd:- {shots_dir}/screen-${{ts}}-${{shot_num}}.png 2>/dev/null || true; ",
-        f"ln -sf screen-${{ts}}-${{shot_num}}.png {shots_dir}/screen-${{shot_num}}.png 2>/dev/null || true; done",
+        f"xwd -root -display {DISPLAY} 2>/dev/null | convert xwd:- {shots_dir}/screen-${{ts}}-${{shot_num}}.png 2>/dev/null || true; done",
         f"if kill -0 $EMU_PID 2>/dev/null; then echo yes > {evidence}/alive.txt; ",
         f"else echo no > {evidence}/alive.txt; fi",
         "kill $INPUT_PID 2>/dev/null || true",
@@ -250,11 +249,7 @@ def main(argv: list | None = None) -> int:
     log_file = evidence_path / "run.log"
     alive = alive_file.read_text().strip() == "yes" if alive_file.exists() else False
     log = log_file.read_text(errors="replace") if log_file.exists() else ""
-    screenshots = sorted(str(p) for p in screenshots_path.glob("screen-*.png") if not p.is_symlink())
-    if not screenshots:
-        screenshots = sorted(str(p) for p in screenshots_path.glob("screen-*.png"))
-    if not screenshots:
-        screenshots = sorted(str(p) for p in evidence_path.glob("screen-*.png") if not p.is_symlink())
+    screenshots = sorted(str(p) for p in screenshots_path.glob("screen-*.png"))
     if not screenshots:
         screenshots = sorted(str(p) for p in evidence_path.glob("screen-*.png"))
 

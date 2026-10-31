@@ -46,8 +46,6 @@ analysis/exploratory_fallback/
 
 # Test outputs
 Testing/
-.playwright-mcp/pc/*.png
-!.playwright-mcp/pc/.gitkeep
 
 recomp/generated/
 recomp/build/
