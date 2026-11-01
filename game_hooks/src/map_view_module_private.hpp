@@ -70,12 +70,22 @@ struct Snapshot {
     renderer::MapViewLayout layout{};
 };
 
+struct UiSnapshot {
+    uint64_t submission = 0;
+    uint32_t width = 640;
+    uint32_t height = 448;
+    uint32_t pitch = 640 * 4;
+    std::vector<uint8_t> rgba;
+};
+
 // Call only at guest execution safe points. Teardown requires guest execution stopped;
 // arena addresses retained in guest objects must never be used after teardown/reset.
 void Install(PS2Runtime&);
 void Teardown(PS2Runtime&);
 std::optional<Snapshot> Capture(PS2Runtime&);
 std::optional<Snapshot> CaptureNative(PS2Runtime&);
+std::optional<UiSnapshot> CaptureUi(PS2Runtime&);
+renderer::MapViewLayout ResolveOutputLayout();
 bool PublishComposedLayout(PS2Runtime&, const Snapshot*);
 std::optional<renderer::MapViewLayout> ActiveLayout(PS2Runtime&);
 std::optional<renderer::MapViewLayout> ActiveLayout();

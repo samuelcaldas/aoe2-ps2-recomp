@@ -14,22 +14,58 @@ MapViewSession::MapViewSession(PS2Runtime& runtime) {
     map_view::Install(runtime);
     runtime_ = &runtime;
 #if defined(__SWITCH__)
-    std::clog << "[native-presentation] map-only: menus and HUD are not implemented\n";
+    std::clog << "[native-presentation] full presenter active: menus, HUD, and map enabled\n";
     runtime.setNativeFrameProvider([&runtime]() -> std::optional<PS2OwnedPresentationFrame> {
-        auto snap = map_view::CaptureNative(runtime);
-        if (!snap || snap->indices.empty()) {
+        auto map_snap = map_view::CaptureNative(runtime);
+        auto ui_snap = map_view::CaptureUi(runtime);
+
+        const bool has_map = map_snap && !map_snap->indices.empty();
+        const bool has_ui = ui_snap && !ui_snap->rgba.empty();
+
+        if (!has_map && !has_ui) {
             map_view::PublishComposedLayout(runtime, nullptr);
             return std::nullopt;
         }
-        renderer::MapFrameSnapshot frame;
-        frame.width = snap->width; frame.height = snap->height; frame.pitch = snap->pitch;
-        frame.indices = snap->indices; frame.layout = snap->layout;
-        for (size_t i = 0; i < 256; ++i)
-            for (size_t c = 0; c < 4; ++c) frame.palette[i][c] = snap->palette[i * 4 + c];
-        auto composed = renderer::MapViewCompositor::TryComposeNativeMap(frame);
-        if (!composed || !map_view::PublishComposedLayout(runtime, &*snap))
-            throw std::runtime_error("native map frame composition failed");
-        return PS2OwnedPresentationFrame{composed->pixels, composed->width, composed->height, composed->strideBytes};
+
+        auto layout = has_map ? map_snap->layout
+                              : map_view::ActiveLayout(runtime).value_or(map_view::ResolveOutputLayout());
+        uint32_t out_w = static_cast<uint32_t>(layout.output.width);
+        uint32_t out_h = static_cast<uint32_t>(layout.output.height);
+
+        std::optional<renderer::RgbaFrameView> ui_view;
+        if (has_ui) {
+            ui_view.emplace(ui_snap->rgba, ui_snap->width, ui_snap->height, ui_snap->pitch);
+        }
+
+        if (has_map) {
+            renderer::MapFrameSnapshot frame;
+            frame.width = map_snap->width;
+            frame.height = map_snap->height;
+            frame.pitch = map_snap->pitch;
+            frame.indices = map_snap->indices;
+            frame.layout = map_snap->layout;
+            for (size_t i = 0; i < 256; ++i)
+                for (size_t c = 0; c < 4; ++c) frame.palette[i][c] = map_snap->palette[i * 4 + c];
+
+            std::optional<renderer::ComposedMapFrame> composed;
+            if (ui_view) {
+                composed = renderer::MapViewCompositor::TryCompose(*ui_view, frame);
+            } else {
+                composed = renderer::MapViewCompositor::TryComposeNativeMap(frame);
+            }
+            if (!composed || !map_view::PublishComposedLayout(runtime, &*map_snap))
+                throw std::runtime_error("native map frame composition failed");
+            return PS2OwnedPresentationFrame{composed->pixels, composed->width, composed->height, composed->strideBytes};
+        }
+
+        map_view::PublishComposedLayout(runtime, nullptr);
+        if (ui_view) {
+            auto composed = renderer::MapViewCompositor::TryComposeUi(*ui_view, out_w, out_h);
+            if (composed) {
+                return PS2OwnedPresentationFrame{composed->pixels, composed->width, composed->height, composed->strideBytes};
+            }
+        }
+        return std::nullopt;
     });
 #endif
     runtime.setFrameCompositor([&runtime](PS2PresentationFrameView legacy) -> std::optional<PS2OwnedPresentationFrame> {

@@ -57,24 +57,6 @@ void ReapplyPanelBounds(uint8_t *ram, uint32_t panel, uint32_t w, uint32_t h) {
   std::memcpy(Bytes(ram, panel + 0x14, 4), &w, 4);
   std::memcpy(Bytes(ram, panel + 0x18, 4), &h, 4);
 }
-renderer::MapViewLayout ResolveOutputLayout() {
-#if defined(__SWITCH__)
-  auto [out_w, out_h] = DefaultMapOutput(true, appletGetOperationMode() == AppletOperationMode_Console);
-#else
-  auto [out_w, out_h] = DefaultMapOutput(false, false);
-#endif
-  if (const char *w_env = std::getenv("AOE2_WINDOW_WIDTH")) {
-    uint32_t val = std::strtoul(w_env, nullptr, 10);
-    if (val >= 640 && val <= 1920)
-      out_w = val;
-  }
-  if (const char *h_env = std::getenv("AOE2_WINDOW_HEIGHT")) {
-    uint32_t val = std::strtoul(h_env, nullptr, 10);
-    if (val >= 448 && val <= 1080)
-      out_h = val;
-  }
-  return renderer::MapViewLayout::ForOutput(out_w, out_h);
-}
 void InitializeArenaCanaries(uint8_t *ram, const Relocation &r) {
   std::memset(Bytes(ram, r.base, r.layout.total_bytes), 0,
               r.layout.total_bytes);
@@ -265,6 +247,24 @@ constexpr std::array<PS2Runtime::RecompiledFunction, entries.size()> wrappers{
     Wrapper<10>, Wrapper<11>, Wrapper<12>, Wrapper<13>, Wrapper<14>,
     Wrapper<15>};
 } // namespace
+renderer::MapViewLayout ResolveOutputLayout() {
+#if defined(__SWITCH__)
+  auto [out_w, out_h] = DefaultMapOutput(true, appletGetOperationMode() == AppletOperationMode_Console);
+#else
+  auto [out_w, out_h] = DefaultMapOutput(false, false);
+#endif
+  if (const char *w_env = std::getenv("AOE2_WINDOW_WIDTH")) {
+    uint32_t val = std::strtoul(w_env, nullptr, 10);
+    if (val >= 640 && val <= 1920)
+      out_w = val;
+  }
+  if (const char *h_env = std::getenv("AOE2_WINDOW_HEIGHT")) {
+    uint32_t val = std::strtoul(h_env, nullptr, 10);
+    if (val >= 448 && val <= 1080)
+      out_h = val;
+  }
+  return renderer::MapViewLayout::ForOutput(out_w, out_h);
+}
 void Teardown(PS2Runtime &runtime) {
   std::shared_ptr<State> state;
   {
@@ -339,6 +339,15 @@ std::optional<Snapshot> CaptureNative(PS2Runtime &runtime) {
                                 found->second->lease.generation))
     return std::nullopt;
   return found->second->snapshot;
+}
+std::optional<UiSnapshot> CaptureUi(PS2Runtime &runtime) {
+  UiSnapshot snap;
+  if (!runtime.captureHostUiFrame(snap.rgba, snap.width, snap.height)) {
+    return std::nullopt;
+  }
+  snap.pitch = snap.width * 4;
+  snap.submission = 1;
+  return snap;
 }
 bool PublishComposedLayout(PS2Runtime &runtime, const Snapshot *snapshot) {
   std::lock_guard lock(mutex);
