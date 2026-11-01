@@ -117,7 +117,7 @@ Layers (C++ namespaces `aoe2::<layer>`, headers under `<layer>/include/aoe2/<lay
 - `runtime/` — `GuestMemory` (64 MiB EE RAM) and the abstract `PlatformServices` (logging, clock).
 - `platform/desktop/` — concrete `PlatformServices` + `ActionRecorderInputSink`; `src/main.cpp` is the `aoe2_smoke_test` ctest executable. `platform/switch/` and `platform/android/` contain target integration.
 - `input/` — platform-neutral `ActionType`/`ActionEvent`/`InputSink`. The PS2 game supports a USB mouse; on Switch handheld it is replaced by the touchscreen: `TouchGestureTranslator` (+ `SurfaceMapping`, host → 640x448 guest logical pixels) turns touches into pointer actions, and `GuestMouseAdapter` folds them into the per-frame mouse state the recompiled game polls. Docked, a USB mouse and keyboard on the dock mirror the PS2 peripherals: `UsbMouseTranslator` (relative reports → the same pointer actions) and `GuestKeyboardAdapter` (USB HID boot-protocol reports); `SourcesFor(OperationMode)` picks the sources per mode. No USB/IOP/SIF emulation (see `docs/architecture.md` §6). Replacements hook the game's KCET hardware layer (`kt_mouse`, `kt_keybd`, `kt_gpu`, ...) via runtime function replacement, with guest addresses resolved into ignored files — see `docs/adr/0001-kcet-boundary-replacement.md`.
-- `renderer/` — `IRenderer` + `NullRenderer` (headless). Design mandate: replace rendering at the high level (sprite/tile/UI draws mapped to `IRenderer`), **not** low-level GS emulation.
+- `renderer/` — `IRenderer` + `NullRenderer` (headless). Design mandate: capture the software map and verified high-level UI draws, then compose through the existing presenter without GS visual processing. `IRenderer` is not currently the Switch presenter.
 - `tools/` — Python 3 stdlib-only, fail-fast scripts; each resolves `REPO_ROOT` and inserts it into `sys.path` to import `core.target`.
 
 ## Documentation Chain & Canonical References
@@ -126,13 +126,14 @@ Every document in the repository links into a coherent chain leading back to thi
 
 - **System Architecture**: [`docs/architecture.md`](docs/architecture.md) (subsystems, EE/VU/GS/IOP notes, and layer boundaries).
 - **Verified Draw Seams**: [`docs/sot/high-level-draw-seams.md`](docs/sot/high-level-draw-seams.md) (map software rasterization, shape/UI calls, and the low-level `kt_gpu` presentation role).
+- **Real Rendering Pipeline**: [`docs/sot/caminho-real-de-desenho-pipeline.md`](docs/sot/caminho-real-de-desenho-pipeline.md) (end-to-end Genie Engine, RDRAM, DMA, GS, and interception analysis; Portuguese).
 - **Nintendo Switch Target**: [`docs/switch-target-architecture.md`](docs/switch-target-architecture.md) (Horizon OS services, `appletHook` 720p/1080p scaling, `audren` audio, Title Takeover memory protection, and touch/Joy-Con input).
 - **HD Asset Strategy & Viewport**: [`docs/sot/hd-assets-strategy.md`](docs/sot/hd-assets-strategy.md) (canonical SOT for HD 2013 assets, runtime playfield rasterization, and viewport expansion).
 - **KCET Native Boundary**: [`docs/adr/0001-kcet-boundary-replacement.md`](docs/adr/0001-kcet-boundary-replacement.md) (ADR governing the runtime replacement of the game's hardware abstraction layer).
 - **Prior Art, Reuse & Permissions**: [`docs/sot/prior-art-and-reuse.md`](docs/sot/prior-art-and-reuse.md) (provenance, clean-room rules, dependency licenses, and authorized decompilation reuse).
 - **Recompilation Workflow**: [`docs/ghidra-ps2recomp-workflow.md`](docs/ghidra-ps2recomp-workflow.md) (Ghidra headless export, TOML configuration, and PS2Recomp codegen).
 - **Desktop Probe & Overlays**: [`docs/desktop-runtime-probe.md`](docs/desktop-runtime-probe.md) (Linux host probe and dynamic code overlay milestones).
-- **Active Implementation Plan**: [`docs/plans/nifty-herding-pudding.md`](docs/plans/nifty-herding-pudding.md) (64 MiB RAM expansion and reservation validation, prerequisite for viewport expansion).
+- **Graphics Implementation Plan**: [`docs/plans/gs-independent-rendering.md`](docs/plans/gs-independent-rendering.md) (complete GS-independent presentation); [viewport plan](docs/plans/expanded-viewport-native-implementation.md) tracks map expansion and validation.
 
 ## Legal / provenance rules (enforced by tooling — do not weaken)
 
