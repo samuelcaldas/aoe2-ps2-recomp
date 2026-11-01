@@ -33,5 +33,8 @@ public:
 
     /// Map-only native frame. Unimplemented HUD and menu regions remain black.
     static std::optional<ComposedMapFrame> TryComposeNativeMap(const MapFrameSnapshot& snapshot) noexcept;
+
+    /// Compose UI-only native frame for menus/boot/dialogs, fitting/centering into the output extent without touching GS.
+    static std::optional<ComposedMapFrame> TryComposeUi(RgbaFrameView ui, uint32_t output_width, uint32_t output_height) noexcept;
 };
 }
