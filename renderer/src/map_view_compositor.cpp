@@ -178,6 +178,52 @@ std::optional<ComposedMapFrame> MapViewCompositor::TryComposeNativeMap(const Map
     PaintMap(*pixels, snapshot);
     return ComposedMapFrame{std::move(pixels), width, height, width * 4};
 }
+std::optional<ComposedMapFrame> MapViewCompositor::TryComposeUi(RgbaFrameView ui, uint32_t output_width, uint32_t output_height) noexcept {
+    if (!ValidateLegacyNoThrow(ui)) return std::nullopt;
+    if (output_width < 640 || output_width > 1920 || output_height < 448 || output_height > 1080)
+        return std::nullopt;
+
+    auto pixels = std::make_shared<std::vector<uint8_t>>(uint64_t{output_width} * output_height * 4, 0);
+    for (size_t i = 3; i < pixels->size(); i += 4) (*pixels)[i] = 255;
+
+    if (output_width == ui.width && output_height == ui.height) {
+        for (uint32_t y = 0; y < ui.height; ++y) {
+            std::memcpy(pixels->data() + uint64_t{y} * output_width * 4,
+                        ui.pixels.data() + uint64_t{y} * ui.strideBytes,
+                        ui.width * 4);
+        }
+        return ComposedMapFrame{std::move(pixels), output_width, output_height, output_width * 4};
+    }
+
+    try {
+        const aoe2::input::Extent window{static_cast<float>(output_width), static_cast<float>(output_height)};
+        const aoe2::input::Extent frame{640.0f, 512.0f};
+        const aoe2::input::Extent logical{static_cast<float>(ui.width), static_cast<float>(ui.height)};
+        const auto transform = aoe2::input::PresentationTransform(window, frame, logical, {0.0f, 0.0f, frame.width, frame.height});
+        const auto dest = transform.FrameDestination();
+
+        const uint32_t left = static_cast<uint32_t>(std::max(0.0f, dest.x));
+        const uint32_t top = static_cast<uint32_t>(std::max(0.0f, dest.y));
+        const uint32_t dest_w = static_cast<uint32_t>(std::min(static_cast<float>(output_width) - left, dest.width));
+        const uint32_t dest_h = static_cast<uint32_t>(std::min(static_cast<float>(output_height) - top, dest.height));
+
+        for (uint32_t dy = 0; dy < dest_h; ++dy) {
+            uint8_t* dst_row = pixels->data() + (uint64_t{top + dy} * output_width + left) * 4;
+            for (uint32_t dx = 0; dx < dest_w; ++dx) {
+                const auto pt = transform.ToLogical(static_cast<float>(left + dx), static_cast<float>(top + dy));
+                const uint32_t sx = std::clamp(static_cast<uint32_t>(pt.x), 0u, ui.width - 1u);
+                const uint32_t sy = std::clamp(static_cast<uint32_t>(pt.y), 0u, ui.height - 1u);
+                const uint8_t* src_px = ui.pixels.data() + uint64_t{sy} * ui.strideBytes + sx * 4;
+                uint8_t* dst_px = dst_row + dx * 4;
+                std::memcpy(dst_px, src_px, 4);
+            }
+        }
+    } catch (...) {
+        return std::nullopt;
+    }
+
+    return ComposedMapFrame{std::move(pixels), output_width, output_height, output_width * 4};
+}
 ComposedMapFrame MapViewCompositor::Compose(RgbaFrameView legacy, const MapFrameSnapshot& snapshot) {
     auto result = TryCompose(legacy, snapshot);
     if (!result) {

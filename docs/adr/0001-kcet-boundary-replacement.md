@@ -54,13 +54,13 @@ High-level replacements hook the KCET boundary: a KCET function is replaced by a
 | `kt_libpad` | DualShock 2 gamepad and analog cursor emulation mapped to host controllers | Host gamepads, Joy-Cons, Pro Controller via raylib / SDL |
 | `kt_libcdvd_server`, `kt_file` | File access redirected to decoupled external assets or extracted disc files | External `assets/` folder via `LooseHdAssetProvider` |
 | `kt_mc_2` | Save game operations redirected to host platform save files | Host memory-card / save directory |
-| `kt_gpu` | Seam for the high-level `IRenderer` (sprites, tiles, UI) bypassing GS VRAM and CLUT swizzling | OpenGL ES 3 / Mesa / deko3d backend (`docs/sot/subsystems-assets-evolution.md`) |
+| `kt_gpu` | Low-level GS register/command dispatch and final framebuffer transfer; not a sprite/tile/UI draw seam | Retain only where needed for frame synchronization/presentation; high-level draw interception belongs at verified engine seams (`docs/sot/high-level-draw-seams.md`) |
 | `mydplay.cpp` | DirectPlay Compatible Interface hook redirecting P2P lockstep to UDP LAN | `aoe2::net::UdpLanTransport` (`docs/sot/multiplayer-lan-architecture.md`) |
 | `soundcd.irx` / audio | High-level sound effects and music streams bypassing SPU2 / IOP | Host audio backend (SDL2 / raylib / OpenAL) playing WAV/MP3 |
 | `kt_kernel` | None: the runtime's EE scheduler provides threads and semaphores | — |
 | `kt_hd` | Not replaced; unused on the retail disc | — |
 
-Order of work: input (`kt_mouse`, `kt_keybd`) first; then `kt_gpu` with the renderer and `mydplay` with network; then sound overrides (`soundcd.irx`) and file subsystems.
+Order of work: input (`kt_mouse`, `kt_keybd`) first; then verified map/sprite/UI renderer seams and `mydplay` with network; then sound overrides (`soundcd.irx`) and file subsystems. Do not treat `kt_gpu` dispatch as per-object drawing; see [`docs/sot/high-level-draw-seams.md`](../sot/high-level-draw-seams.md).
 
 ## Rules
 
@@ -82,6 +82,6 @@ Order of work: input (`kt_mouse`, `kt_keybd`) first; then `kt_gpu` with the rend
 - `kt_mouse`: implemented. `tools/resolve_kcet_hooks.py` finds the RPC bind (USB mouse service SID `0x80000210`) and the three RPC wrappers (functions 1 info, 2 read events, 3 device info) in the decompilation by structure and writes their addresses to the ignored `game/SLES-50282/kcet_hooks.ini`. `game_hooks/src/kcet_mouse_overrides.cpp` registers a game override that replaces them with host functions answering from `aoe2::input::UsbMouseRpcModel`, sampled from the platform mouse through raylib once per game poll. Without the hooks file the bind loop has no IOP service to reach, so the file is required to boot past mouse initialization.
 - `kt_keybd`: the host RPC model and ELF resolver for the six RPC roles are implemented. The game-side keyboard handlers and registry integration are not yet implemented, so keyboard input still relies on the runtime's pad emulation meanwhile. The host report payload models a boot keyboard report; the transferred metadata byte is approximated as zero because its application meaning is not established.
 - `mydplay.cpp`: specified in `docs/sot/multiplayer-lan-architecture.md`. Intercepts the DirectPlay vtable at `0x338140` to route multiplayer lockstep over UDP LAN sockets.
-- `kt_gpu`: specified in `docs/sot/subsystems-assets-evolution.md`. Seam for high-level rendering via `aoe2::renderer::IRenderer`, bypassing GS hardware CLUT swizzling and VRAM limitations.
+- `kt_gpu`: low-level dispatcher instrumentation exists, but its command handlers still forward to the original guest functions. It is not the high-level renderer seam; sprite/UI interception is identified at `func_0025E640`, and map composition uses the map-view path. See [`docs/sot/high-level-draw-seams.md`](../sot/high-level-draw-seams.md).
 - `soundcd.irx`: specified in `docs/sot/subsystems-assets-evolution.md`. Intercepts audio triggers to play WAV/MP3 files from host audio backends directly.
 - The rest: not started.

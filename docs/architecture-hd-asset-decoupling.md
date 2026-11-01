@@ -106,7 +106,7 @@ flowchart TD
    - The optional build stage prepares the catalog under the provider's `assets/<category>/` layout (`tools/stage_hd_assets.py`, `tools/verify_hd_stage.py`). It preserves source bytes and does not decode SLPs.
 2. **Phase 2 (Current Focus)**:
    - `aoe2::assets::IAssetProvider`, `LooseHdAssetProvider`, and `AssetPathResolver` exist, but no game runtime initialization or draw path calls them yet.
-   - Resolve HD assets against guest graphic IDs, decode SLP 2.0N with the appropriate JASC-PAL palette, and connect the provider to high-level KCET `kt_gpu` draw calls; do not emulate the GS packet pipeline for the replacement renderer.
+   - Resolve HD assets against guest graphic IDs, decode SLP 2.0N with the appropriate JASC-PAL palette, and connect the provider at verified engine shape/UI draw calls such as `func_0025E640`; `kt_gpu` is only the low-level GS/final-frame dispatcher. See [`docs/sot/high-level-draw-seams.md`](sot/high-level-draw-seams.md); do not emulate the GS packet pipeline for the replacement renderer.
 3. **Phase 3**:
    - Host audio provider bypassing IOP RPC commands.
    - Widescreen coordinate translation mapping host touches/clicks directly to game simulation space while anchoring HUD elements to widescreen borders.

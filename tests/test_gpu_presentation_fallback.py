@@ -41,6 +41,7 @@ namespace aoe2::game_hooks::gpu {
 inline constexpr std::array<uint32_t, 7> entries{};
 inline void Install(PS2Runtime&) {}
 inline void SetNativeDrawInterceptor(bool (*)(uint8_t, uint32_t, uint32_t)) {}
+inline bool HasNativeDrawInterceptor() { return false; }
 }
 namespace aoe2::game_hooks::diagnostics {
 inline uint64_t gpu_snapshot_count = 0;
@@ -111,8 +112,12 @@ int main(int, char** arguments) {
         std::cerr << "guest fallback must not remap clicks to an undisplayed native HUD\n";
         return 1;
     }
-    if (check == "status" && log.str().find("native GLES renderer and HD asset resolver active") != std::string::npos) {
-        std::cerr << "initialization must not claim native HD/GLES rendering without a replacement\n";
+    if (check == "status" && log.str().find("presentation: native map-only") != std::string::npos) {
+        std::cerr << "kt_gpu dispatcher installation must not claim native map presentation\n";
+        return 1;
+    }
+    if (check == "status" && log.str().find("command handlers still forward to original game") == std::string::npos) {
+        std::cerr << "status must disclose that command handlers are forwarded to the game\n";
         return 1;
     }
 }

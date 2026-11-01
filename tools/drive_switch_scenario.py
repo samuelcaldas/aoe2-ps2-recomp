@@ -232,12 +232,77 @@ def do_click(display: str, wx: int, wy: int, duration: float = 0.4) -> None:
 
 def is_memory_card_busy(display: str) -> bool:
     """Check if memory card is still displaying '---KB' (busy dashes)."""
-    return is_screen_loading(display)
+    tmp_path = Path("/tmp/mc_check.png")
+    if not capture_screenshot(tmp_path, display):
+        return True
+    try:
+        from PIL import Image
+        import numpy as np
+        arr = np.array(Image.open(tmp_path).convert("L"))
+        if arr.mean() < 5.0:
+            return True
+        top_pixels = int((arr[135, 768:795] < 100).sum())
+        dash_pixels = int((arr[139, 768:795] < 100).sum())
+        if dash_pixels >= 15 and top_pixels <= 2:
+            return True
+        return False
+    except Exception:
+        return False
 
 
 def wait_for_card_ready(display: str, timeout: float = 60.0, settle_after: float = 3.0) -> bool:
     """Wait until memory card check completes."""
-    return wait_for_screen_ready(display, timeout=timeout, settle_after=settle_after)
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not is_memory_card_busy(display):
+            if settle_after > 0:
+                time.sleep(settle_after)
+            return True
+        time.sleep(1.0)
+    return False
+
+
+def is_osk_open(display: str) -> bool:
+    """Check if on-screen keyboard overlay is open."""
+    tmp_path = Path("/tmp/osk_check.png")
+    if not capture_screenshot(tmp_path, display):
+        return False
+    try:
+        from PIL import Image
+        import numpy as np
+        arr = np.array(Image.open(tmp_path).convert("RGB"))
+        return float(arr[100:200, 500:800, 0].mean()) < 80.0
+    except Exception:
+        return False
+
+
+def is_dialog_open(display: str) -> bool:
+    """Check if centered parchment dialog (New Player / Confirm) is open."""
+    tmp_path = Path("/tmp/dialog_check.png")
+    if not capture_screenshot(tmp_path, display):
+        return False
+    try:
+        from PIL import Image
+        import numpy as np
+        arr = np.array(Image.open(tmp_path).convert("RGB"))
+        return bool(arr[360, 640, 0] > 180 and arr[360, 640, 1] > 150)
+    except Exception:
+        return False
+
+
+def is_select_player_open(display: str) -> bool:
+    """Check if Select Player screen is displayed."""
+    tmp_path = Path("/tmp/sp_check.png")
+    if not capture_screenshot(tmp_path, display):
+        return False
+    try:
+        from PIL import Image
+        import numpy as np
+        arr = np.array(Image.open(tmp_path).convert("RGB"))
+        px = arr[75, 640]
+        return bool(px[0] > 100 and px[1] > 50 and px[2] < 50)
+    except Exception:
+        return False
 
 
 def follow_guest_event(
@@ -290,7 +355,7 @@ def do_step(display: str, action: str, argument, settle: float, step_name: str =
         time.sleep(0.5)
         send_pad_button(display, "start", 0.35)
     elif step_name == "card-ok":
-        wait_for_screen_ready(display, timeout=45.0, settle_after=2.0)
+        wait_for_card_ready(display, timeout=60.0, settle_after=2.0)
         # Select Player list is shown with "1. New Player" highlighted.
         time.sleep(1.0)
         wx, wy = to_window_coords((251, 312))
@@ -324,19 +389,17 @@ def do_step(display: str, action: str, argument, settle: float, step_name: str =
             time.sleep(0.2)
         send_pad_button(display, "cross", 0.4)
         time.sleep(1.5)
-    elif step_name in ("profile-name-a", "profile-name-o", "profile-name-k"):
+    elif step_name in ("profile-name-a", "profile-name-o", "profile-name-k", "profile-name-enter"):
         time.sleep(0.5)
-    elif step_name == "profile-name-enter":
-        time.sleep(1.5)
     elif step_name == "profile-submit":
-        # Screen is back on New Player dialog with Name: [ a ] (screen-native-*-047.png).
-        # Submit the dialog by clicking [ OK ] directly at (245, 315) -> (535, 541).
+        # Screen is back on New Player dialog with Name: [ a ].
+        # Submit the dialog by clicking [ OK ] directly at (245, 315) -> (517, 541).
         time.sleep(1.0)
         wx, wy = to_window_coords((245, 315))
         do_click(display, wx, wy, 0.4)
         time.sleep(0.8)
-        # Send Return key as secondary confirmation
         subprocess.run(["xdotool", "key", "Return"], env=env)
+        send_pad_button(display, "cross", 0.4)
         time.sleep(1.0)
     elif step_name == "profile-confirm":
         # "Save to Memory Card? [Yes] [No]" prompt
@@ -353,11 +416,13 @@ def do_step(display: str, action: str, argument, settle: float, step_name: str =
         do_click(display, wx, wy, 0.4)
         time.sleep(0.5)
         send_pad_button(display, "cross", 0.4)
+        time.sleep(0.5)
+        send_pad_button(display, "start", 0.4)
         time.sleep(3.0)
     elif step_name == "single-player":
         # Main Menu -> Single Player
         wait_for_screen_ready(display, timeout=30.0, settle_after=2.0)
-        wx, wy = 890, 172
+        wx, wy = to_window_coords((458, 85))
         do_click(display, wx, wy, 0.4)
         time.sleep(0.5)
         send_pad_button(display, "cross", 0.4)
@@ -365,7 +430,7 @@ def do_step(display: str, action: str, argument, settle: float, step_name: str =
     elif step_name == "campaigns":
         # Single Player -> Campaigns
         wait_for_screen_ready(display, timeout=30.0, settle_after=2.0)
-        wx, wy = 890, 168
+        wx, wy = to_window_coords((418, 86))
         do_click(display, wx, wy, 0.4)
         time.sleep(0.5)
         send_pad_button(display, "cross", 0.4)
@@ -475,7 +540,6 @@ def drive_scenario(
                 story_clicks += 1
                 send_pad_button(display, "cross", 0.3)
                 send_pad_button(display, "start", 0.3)
-                do_click(display, 655, 395, 0.2)
                 shot = screenshots_dir / f"switch-{mode}-story-{story_clicks}.png"
                 capture_screenshot(shot, display)
                 print(f"[{mode}] Captured {shot.name}", flush=True)

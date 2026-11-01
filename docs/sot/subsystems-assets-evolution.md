@@ -66,7 +66,7 @@ flowchart TD
 ### 2.4 Especificação para o Recomp
 - **Alvo**: `aoe2::renderer::IRenderer` via **OpenGL ES 3.0 / Mesa**.
 - **Regra**: **Zero emulação do Graphics Synthesizer do PS2.**
-- **Interceptação**: As rotinas de desenho de sprites e blocos da engine chamavam o shim `kt_gpu.c` (VRAM `0x125800`). Em vez de emitir microprogramas VU1 ou pacotes GIF para o GS, o recomp substitui essas funções via `game_overrides` e despacha chamadas com coordenadas normalizadas para o `IRenderer`.
+- **Interceptação**: `kt_gpu` é um despachante de registradores GS e transferência do framebuffer final, não recebe chamadas de desenho de sprites/blocos. Os tiles do mapa são rasterizados por software; sprites e elementos de interface passam pela chamada de shape `func_0025E640`. A investigação e matriz de pontos estão em [`high-level-draw-seams.md`](high-level-draw-seams.md). A integração dessas chamadas com `IRenderer` ainda precisa ser implementada e validada.
 
 ---
 

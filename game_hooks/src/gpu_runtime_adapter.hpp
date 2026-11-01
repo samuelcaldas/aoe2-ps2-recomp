@@ -4,6 +4,9 @@
 #include "ps2_runtime.h"
 #include "ps2_runtime_macros.h"
 #include <array>
+#include <atomic>
+#include <cstdlib>
+#include <iostream>
 #include <stdexcept>
 
 // Owner-authorized kt_gpu adaptation: samuelcaldas/age-of-empires-2-decomp,
@@ -14,6 +17,58 @@ inline constexpr std::array<uint32_t, 7> entries{
 
 using NativeDrawInterceptor = bool (*)(uint8_t kind, uint32_t cmd_addr, uint32_t work_state_addr);
 inline NativeDrawInterceptor g_native_draw_interceptor = nullptr;
+
+inline bool HasNativeDrawInterceptor() {
+    return g_native_draw_interceptor != nullptr;
+}
+
+struct DispatchCounts {
+    std::array<std::atomic<uint64_t>, 29> native{};
+    std::array<std::atomic<uint64_t>, 29> original{};
+};
+inline DispatchCounts g_dispatch_counts{};
+inline std::atomic<uint64_t> g_dispatch_total{0};
+
+inline uint64_t DispatchReportInterval() {
+    static const uint64_t interval = [] {
+        const char* value = std::getenv("AOE2_GPU_TRACE_INTERVAL");
+        if (!value || !*value) return uint64_t{10000};
+        char* end = nullptr;
+        const auto parsed = std::strtoull(value, &end, 10);
+        return end == value || *end || parsed == 0 ? uint64_t{10000} : parsed;
+    }();
+    return interval;
+}
+
+inline void CountDispatch(uint8_t kind, bool native) {
+    if (kind >= g_dispatch_counts.native.size()) return;
+    auto& counts = native ? g_dispatch_counts.native : g_dispatch_counts.original;
+    const auto route_count = counts[kind].fetch_add(1, std::memory_order_relaxed) + 1;
+    const auto total = g_dispatch_total.fetch_add(1, std::memory_order_relaxed) + 1;
+    const auto interval = DispatchReportInterval();
+    if (route_count == 1 || route_count % interval == 0) {
+        std::clog << "[gpu-dispatch] kind=" << unsigned(kind)
+                  << " route=" << (native ? "native-interceptor" : "original-handler")
+                  << " route_count=" << route_count << " total=" << total << '\n';
+    }
+}
+
+inline void ReportDispatchSummary() {
+    uint64_t native_total = 0;
+    uint64_t original_total = 0;
+    for (std::size_t kind = 0; kind < g_dispatch_counts.native.size(); ++kind) {
+        const auto native = g_dispatch_counts.native[kind].load(std::memory_order_relaxed);
+        const auto original = g_dispatch_counts.original[kind].load(std::memory_order_relaxed);
+        native_total += native;
+        original_total += original;
+        if (native || original) {
+            std::clog << "[gpu-dispatch-summary] kind=" << kind
+                      << " native=" << native << " original=" << original << '\n';
+        }
+    }
+    std::clog << "[gpu-dispatch-summary] total=" << (native_total + original_total)
+              << " native=" << native_total << " original=" << original_total << '\n';
+}
 
 inline void SetNativeDrawInterceptor(NativeDrawInterceptor interceptor) {
     g_native_draw_interceptor = interceptor;
@@ -44,10 +99,12 @@ inline void DispatchHandler(uint8_t* ram, R5900Context* ctx, PS2Runtime* runtime
     const uint32_t work_state = getRegU32(ctx, 16);
 
     if (g_native_draw_interceptor && g_native_draw_interceptor(kind, cmd_addr, work_state)) {
+        CountDispatch(kind, true);
         Resume(ram, ctx, runtime);
         return;
     }
 
+    CountDispatch(kind, false);
     const auto target = aoe2::gpu::KtGpuModel(memory).Handler(kind);
     if (!runtime->hasFunction(target)) throw std::runtime_error("native GPU: missing guest handler");
     SET_GPR_U64(ctx, 4, GPR_U64(ctx, 16));

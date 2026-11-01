@@ -23,11 +23,8 @@ void InstallNativeGpu(PS2Runtime& runtime) {
     const bool native = native_input::ReadSwitches().Enabled("gpu");
     if (native) {
         gpu::Install(runtime);
-#if defined(__SWITCH__)
-        std::cout << "[aoe2] presentation: native host presentation active\n";
-#else
-        std::cout << "[aoe2] presentation: desktop native presentation active\n";
-#endif
+        std::cout << "[aoe2] kt_gpu dispatcher: installed 7/7; command handlers still forward to original game; native draw interceptor="
+                  << (gpu::HasNativeDrawInterceptor() ? "connected" : "not connected") << '\n';
     }
     if (diagnostics::Enabled()) {
         diagnostics::gpu_snapshot_count = 0;
@@ -37,7 +34,7 @@ void InstallNativeGpu(PS2Runtime& runtime) {
                 throw std::runtime_error("GPU observer: incomplete installation");
         }
     }
-    std::cout << "[aoe2] native kt_gpu: " << (native ? "installed 7/7" : "off") << '\n';
+    std::cout << "[aoe2] kt_gpu module: " << (native ? "dispatcher installed; no native command handlers" : "off") << '\n';
 }
 }
 PS2_REGISTER_GAME_OVERRIDE("aoe2 native gpu module", "AOK.ELF", 0, 0, InstallNativeGpu)

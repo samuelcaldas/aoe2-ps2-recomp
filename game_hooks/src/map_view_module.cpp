@@ -98,7 +98,7 @@ void Prepare(uint8_t *ram, R5900Context *ctx, PS2Runtime &runtime,
         "map panel changed: stop guest and reinstall map view module");
   ValidateAreaReuse(ram, Word(ram, panel + 0x1c5c));
   auto layout = state.mode == MapViewMode::Native ? ResolveOutputLayout()
-                                                  : renderer::MapViewLayout{};
+                                                  : renderer::MapViewLayout::ForOutput(640, 448);
   const uint32_t width = state.mode == MapViewMode::Native
                              ? static_cast<uint32_t>(layout.map.width)
                              : 640;
@@ -237,6 +237,15 @@ void Wrapper(uint8_t *ram, R5900Context *ctx, PS2Runtime *runtime) {
   }
   if constexpr (Slot == 12 || Slot == 13)
     HandleDrawListAddYHook(ctx, *state, Slot);
+  if constexpr (Slot == 15) {
+    const uint32_t panel = getRegU32(ctx, 4);
+    const uint32_t ra = getRegU32(ctx, 31);
+    state->originals[Slot](ram, ctx, runtime);
+    if (state->lease && panel && panel == state->relocation.panel && ctx->pc == ra) {
+      RecordMapPanelSubmission(ram, *state);
+    }
+    return;
+  }
   state->originals[Slot](ram, ctx, runtime);
   // Return may mean yield or tail dispatch. No completion cleanup or register
   // restoration.

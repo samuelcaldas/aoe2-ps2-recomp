@@ -15,6 +15,7 @@ flowchart TD
     ROOT --> WORKFLOW["docs/ghidra-ps2recomp-workflow.md (Ghidra & Recomp Pipeline)"]
     ROOT --> ADR["docs/adr/0001-kcet-boundary-replacement.md (KCET Native Boundary ADR)"]
     ROOT --> PROBE["docs/desktop-runtime-probe.md (Desktop Probe & Overlay Milestones)"]
+    ROOT --> DRAW_SEAMS["docs/sot/high-level-draw-seams.md (Verified High-Level Draw Seams)"]
 
     ARCH --> SOT_INDEX["docs/sot/ (Source of Truth Directory)"]
     SOT_INDEX --> SOT_SEMANTICS["docs/sot/*-semantics.md (Module Specifications)"]
@@ -39,6 +40,7 @@ flowchart TD
 7. **[`docs/desktop-runtime-probe.md`](desktop-runtime-probe.md)**: Desktop Linux bring-up probe results, runtime initialization, and dynamic overlay milestones.
 8. **[`docs/ghidra-ps2recomp-workflow.md`](ghidra-ps2recomp-workflow.md)**: Headless Ghidra export, TOML configuration, and PS2Recomp codegen pipeline.
 9. **[`docs/multiplatform-build-isolation.md`](multiplatform-build-isolation.md)**: Multi-platform build artifact isolation and target switching strategy (Desktop, Nintendo Switch, Android).
+10. **[`docs/sot/high-level-draw-seams.md`](sot/high-level-draw-seams.md)**: Canonical analysis of the software map rasterizer, sprite/UI shape calls, and low-level `kt_gpu` presentation role.
 
 ---
 
@@ -47,6 +49,7 @@ Subsystem-specific behavioral specifications:
 * **[`docs/sot/overlay-recompilation.md`](sot/overlay-recompilation.md)**: Multi-menu, lobby, and scenario dynamic overlay recompilation and dispatch.
 * **[`docs/sot/multiplayer-lan-architecture.md`](sot/multiplayer-lan-architecture.md)**: i.LINK / UDP network emulation and discovery.
 * **[`docs/sot/play-emulator-sot.md`](sot/play-emulator-sot.md)**: Play! emulator hardware reference behavior for SIF/IOP handshakes.
+* **[`docs/sot/high-level-draw-seams.md`](sot/high-level-draw-seams.md)**: Verified evidence for the high-level map, sprite, UI, and glyph draw paths; `kt_gpu` is not the gameplay draw seam.
 * **Subsystem Semantics**:
   - [`sot/gpu-semantics.md`](sot/gpu-semantics.md): GS drawing and texture uploads.
   - [`sot/hud-artifacts-clut-swizzle.md`](sot/hud-artifacts-clut-swizzle.md): HUD rendering artifacts, CLUT swizzling, and GLES modernization roadmap.

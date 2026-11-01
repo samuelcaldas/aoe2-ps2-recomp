@@ -76,14 +76,11 @@ std::optional<ResolvedSprite> AssetResolver::ResolveSprite(
     uint8_t player_id
 ) {
     if (!active_palette_.has_value()) {
-        // Fallback default grayscale palette if none active
-        std::string fallback = "JASC-PAL\r\n0100\r\n256\r\n";
-        for (int i = 0; i < 256; ++i) {
-            fallback += std::to_string(i) + " " + std::to_string(i) + " " + std::to_string(i) + "\r\n";
-        }
-        active_palette_ = JascPalette::FromString(fallback);
-        active_palette_id_ = 0;
-        ++palette_version_;
+        // SLP pixels are palette indices; grayscale would produce a plausible
+        // but incorrect sprite and could be mistaken for a successful decode.
+        // Let the caller preserve its PS2/legacy path until a real palette is
+        // available.
+        return std::nullopt;
     }
 
     const FrameCacheKey key{category, asset_id, frame_index, player_id, palette_version_};

@@ -14,7 +14,7 @@ MapViewSession::MapViewSession(PS2Runtime& runtime) {
     map_view::Install(runtime);
     runtime_ = &runtime;
 #if defined(__SWITCH__)
-    std::clog << "[native-presentation] full presenter active: menus, HUD, and map enabled\n";
+    std::clog << "[native-presentation] map-only: menus and HUD are not implemented\n";
     runtime.setNativeFrameProvider([&runtime]() -> std::optional<PS2OwnedPresentationFrame> {
         auto map_snap = map_view::CaptureNative(runtime);
         auto ui_snap = map_view::CaptureUi(runtime);

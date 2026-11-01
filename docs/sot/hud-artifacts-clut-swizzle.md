@@ -65,7 +65,7 @@ The distortion on the buttons stems from a combination of **PS2-exclusive asset 
 
 Per [`ADR 0001`](../adr/0001-kcet-boundary-replacement.md) and [`docs/sot/prior-art-and-reuse.md`](prior-art-and-reuse.md):
 > **We do not invest engineering effort reverse-engineering low-level PS2 GS eDRAM emulation quirks or fixing complex CLUT swizzle bugs.**
-> The PS2 hardware layer (`kt_gpu`) is designed to be stripped and superseded by a high-level host renderer (`aoe2::renderer::IRenderer`) that presents truecolor 32-bit RGBA textures.
+> `kt_gpu` is the low-level GS register and final-frame dispatcher, not the per-sprite or HUD draw seam. The verified high-level calls and their limits are documented in [`high-level-draw-seams.md`](high-level-draw-seams.md); the host renderer can replace shapes only after those engine calls are hooked and their contracts are validated.
 
 The UI logic has already been cleanly extracted and decompiled from the original code:
 - [`hud_panel_layout.cpp`](file:///home/samuelcaldas/repos/aoe2-ps2-recomp/third_party/age-of-empires-2-decomp/src/render/hud_panel_layout.cpp): Computes exact bounding boxes, button matrices, and hit testing for PC 640x480, PC 800x600, and PS2 640x448.
@@ -91,10 +91,10 @@ The modern renderer is defined in [`aoe2::renderer::GlesRenderer`](../../rendere
   1. Add desktop EGL headless/surfaceless or X11/Wayland window context binding, enabling actual OpenGL ES 3.0 / Mesa rendering on the Linux development host.
   2. Bind `eglSwapBuffers` inside [`EndFrame()`](../../renderer/src/gles_renderer.cpp#L135-L139).
 
-### Stage 3: High-Level HUD Draw Interception (`kt_gpu`)
-* **Current Status**: [`game_hooks/src/kcet_gpu_module.cpp`](../../game_hooks/src/kcet_gpu_module.cpp#L26-L29) prints `[aoe2] presentation: guest framebuffer fallback; native HD HUD unavailable`.
+### Stage 3: High-Level HUD Draw Interception (`func_0025E640`)
+* **Current Status**: `kt_gpu` dispatch instrumentation does not intercept individual HUD draws. The shape draw seam is `func_0025E640`; see [`high-level-draw-seams.md`](high-level-draw-seams.md). Native HD HUD presentation remains unavailable.
 * **Next Action**:
-  1. Connect `SetNativeDrawInterceptor` in [`gpu_runtime_adapter.hpp`](../../game_hooks/src/gpu_runtime_adapter.hpp#L18-L20) to intercept the game's HUD draw requests.
+  1. Resolve and hook the verified shape draw entry with the correct guest calling convention and frame lifecycle.
   2. Feed decoded button frames from loose assets or decompiled vector shapes into `UploadTexture` as 32-bit RGBA textures.
   3. Emit `DrawSprite` calls for Menu, Diplomacy, Chat, and Minimap buttons at their resolved coordinates from `hud_panel_layout.cpp`.
 

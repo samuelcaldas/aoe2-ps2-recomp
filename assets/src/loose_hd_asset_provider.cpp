@@ -1,5 +1,6 @@
 #include <aoe2/assets/loose_hd_asset_provider.hpp>
 
+#include <cstring>
 #include <fstream>
 #include <sstream>
 
@@ -8,6 +9,12 @@ namespace aoe2::assets {
 namespace {
 
 std::string SniffFormat(const std::vector<uint8_t>& data) {
+    if (data.size() >= 8 && std::memcmp(data.data(), "JASC-PAL", 8) == 0) {
+        return "jasc-pal";
+    }
+    if (data.size() >= 2 && data[0] == 'B' && data[1] == 'M') {
+        return "bmp";
+    }
     if (data.size() >= 4) {
         if (data[0] == '2' && data[1] == '.' && data[2] == '0' && data[3] == 'N') {
             return "slp-2.0N";
