@@ -43,20 +43,36 @@ BOOT_TO_MENU = [
 SCENARIOS = {
     "smoke": BOOT_TO_MENU[:3],
     "main-menu": BOOT_TO_MENU,
-    "single-player": BOOT_TO_MENU + [("single-player", "pad", "cross", 4)],
+    "single-player": BOOT_TO_MENU + [("single-player", "click", (458, 85), 6)],
     "campaign": BOOT_TO_MENU + [
-        ("single-player", "pad", "cross", 4),
-        ("campaigns", "pad", "cross", 4),
-        ("wallace-marker", "pad", "cross", 4),
-        ("scenario-1", "pad", "cross", 6),
+        ("single-player", "click", (458, 85), 8),
+        ("campaigns", "click", (418, 86), 15),
+        ("wallace-marker", "click", (221, 77), 15),
+        ("scenario-1", "click", (183, 57), 35),
+        ("briefing", "pad", "cross", 25),
+        ("briefing-next", "pad", "cross", 25),
+        ("mission-loading", "pad", "cross", 40),
+        ("brief-3", "pad", "cross", 25),
+        ("brief-4", "pad", "cross", 25),
+        ("brief-5", "pad", "cross", 35),
+        ("mission", "pad", "cross", 35),
+        ("mission-start", "pad", "cross", 50),
         ("story-complete", "story-until", None, 12),
         ("mission-live", "wait", None, 30),
     ],
     "campaign-auto": BOOT_TO_MENU + [
-        ("single-player", "pad", "cross", 4),
-        ("campaigns", "pad", "cross", 4),
-        ("wallace-marker", "pad", "cross", 4),
-        ("scenario-1", "pad", "cross", 6),
+        ("single-player", "click", (458, 85), 8),
+        ("campaigns", "click", (418, 86), 15),
+        ("wallace-marker", "click", (221, 77), 15),
+        ("scenario-1", "click", (183, 57), 35),
+        ("briefing", "pad", "cross", 25),
+        ("briefing-next", "pad", "cross", 25),
+        ("mission-loading", "pad", "cross", 40),
+        ("brief-3", "pad", "cross", 25),
+        ("brief-4", "pad", "cross", 25),
+        ("brief-5", "pad", "cross", 35),
+        ("mission", "pad", "cross", 35),
+        ("mission-start", "pad", "cross", 50),
         ("story-complete", "story-until", None, 12),
         ("map-submitted", "map-until", None, 600),
         ("map-stability", "wait", None, 30),
@@ -233,9 +249,10 @@ def detect_screen_state(arr) -> str:
         & (arr[150:210, 730:1060, 2] < 45)
     ).sum()
     if gold_menu > 200:
-        if title_mean > 100.0:
-            return "main_menu"
-        return "single_player_menu"
+        header_text = (arr[65:95, 750:1000] > 130).sum()
+        if header_text > 2500:
+            return "single_player_menu"
+        return "main_menu"
 
     return "unknown"
 
@@ -387,39 +404,48 @@ def do_step(display: str, action: str, argument, settle: float, step_name: str =
             send_pad_button(display, "cross", 1.2)
             time.sleep(3.0)
     elif step_name == "profile-settle":
-        # Wait until Main Menu is reached
-        wait_for_any_screen_state(display, {"main_menu"}, timeout=45.0)
-        time.sleep(1.5)
+        # Wait until Main Menu is reached and has fully faded in
+        deadline = time.monotonic() + 45.0
+        while time.monotonic() < deadline:
+            st, _ = get_current_screen_state(display)
+            b = get_screen_brightness(display)
+            if st == "main_menu" and b >= 8000.0:
+                break
+            time.sleep(1.0)
+        time.sleep(2.0)
     elif step_name == "single-player":
         wait_for_any_screen_state(display, {"main_menu"}, timeout=30.0)
         time.sleep(1.0)
-        send_pad_button(display, "cross", 1.2)
+        wx, wy = to_window_coords((458, 85))
+        do_click(display, wx, wy, 0.4)
+        time.sleep(0.3)
+        send_pad_button(display, "cross", 0.5)
         wait_for_any_screen_state(display, {"single_player_menu"}, timeout=20.0)
         time.sleep(1.0)
     elif step_name == "campaigns":
-        wait_for_any_screen_state(display, {"single_player_menu"}, timeout=20.0)
+        wait_for_any_screen_state(display, {"single_player_menu"}, timeout=30.0)
         time.sleep(1.0)
-        send_pad_button(display, "cross", 1.2)
-        wait_for_any_screen_state(display, {"campaigns_book"}, timeout=30.0)
-        time.sleep(2.0)
+        wx, wy = to_window_coords((418, 86))
+        do_click(display, wx, wy, 0.4)
+        time.sleep(0.3)
+        send_pad_button(display, "cross", 0.5)
+        wait_for_any_screen_state(display, {"campaigns_book"}, timeout=90.0)
+        time.sleep(3.0)
     elif step_name == "wallace-marker":
-        wait_for_any_screen_state(display, {"campaigns_book"}, timeout=20.0)
-        time.sleep(1.0)
-        # On Campaigns book, focus starts on "Main Menu" at the bottom.
-        # Press Up 5 times to reach William Wallace at the top!
-        for _ in range(5):
-            send_pad_button(display, "up", 0.8)
-            time.sleep(0.8)
-        time.sleep(1.0)
-        # Select William Wallace
-        send_pad_button(display, "cross", 1.5)
-        time.sleep(3.0)
-    elif step_name == "scenario-1":
-        # Start Scenario 1 Marching and Fighting
-        send_pad_button(display, "cross", 1.5)
+        wait_for_any_screen_state(display, {"campaigns_book"}, timeout=60.0)
         time.sleep(2.0)
-        send_pad_button(display, "cross", 1.5)
+        wx, wy = to_window_coords((221, 77))
+        do_click(display, wx, wy, 0.5)
+        time.sleep(0.5)
+        send_pad_button(display, "cross", 0.5)
+        time.sleep(5.0)
+    elif step_name == "scenario-1":
         time.sleep(3.0)
+        wx, wy = to_window_coords((183, 57))
+        do_click(display, wx, wy, 0.5)
+        time.sleep(0.5)
+        send_pad_button(display, "cross", 0.5)
+        time.sleep(5.0)
     elif step_name in (
         "briefing",
         "briefing-next",
@@ -433,7 +459,12 @@ def do_step(display: str, action: str, argument, settle: float, step_name: str =
         time.sleep(1.0)
         send_pad_button(display, "cross", 0.4)
         time.sleep(0.5)
+        send_pad_button(display, "triangle", 0.4)
+        time.sleep(0.5)
         send_pad_button(display, "start", 0.4)
+        time.sleep(0.3)
+        wx, wy = to_window_coords((320, 224))
+        do_click(display, wx, wy, 0.3)
     elif step_name.startswith("story-advance"):
         time.sleep(0.5)
         wx, wy = to_window_coords((320, 224))
