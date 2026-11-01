@@ -33,11 +33,14 @@ WINDOW_SIZE = (1280, 720)
 BOOT_TO_MENU = [
     ("key-return-1", "key", "Return", 5),
     ("key-return-2", "key", "Return", 5),
-    ("card-ok", "pad", "cross", 5),
-    ("profile-name-field", "pad", "cross", 4),
-    ("profile-submit", "pad", "cross", 4),
-    ("profile-confirm", "pad", "cross", 6),
-    ("profile-settle", "pad", "cross", 6),
+    ("card-ok", "click", (251, 350), 30),
+    ("profile-new-player", "click", (251, 350), 5),
+    ("profile-name-field", "click", (335, 237), 3),
+    ("profile-name-a", "click", (176, 64), 2),
+    ("profile-name-enter", "click", (500, 153), 3),
+    ("profile-submit", "click", (245, 315), 5),
+    ("profile-confirm", "click", (245, 315), 10),
+    ("profile-settle", "wait", None, 10),
 ]
 
 SCENARIOS = {
@@ -381,20 +384,51 @@ def do_step(display: str, action: str, argument, settle: float, step_name: str =
             {"select_player_ready", "new_player_dialog", "main_menu"},
             timeout=90.0,
         )
+        time.sleep(3.0)
         if st == "select_player_ready":
-            time.sleep(2.0)
+            wx, wy = to_window_coords((251, 350))
+            do_click(display, wx, wy, 0.4)
+            time.sleep(0.5)
             send_pad_button(display, "cross", 0.5)
-            time.sleep(3.0)
+            time.sleep(2.0)
+    elif step_name == "profile-new-player":
+        st, _ = get_current_screen_state(display)
+        if st == "select_player_ready":
+            wx, wy = to_window_coords((251, 350))
+            do_click(display, wx, wy, 0.4)
+            time.sleep(0.5)
+            send_pad_button(display, "cross", 0.5)
+            time.sleep(2.0)
     elif step_name == "profile-name-field":
+        st, _ = get_current_screen_state(display)
+        if st in ("new_player_dialog", "select_player_ready"):
+            wx, wy = to_window_coords((335, 237))
+            do_click(display, wx, wy, 0.4)
+            time.sleep(0.5)
+            send_pad_button(display, "cross", 0.5)
+            time.sleep(1.5)
+    elif step_name == "profile-name-a":
+        wx, wy = to_window_coords((176, 64))
+        do_click(display, wx, wy, 0.4)
+        time.sleep(0.5)
+        send_pad_button(display, "cross", 0.5)
         time.sleep(1.0)
-        send_pad_button(display, "down", 0.5)
-        time.sleep(1.5)
+    elif step_name == "profile-name-enter":
+        wx, wy = to_window_coords((500, 153))
+        do_click(display, wx, wy, 0.4)
+        time.sleep(0.3)
+        send_pad_button(display, "start", 0.5)
+        time.sleep(2.0)
     elif step_name == "profile-submit":
-        time.sleep(1.0)
+        wx, wy = to_window_coords((245, 315))
+        do_click(display, wx, wy, 0.4)
+        time.sleep(0.3)
         send_pad_button(display, "cross", 0.5)
         time.sleep(2.0)
     elif step_name == "profile-confirm":
-        time.sleep(1.0)
+        wx, wy = to_window_coords((245, 315))
+        do_click(display, wx, wy, 0.4)
+        time.sleep(0.3)
         send_pad_button(display, "cross", 0.5)
         time.sleep(3.0)
     elif step_name == "profile-settle":
@@ -560,6 +594,8 @@ def drive_scenario(
                     nonlocal map_clicks
                     map_clicks += 1
                     send_pad_button(display, "cross", 0.8)
+                    wx, wy = to_window_coords((320, 224))
+                    do_click(display, wx, wy, 0.4)
                     shot = screenshots_dir / f"switch-{mode}-map-wait-{map_clicks}.png"
                     capture_screenshot(shot, display)
                     print(f"[{mode}] Captured {shot.name}", flush=True)
