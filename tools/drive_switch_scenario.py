@@ -239,10 +239,10 @@ def detect_screen_state(arr) -> str:
             return "select_player_mc_busy"
         return "select_player_ready"
 
-    # Book has dark title 'Campaigns' (mean < 60) and bright map page (mean > 75)
+    # Book has dark title 'Campaigns' (mean < 80) and bright map page (mean > 75)
     title_mean = arr[85:125, 550:730].mean()
     map_mean = arr[250:450, 250:550].mean()
-    if title_mean < 60.0 and map_mean > 75.0:
+    if title_mean < 80.0 and map_mean > 75.0:
         return "campaigns_book"
 
     # Menus have bright title banner (> 80)
@@ -426,53 +426,68 @@ def do_step(display: str, action: str, argument, settle: float, step_name: str =
         send_pad_button(display, "cross", 0.5)
         time.sleep(2.0)
     elif step_name == "profile-confirm":
-        wx, wy = to_window_coords((245, 315))
-        do_click(display, wx, wy, 0.4)
-        time.sleep(0.3)
-        send_pad_button(display, "cross", 0.5)
-        time.sleep(3.0)
+        # Keep confirming until dialog closes and transitions
+        deadline = time.monotonic() + 30.0
+        while time.monotonic() < deadline:
+            wx, wy = to_window_coords((245, 315))
+            do_click(display, wx, wy, 0.4)
+            time.sleep(0.3)
+            send_pad_button(display, "cross", 0.5)
+            time.sleep(2.0)
+            st, _ = get_current_screen_state(display)
+            if st != "new_player_dialog":
+                break
     elif step_name == "profile-settle":
         # Wait until Main Menu is reached and has fully faded in
-        deadline = time.monotonic() + 60.0
-        while time.monotonic() < deadline:
-            st, _ = get_current_screen_state(display)
-            b = get_screen_brightness(display)
-            if st == "main_menu" and b >= 8000.0:
-                break
-            time.sleep(1.0)
-        time.sleep(2.0)
+        wait_for_any_screen_state(display, {"main_menu"}, timeout=45.0)
+        time.sleep(3.0)
     elif step_name == "single-player":
         wait_for_any_screen_state(display, {"main_menu"}, timeout=30.0)
-        time.sleep(1.0)
+        time.sleep(1.5)
         wx, wy = to_window_coords((458, 85))
         do_click(display, wx, wy, 0.4)
         time.sleep(0.3)
         send_pad_button(display, "cross", 0.5)
-        wait_for_any_screen_state(display, {"single_player_menu"}, timeout=20.0)
-        time.sleep(1.0)
+        st = wait_for_any_screen_state(display, {"single_player_menu"}, timeout=30.0)
+        if st != "single_player_menu":
+            do_click(display, wx, wy, 0.4)
+            send_pad_button(display, "cross", 0.5)
+            wait_for_any_screen_state(display, {"single_player_menu"}, timeout=20.0)
+        time.sleep(2.0)
     elif step_name == "campaigns":
         wait_for_any_screen_state(display, {"single_player_menu"}, timeout=30.0)
-        time.sleep(1.0)
+        time.sleep(1.5)
         wx, wy = to_window_coords((418, 86))
         do_click(display, wx, wy, 0.4)
         time.sleep(0.3)
         send_pad_button(display, "cross", 0.5)
-        wait_for_any_screen_state(display, {"campaigns_book"}, timeout=90.0)
+        st = wait_for_any_screen_state(display, {"campaigns_book"}, timeout=90.0)
+        if st != "campaigns_book":
+            do_click(display, wx, wy, 0.4)
+            send_pad_button(display, "cross", 0.5)
+            wait_for_any_screen_state(display, {"campaigns_book"}, timeout=45.0)
         time.sleep(3.0)
     elif step_name == "wallace-marker":
         wait_for_any_screen_state(display, {"campaigns_book"}, timeout=60.0)
         time.sleep(2.0)
-        wx, wy = to_window_coords((221, 77))
+        # Click Scottish flag at William Wallace (window: 498, 158; logical: 219, 77)
+        wx, wy = to_window_coords((219, 77))
         do_click(display, wx, wy, 0.5)
         time.sleep(0.5)
-        send_pad_button(display, "cross", 0.5)
+        send_pad_button(display, "cross", 0.8)
         time.sleep(5.0)
     elif step_name == "scenario-1":
         time.sleep(3.0)
-        wx, wy = to_window_coords((183, 57))
+        # On Wallace campaign page, focus starts at Campaign Menu.
+        # Press Up to select Scenario 1, and also click directly at Scenario 1 marker.
+        send_pad_button(display, "up", 0.5)
+        time.sleep(0.5)
+        send_pad_button(display, "cross", 0.8)
+        time.sleep(0.5)
+        wx, wy = to_window_coords((271, 87))
         do_click(display, wx, wy, 0.5)
         time.sleep(0.5)
-        send_pad_button(display, "cross", 0.5)
+        send_pad_button(display, "cross", 0.8)
         time.sleep(5.0)
     elif step_name in (
         "briefing",
@@ -485,11 +500,9 @@ def do_step(display: str, action: str, argument, settle: float, step_name: str =
         "mission-start",
     ):
         time.sleep(1.0)
-        send_pad_button(display, "cross", 0.4)
+        send_pad_button(display, "cross", 0.5)
         time.sleep(0.5)
-        send_pad_button(display, "triangle", 0.4)
-        time.sleep(0.5)
-        send_pad_button(display, "start", 0.4)
+        send_pad_button(display, "start", 0.5)
         time.sleep(0.3)
         wx, wy = to_window_coords((320, 224))
         do_click(display, wx, wy, 0.3)
