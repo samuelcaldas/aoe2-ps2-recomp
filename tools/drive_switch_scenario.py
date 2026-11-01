@@ -230,9 +230,9 @@ def detect_screen_state(arr) -> str:
     if center_color[0] > 200 and center_color[1] > 180 and center_color[2] > 120:
         return "new_player_dialog"
 
-    if 40 < center_color[0] < 90 and 35 < center_color[1] < 80 and 25 < center_color[2] < 65:
+    if 40 < center_color[0] < 160 and 35 < center_color[1] < 140 and 25 < center_color[2] < 110:
         mc_crop = arr[140:190, 700:850].mean()
-        if mc_crop < 95.0:
+        if mc_crop < 100.0:
             return "select_player_mc_busy"
         return "select_player_ready"
 
