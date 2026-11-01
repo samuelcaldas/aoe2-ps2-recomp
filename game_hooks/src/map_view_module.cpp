@@ -368,12 +368,14 @@ bool PublishComposedLayout(PS2Runtime &runtime, const Snapshot *snapshot) {
     state.composed_layout.reset();
     return false;
   }
-  if (state.mode != MapViewMode::Native || !state.lease ||
-      !runtime.validateMapArena(&state, state.lease.generation) ||
-      !state.snapshot || state.snapshot->generation != snapshot->generation ||
-      state.snapshot->panel != snapshot->panel ||
-      state.snapshot->lifecycle != snapshot->lifecycle)
-    return false;
+  if (state.mode == MapViewMode::Native) {
+    if (!state.lease ||
+        !runtime.validateMapArena(&state, state.lease.generation) ||
+        !state.snapshot || state.snapshot->generation != snapshot->generation ||
+        state.snapshot->panel != snapshot->panel ||
+        state.snapshot->lifecycle != snapshot->lifecycle)
+      return false;
+  }
   state.composed_layout = snapshot->layout;
   return true;
 }

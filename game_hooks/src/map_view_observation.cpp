@@ -94,12 +94,38 @@ void LogObserveCall(uint8_t* ram, size_t slot, uint32_t area, uint32_t a0, uint3
     }
     std::clog << std::dec << '\n';
 }
+static uint32_t ResolvePaletteSource(uint8_t* ram, uint32_t palette_slot) {
+    if (!palette_slot || palette_slot < 0x100000u || palette_slot >= 0x2000000u) {
+        return 0x00C5C700u;
+    }
+    const uint32_t ptr = Word(ram, palette_slot + 4u);
+    if (ptr >= 0x100000u && ptr + 1024u <= 0x2000000u) {
+        const uint8_t* data = Bytes(ram, ptr, 1024);
+        bool has_nonzero = false;
+        for (size_t i = 0; i < 64; ++i) {
+            if (data[i] != 0) { has_nonzero = true; break; }
+        }
+        if (has_nonzero) return ptr;
+    }
+    if (palette_slot + 0x5Cu + 1024u <= 0x2000000u) {
+        const uint8_t* data = Bytes(ram, palette_slot + 0x5Cu, 1024);
+        bool has_nonzero = false;
+        for (size_t i = 0; i < 64; ++i) {
+            if (data[i] != 0) { has_nonzero = true; break; }
+        }
+        if (has_nonzero) return palette_slot + 0x5Cu;
+    }
+    if (ptr >= 0x100000u && ptr + 1024u <= 0x2000000u) {
+        return ptr;
+    }
+    return 0x00C5C700u;
+}
+
 void ObservePalette(uint8_t* ram, R5900Context* ctx, State& state, const Relocation& r) {
     if (getRegU32(ctx, 4) != r.area) return;
     ++state.palettes;
     const uint32_t palette_slot = Word(ram, r.area);
-    Bytes(ram, palette_slot, 0x45c);
-    const uint32_t source = palette_slot+0x5c;
+    const uint32_t source = ResolvePaletteSource(ram, palette_slot);
     std::memcpy(state.last_palette.data(), Bytes(ram, source, 1024), 1024);
     state.has_last_palette = true;
     if (state.snapshot) {
@@ -184,6 +210,17 @@ void PublishSnapshot(uint8_t* ram, State& state, const Relocation& r, Snapshot s
     if (all_zero && state.has_last_palette) {
         std::memcpy(snap.palette.data(), state.last_palette.data(), 1024);
     } else if (!all_zero) {
+        size_t opaque_count = 0;
+        for (size_t i = 0; i < 256; ++i) {
+            opaque_count += (snap.palette[i * 4 + 3] != 0);
+        }
+        if (opaque_count == 0) {
+            for (size_t i = 0; i < 256; ++i) {
+                if (snap.palette[i * 4 + 0] != 0 || snap.palette[i * 4 + 1] != 0 || snap.palette[i * 4 + 2] != 0) {
+                    snap.palette[i * 4 + 3] = 0x80;
+                }
+            }
+        }
         std::memcpy(state.last_palette.data(), snap.palette.data(), 1024);
         state.has_last_palette = true;
     }
@@ -237,16 +274,14 @@ void RecordSubmission(uint8_t* ram, State& state, const Relocation& r, uint32_t 
     // area's first word is not guaranteed to be the palette active for this
     // upload, so snapshot the palette from the same viewport as the pixels.
     snap.palette_slot = Word(ram, viewport + 0x14);
-    if (!snap.palette_slot) {
-        std::clog << "[map-submit-skip] viewport has no active CLUT slot\n";
-        return;
+    if (!snap.palette_slot && r.area) {
+        snap.palette_slot = Word(ram, r.area + 0x00u);
     }
-    Bytes(ram, snap.palette_slot, 8);
-    snap.palette_source = Word(ram, snap.palette_slot + 4);
+    snap.palette_source = ResolvePaletteSource(ram, snap.palette_slot);
     Bytes(ram, snap.palette_source, 1024);
     std::clog << "[map-palette-source] viewport=" << viewport
               << " slot=0x" << std::hex << snap.palette_slot
-              << " clut=0x" << (Word(ram, snap.palette_slot + 2) & 0xffffu)
+              << " clut=0x" << (snap.palette_slot ? (Word(ram, snap.palette_slot + 2) & 0xffffu) : 0)
               << " data=0x" << snap.palette_source << std::dec << '\n';
     const uint32_t target_w = state.lease ? r.target_w : Word(ram, viewport+0x3c);
     const uint32_t target_h = state.lease ? r.target_h : Word(ram, viewport+0x38);
@@ -472,25 +507,14 @@ void RecordMapPanelSubmission(uint8_t* ram, State& state) {
     snap.source = r.base + r.layout.visible_offset;
 
     uint32_t palette_slot = 0;
-    uint32_t palette_src = 0;
     if (snap.viewport) {
         palette_slot = Word(ram, snap.viewport + 0x14u);
-        if (palette_slot && palette_slot >= 0x100000u && palette_slot < 0x2000000u) {
-            palette_src = Word(ram, palette_slot + 4u);
-        }
     }
-    if (!palette_src || palette_src < 0x100000u || palette_src >= 0x2000000u) {
-        const uint32_t pal_obj = Word(ram, r.area + 0x00u);
-        if (pal_obj && pal_obj >= 0x100000u && pal_obj < 0x2000000u) {
-            palette_slot = pal_obj;
-            palette_src = pal_obj + 0x5Cu;
-        }
-    }
-    if (!palette_src || palette_src < 0x100000u || palette_src >= 0x2000000u) {
-        palette_src = 0x00C5C700u;
+    if (!palette_slot && r.area) {
+        palette_slot = Word(ram, r.area + 0x00u);
     }
     snap.palette_slot = palette_slot;
-    snap.palette_source = palette_src;
+    snap.palette_source = ResolvePaletteSource(ram, palette_slot);
 
     PublishSnapshot(ram, state, r, std::move(snap), r.target_w, r.target_h);
 }

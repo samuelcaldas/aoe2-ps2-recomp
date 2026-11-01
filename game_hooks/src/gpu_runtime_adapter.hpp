@@ -30,12 +30,12 @@ inline DispatchCounts g_dispatch_counts{};
 inline std::atomic<uint64_t> g_dispatch_total{0};
 
 inline uint64_t DispatchReportInterval() {
-    static const uint64_t interval = [] {
+    static const uint64_t interval = []() -> uint64_t {
         const char* value = std::getenv("AOE2_GPU_TRACE_INTERVAL");
         if (!value || !*value) return uint64_t{10000};
         char* end = nullptr;
         const auto parsed = std::strtoull(value, &end, 10);
-        return end == value || *end || parsed == 0 ? uint64_t{10000} : parsed;
+        return (end == value || *end || parsed == 0) ? uint64_t{10000} : static_cast<uint64_t>(parsed);
     }();
     return interval;
 }

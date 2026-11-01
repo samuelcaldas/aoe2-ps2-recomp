@@ -17,6 +17,9 @@ MapViewSession::MapViewSession(PS2Runtime& runtime) {
     std::clog << "[native-presentation] map-only: menus and HUD are not implemented\n";
     runtime.setNativeFrameProvider([&runtime]() -> std::optional<PS2OwnedPresentationFrame> {
         auto map_snap = map_view::CaptureNative(runtime);
+        if (!map_snap) {
+            map_snap = map_view::Capture(runtime);
+        }
         auto ui_snap = map_view::CaptureUi(runtime);
 
         const bool has_map = map_snap && !map_snap->indices.empty();
