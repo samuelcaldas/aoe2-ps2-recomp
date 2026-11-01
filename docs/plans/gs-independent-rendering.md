@@ -1,6 +1,6 @@
 # Implementation handoff: GS-independent graphics
 
-This plan implements the [canonical rendering contract](../sot/high-level-draw-seams.md#7-gs-independent-presentation-contract); it is indexed by [docs/README.md](../README.md). Its final goal is boot through gameplay without GS visual processing. Preserve the legacy reference during development. Do not edit generated C++, weaken provenance checks, or change the owner's decomp repository. Runtime changes belong in the authorized PS2Recomp fork; record a new pin and truthful generation provenance when required.
+This plan implements the [canonical rendering contract](../sot/high-level-draw-seams.md#7-gs-independent-presentation-contract) using the source-checked [binary intervention map](../sot/graphics-binary-intervention-map.md); it is indexed by [docs/README.md](../README.md). Its final goal is boot through gameplay without GS visual processing. Preserve the legacy reference during development. Do not edit generated C++, weaken provenance checks, or change the owner's decomp repository. Runtime changes belong in the authorized PS2Recomp fork; record a new pin and truthful generation provenance when required.
 
 ## Starting point and rules
 
@@ -24,11 +24,11 @@ This plan implements the [canonical rendering contract](../sot/high-level-draw-s
 **Depends on:** task 1 frame-boundary evidence. **Primary areas:** runtime presentation boundary, `game_hooks`, `renderer`.
 
 1. Introduce a bounded per-generation capture/assembly contract as specified in the SOT. Sealed data owns copies or retained immutable resources; order, format, clip, palette, lifetime and output dimensions are explicit. Validate bounds and overflow. Abort incomplete or stale generations on transition, resource failure or shutdown.
-2. Route the resulting owned RGBA frame through the existing presenter. Extend the actual desktop and Switch runtime paths as needed; do not create a second EGL context or use the GS-derived desktop compositor as the native source. Implement independently verified frame pacing and guest-visible completion before disabling the corresponding GS side effects.
+2. Route immutable captured commands and textures through the existing presenter for direct GLES composition. An owned RGBA frame is an intermediate milestone only. Extend the actual desktop and Switch runtime paths as needed; do not create a second EGL context or use the GS-derived desktop compositor as the native source. Implement independently verified frame pacing and guest-visible completion before disabling the corresponding GS side effects.
 3. Add an explicitly selected strict native mode and named diagnostics for unsupported/missing draw, palette, source, frame completion, stale state, overflow and timeout. Strict mode fails rather than returning `nullopt` to a legacy/black fallback. Keep reference mode separately selectable. Instrument or disable every GS visual entry used during strict tests; assert zero native-path GS accesses, including UI capture and palette lookup.
 4. Test generation ownership and synchronization with synthetic producers, including guest memory mutation after capture, out-of-order or mixed generations, panel destruction, resize, capacity limits, failure and shutdown. Verify that a failed frame never publishes a new input layout or stale frame.
 
-**Gate:** synthetic complete frames reach the existing presenter on desktop and Switch without GS access; missing content fails visibly and deterministically. This gate does not claim real game coverage.
+**Gate:** synthetic complete command streams are composed by GLES in the existing presenter on desktop and Switch without GS access; missing content fails visibly and deterministically. This gate does not claim real game coverage.
 
 ## 3. Boot and menus
 

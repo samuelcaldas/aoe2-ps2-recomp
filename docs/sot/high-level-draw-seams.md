@@ -1,6 +1,6 @@
 # High-Level Draw Seam Analysis: Sprites, Tiles, UI, and `kt_gpu`
 
-This is the canonical contract for the planned GS-independent renderer. The original path is described in Portuguese in [`caminho-real-de-desenho-pipeline.md`](caminho-real-de-desenho-pipeline.md); implementation tasks and acceptance gates are in the [handoff](../plans/gs-independent-rendering.md), indexed by [docs/README.md](../README.md).
+This is the canonical contract for the planned GS-independent renderer. The [binary intervention map](graphics-binary-intervention-map.md) records source-checked entry points, bypasses and open coverage. The original path is described in Portuguese in [`caminho-real-de-desenho-pipeline.md`](caminho-real-de-desenho-pipeline.md); implementation tasks and acceptance gates are in the [handoff](../plans/gs-independent-rendering.md), indexed by [docs/README.md](../README.md).
 
 ## 1. Executive Summary
 
@@ -16,12 +16,12 @@ However, detailed decompilation analysis (`samuelcaldas/age-of-empires-2-decomp`
 2. **The Actual High-Level Drawing Seams (Genie Engine & KCET Subsystems)**:
    - **Playfield & Terrain Tiles**: The game software-rasterizes terrain, fog of war, buildings, and in-world units into an 8-bit indexed EE RAM surface (`0x01F98C80` in the observed legacy 640×262 mode). `map_view_module` contains opt-in arena-backed relocation and expansion code; correct live expanded output remains unproven. The pixel span rasterizer is `func_0017e350` (`src/trade/trade_action_stream_raster.cpp`).
    - **Sprites (Units, Buildings, Projectiles)**:
-     - **Resource Loading**: `func_0025D6D0(shape, name, resource_id)` (`src/render/render_manager_surfaces.cpp`).
+     - **Resource Loading**: `func_0025D6D0(shape, name, resource_id)` is called by `src/render/render_manager_surfaces.cpp` and observed by the shape trace; that source file is a caller, not the loader implementation.
      - **Shape Drawing**: `func_0025E640(shape, area, x, y, frame, flags)` (`src/render/render_helper_2184D0.cpp`). These shapes use PS2 packed formats (e.g., `4.1k` / `4.2k` containers or raw frame tables); some observed numeric IDs correspond to PC/HD SLP IDs (e.g. `2296`, `50100`). This does not prove universal correspondence.
    - **UI Elements & HUD Panels**:
      - **Panel Management & Hierarchy**: Handled by `RenderManager` and screen objects (`src/app/screen_manager.cpp`, `src/render/render_manager_screen.cpp`, `src/render/screen_obj.cpp`).
      - **HUD / Interface Sprites**: Drawn through the same `func_0025E640` shape draw seam into panel surfaces, or uploaded as small PSMT8 textures (e.g., 40×80 command buttons, 396×198 panels at `0x01FC2800`).
-     - **Text / Fonts**: Each font glyph is uploaded separately as a small PSMT4 texture (6×6 to 18×11 px) via KCET DMA transfers and drawn as individual textured quads (`render_font_context.cpp`).
+     - **Text / Fonts**: Small indexed uploads and quads have been observed in prior traces. `0x224B90` is a candidate font-transfer path; its ABI and coverage remain unverified. The previously cited `render_font_context.cpp` is absent from the inspected decompilation.
 
 ---
 
@@ -62,7 +62,7 @@ For the legacy/compatibility path only, when replacing or adapting `kt_gpu` at r
 
 ## 3. High-Level Drawing Pipeline Map
 
-The true flow of visual assets through the engine is structured as follows:
+The diagram summarizes observed legacy paths; it is not exhaustive. UI and font producers can bypass these nodes, as documented in the [binary intervention map](graphics-binary-intervention-map.md).
 
 ```mermaid
 flowchart TD
@@ -79,7 +79,7 @@ flowchart TD
         PlayfieldDispatch["Terrain / Map Render<br/>(func_0031A410 / func_001AB7E0)"]
         SpriteDispatch["Unit / Building Draws<br/>func_0025E640(shape, area, x, y, frame)"]
         UIDispatch["UI / Menu / HUD Panels<br/>(RenderManager / screen_obj)"]
-        FontDispatch["Glyph Generation<br/>(render_font_context)"]
+        FontDispatch["Glyph path<br/>(candidate 0x224B90; coverage unknown)"]
 
         Engine --> PlayfieldDispatch
         Engine --> SpriteDispatch
@@ -119,9 +119,9 @@ flowchart TD
 | Visual Component | Guest Seam / Entry Point | Format / Parameters | Recommended Host Override Strategy |
 | :--- | :--- | :--- | :--- |
 | **Map View / Terrain** | `game_hooks/src/map_view_module.cpp`<br/>`0x0031A410`, `0x001AB7E0`, `0x001ABAC0` | Indexed 8-bit surface and palette; opt-in arena-backed capture | **Partial**: hooks and RGBA composition exist, but live relocation parity, expanded terrain, and completed-frame timing remain acceptance gates. See the [viewport plan](../plans/expanded-viewport-native-implementation.md). |
-| **Sprites (Units, Buildings)** | `func_0025D6D0` (loader)<br/>`func_0025E640` (draw) | `shape`: pointer to shape object<br/>`area`: target viewport/clip area<br/>`x, y`: screen coordinates<br/>`frame`: animation frame index<br/>`flags`: flip / transparency | Optional later substitution: verify resource identity and decode, suppress the original draw only on successful replacement, and preserve ordering with the map rasterizer. |
+| **Sprites (Units, Buildings)** | `func_0025D6D0` (loader)<br/>`func_0025E640` (draw) | Trace labels the arguments shape, area, x/y, frame and flags; exact layout and flag semantics need verification | Optional later substitution: verify resource identity and decode, suppress the original draw only on successful replacement, and preserve ordering with the map rasterizer. |
 | **UI Panels & HUD Elements** | `screen_manager.cpp`<br/>`func_002FD5C0`, `func_002FC350`<br/>Panel draw hooks | Panel bounding boxes (`panel+0x14`, `panel+0x18`) and shape IDs (e.g. `50100` for main background) | First capture original UI above GS with verified source and ordering; later, anchor panels to display borders with matching input mapping. |
-| **Text & Tooltips** | `render_font_context.cpp`<br/>Glyph draw callbacks | Glyph character code, font ID, screen position | Capture original glyphs and metrics before GS; native typography is optional later. |
+| **Text & Tooltips** | `0x224B90` is a transfer-path candidate; full glyph draw seam unknown | Source, format, metrics and draw arguments require runtime tracing | Capture original glyphs and metrics before GS; native typography is optional later. |
 
 ---
 
@@ -160,13 +160,13 @@ The current implementation does **not** satisfy that goal. `MapViewSession` inst
 
 ### Frame lifecycle and ownership
 
-The intended flow is **guest execution → verified high-level capture → ordered frame assembly → immutable owned RGBA frame → existing platform presenter**. The following is a required interface contract, not a claim that an implementation exists:
+The intended flow is **guest execution → verified high-level capture → ordered frame assembly → immutable ordered host commands/resources → direct GLES composition in the existing platform presenter**. The following is a required interface contract, not a claim that an implementation exists:
 
 1. A guest-frame boundary must be proven from actual execution, including scheduler yields and screen transitions. The producer starts a monotonically increasing generation at that boundary, records drawing in guest order, then seals only after all sources for that generation are complete. A callback returning to host code alone is not proof of completion.
 2. Each map snapshot, UI surface, palette and command belongs to that generation and its screen/panel lifetime. Copy mutable guest data at a verified safe point into bounded host-owned storage; never retain guest pointers or references to scratch buffers after the guest resumes. Associate resource handles with a lifetime that outlives every queued use. A screen change, teardown, or failed generation invalidates pending work and input layout.
 3. Frame assembly consumes the sealed sequence in observed order. Surface updates, fills, map output, shapes, glyphs, cursor and overlays must preserve their relative ordering, clipping and alpha; no universal rule such as “all UI after map” is assumed until traces establish it. Treat map pixels containing units as already rasterized: replacing a sprite requires preventing the corresponding original rasterization and preserving intervening draws. A late overlay alone duplicates or incorrectly occludes it.
 4. Define coordinates, pitch, pixel format, palette and alpha interpretation for each source from evidence. Reject integer overflow, out-of-range guest spans, impossible dimensions, invalid frame indices, missing palettes and expired resources. Convert to one documented host RGBA representation before composition. Apply the output transform once; publish its matching inverse input layout only for the successfully presented generation.
-5. The existing presentation owner consumes an immutable host-owned frame with width, height, stride and storage lifetime through completion of upload. Guest hooks do not call GL or create contexts. Adapt the runtime's existing provider/presenter for all supported platforms; do not create a second context or competing presenter. Queue limits and backpressure must be explicit and bounded; never silently drop a required draw or mix generations.
+5. The existing presentation owner consumes immutable host-owned commands and resources through completion of GLES submission; its output and resource lifetimes must be explicit. An owned RGBA frame may be a transitional intermediate, but does not establish direct GLES composition. Guest hooks do not call GL or create contexts. Adapt the runtime's existing provider/presenter for all supported platforms; do not create a second context or competing presenter. Queue limits and backpressure must be explicit and bounded; never silently drop a required draw or mix generations.
 6. Synchronization and teardown must ensure that neither the presenter nor guest accesses released state. Install providers before guest execution, clear them after execution stops, and handle resize, dock transitions and panel destruction as generation boundaries. Validate whether existing runtime locking and scheduler behavior meet these requirements before relying on them.
 
 The first target is original PS2 appearance and functionality without GS. HD assets, alternate fonts and wider layouts are optional later improvements, not prerequisites. Host asset substitution is disabled until its decode, original-call replacement, ownership, composition order and fallback are verified end to end.

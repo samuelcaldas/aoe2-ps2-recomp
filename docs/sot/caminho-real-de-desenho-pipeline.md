@@ -119,7 +119,7 @@ A composição deve usar o apresentador existente; `IRenderer` não é atualment
 | :--- | :--- | :--- |
 | **Playfield (Mapa, Unidades, Terreno)** | **1. Bypass do Buffer:** Leitura direta do buffer de RDRAM `0x01F98C80` + paleta ativa, apresentando 1:1.<br/>**2. Expansão de Viewport (Fase A/B):** Alocar buffer estendido (ex: 1280×720) na RDRAM expandida de 64 MB e interceptar na inicialização do painel em `0x31a410`.<br/>**3. Substituição opcional:** investigar `func_0025E640` após comprovar identidade, ordem e supressão do desenho original. | Compor o snapshot RGBA no apresentador existente, sem usar dados produzidos pelo GS. |
 | **HUD (Painel Inferior e Barra Superior)** | Interceptar no `HudLayout::ForExtent` e nas chamadas de desenho de interface da Genie Engine (`50100.slp`, `50102.slp`). | Ancorar barra de recursos no topo $(0, 0, W, 24)$ e painel de comando na base $(0, H - 120, W, H)$. |
-| **Texto / Fontes** | Investigar despacho de strings e glifos antes do GS; `func_001890A0` é candidato. | Reproduzir glifos originais e métricas; FreeType/TTF é opção posterior. |
+| **Texto / Fontes** | Investigar `0x224B90` e a cadeia de glifos antes do GS; `0x1890A0` consulta o histórico de chat e não é um despachante de texto. | Reproduzir glifos originais e métricas; FreeType/TTF é opção posterior. |
 | **Ponteiro / Mouse** | Interceptar em `PresentationTransform` / `HudInverseMapper`. | Manter as coordenadas do mouse no espaço lógico correto mapeando toques do Switch para os painéis realocados. |
 
 ---

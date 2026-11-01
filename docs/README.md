@@ -51,7 +51,8 @@ Subsystem-specific behavioral specifications:
 * **[`docs/sot/overlay-recompilation.md`](sot/overlay-recompilation.md)**: Multi-menu, lobby, and scenario dynamic overlay recompilation and dispatch.
 * **[`docs/sot/multiplayer-lan-architecture.md`](sot/multiplayer-lan-architecture.md)**: i.LINK / UDP network emulation and discovery.
 * **[`docs/sot/play-emulator-sot.md`](sot/play-emulator-sot.md)**: Play! emulator hardware reference behavior for SIF/IOP handshakes.
-* **[`docs/sot/high-level-draw-seams.md`](sot/high-level-draw-seams.md)**: Verified evidence for the high-level map, sprite, UI, and glyph draw paths; `kt_gpu` is not the gameplay draw seam.
+* **[`docs/sot/high-level-draw-seams.md`](sot/high-level-draw-seams.md)**: GS-independent rendering contract and known evidence.
+* **[`docs/sot/graphics-binary-intervention-map.md`](sot/graphics-binary-intervention-map.md)**: ELF/decomp-checked intervention candidates, direct-call bypasses, and unresolved coverage.
 * **[`docs/sot/caminho-real-de-desenho-pipeline.md`](sot/caminho-real-de-desenho-pipeline.md)**: Detailed rendering pipeline and interception strategy, complementary to the seam analysis above.
 * **Subsystem Semantics**:
   - [`sot/gpu-semantics.md`](sot/gpu-semantics.md): GS drawing and texture uploads.
