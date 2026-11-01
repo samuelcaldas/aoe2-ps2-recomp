@@ -280,7 +280,7 @@ def main(argv: list | None = None) -> int:
     parser.add_argument(
         "--run-seconds",
         type=int,
-        default=900,
+        default=1800,
         help="how long to run the emulator under test (seconds)",
     )
     parser.add_argument(
@@ -333,6 +333,19 @@ def main(argv: list | None = None) -> int:
                 old_shot.unlink()
             except OSError:
                 pass
+
+    ryu_data = evidence_path / "ryujinx-data"
+    if ryu_data.exists():
+        for item in ryu_data.iterdir():
+            if item.name == "sdcard":
+                for mc in (item / "switch" / "aoe2" / "mc0", item / "switch" / "aoe2" / "mc1"):
+                    if mc.exists():
+                        shutil.rmtree(mc, ignore_errors=True)
+            else:
+                if item.is_dir():
+                    shutil.rmtree(item, ignore_errors=True)
+                else:
+                    item.unlink(missing_ok=True)
 
     if not args.dry_run:
         ensure_container_clean(CONTAINER_NAME)

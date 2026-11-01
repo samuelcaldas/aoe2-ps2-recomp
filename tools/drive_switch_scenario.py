@@ -33,62 +33,32 @@ WINDOW_SIZE = (1280, 720)
 BOOT_TO_MENU = [
     ("key-return-1", "key", "Return", 5),
     ("key-return-2", "key", "Return", 5),
-    ("osk-letter-a", "click", (176, 64), 4),
-    ("osk-enter", "click", (470, 151), 4),
-    ("card-ok", "click", (251, 312), 35),
-    ("profile-new-player", "click", (251, 350), 5),
-    ("profile-name-field", "click", (335, 237), 3),
-    ("profile-name-a", "click", (176, 64), 2),
-    ("profile-name-o", "click", (296, 95), 2),
-    ("profile-name-k", "click", (176, 95), 2),
-    ("profile-name-enter", "click", (500, 153), 3),
-    ("profile-submit", "click", (245, 315), 5),
-    ("profile-confirm", "click", (245, 315), 15),
-    ("profile-settle", "wait", None, 15),
+    ("card-ok", "pad", "cross", 5),
+    ("profile-name-field", "pad", "cross", 4),
+    ("profile-submit", "pad", "cross", 4),
+    ("profile-confirm", "pad", "cross", 6),
+    ("profile-settle", "pad", "cross", 6),
 ]
 
 SCENARIOS = {
-    "smoke": BOOT_TO_MENU[:5],
+    "smoke": BOOT_TO_MENU[:3],
     "main-menu": BOOT_TO_MENU,
-    "single-player": BOOT_TO_MENU + [("single-player", "click", (458, 85), 10)],
+    "single-player": BOOT_TO_MENU + [("single-player", "pad", "cross", 4)],
     "campaign": BOOT_TO_MENU + [
-        ("single-player", "click", (458, 85), 10),
-        ("campaigns", "click", (418, 86), 12),
-        ("wallace-marker", "click", (221, 77), 12),
-        ("scenario-1", "click", (183, 57), 40),
-        ("briefing", "key", "shift", 30),
-        ("briefing-next", "key", "z", 30),
-        ("mission-loading", "key", "z", 45),
-        ("brief-3", "key", "z", 25),
-        ("brief-4", "key", "z", 25),
-        ("brief-5", "key", "z", 40),
-        ("mission", "key", "shift", 40),
-        ("mission-start", "key", "z", 60),
-        ("story-advance-1", "click", (320, 224), 20),
-        ("story-advance-2", "click", (320, 224), 20),
-        ("story-advance-3", "click", (320, 224), 12),
-        ("story-advance-4", "click", (320, 224), 12),
-        ("story-advance-5", "click", (320, 224), 12),
-        ("story-advance-6", "click", (320, 224), 12),
-        ("story-advance-7", "click", (320, 224), 12),
-        ("story-advance-8", "click", (320, 224), 12),
+        ("single-player", "pad", "cross", 4),
+        ("campaigns", "pad", "cross", 4),
+        ("wallace-marker", "pad", "cross", 4),
+        ("scenario-1", "pad", "cross", 6),
+        ("story-complete", "story-until", None, 12),
         ("mission-live", "wait", None, 30),
     ],
     "campaign-auto": BOOT_TO_MENU + [
-        ("single-player", "click", (458, 85), 10),
-        ("campaigns", "click", (418, 86), 12),
-        ("wallace-marker", "click", (221, 77), 12),
-        ("scenario-1", "click", (183, 57), 40),
-        ("briefing", "key", "shift", 30),
-        ("briefing-next", "key", "z", 30),
-        ("mission-loading", "key", "z", 45),
-        ("brief-3", "key", "z", 25),
-        ("brief-4", "key", "z", 25),
-        ("brief-5", "key", "z", 40),
-        ("mission", "key", "shift", 40),
-        ("mission-start", "key", "z", 60),
-        ("story-complete", "story-until", (320, 224), 12),
-        ("map-submitted", "map-until", (320, 224), 300),
+        ("single-player", "pad", "cross", 4),
+        ("campaigns", "pad", "cross", 4),
+        ("wallace-marker", "pad", "cross", 4),
+        ("scenario-1", "pad", "cross", 6),
+        ("story-complete", "story-until", None, 12),
+        ("map-submitted", "map-until", None, 600),
         ("map-stability", "wait", None, 30),
     ],
 }
@@ -189,11 +159,14 @@ def send_pad_button(display: str, btn: str, duration: float = 0.35) -> None:
     env = {**os.environ, "DISPLAY": display}
     win = find_window(display, timeout=5.0)
     btn_map = {
+        "b": "z",
+        "a": "x",
         "cross": "z",
         "confirm": "z",
         "circle": "x",
         "cancel": "x",
         "start": "Return",
+        "plus": "Return",
         "up": "Up",
         "down": "Down",
         "left": "Left",
@@ -201,6 +174,7 @@ def send_pad_button(display: str, btn: str, duration: float = 0.35) -> None:
         "triangle": "c",
         "square": "v",
         "select": "Minus",
+        "minus": "Minus",
     }
     key = btn_map.get(btn.lower(), btn)
     if win:
@@ -410,19 +384,19 @@ def do_step(display: str, action: str, argument, settle: float, step_name: str =
         send_pad_button(display, "cross", 0.4)
         time.sleep(1.0)
     elif step_name == "profile-settle":
-        # Return to Select Player list with player "1. a" selected. Click and Cross to enter Main Menu.
+        # Return to Select Player list with player "1. a" selected.
+        # Use Switch B / Enter to confirm loading profile and enter Main Menu.
         time.sleep(2.0)
-        wx, wy = to_window_coords((251, 312))
-        do_click(display, wx, wy, 0.4)
-        time.sleep(0.5)
-        send_pad_button(display, "cross", 0.4)
-        time.sleep(0.5)
-        send_pad_button(display, "start", 0.4)
+        send_pad_button(display, "cross", 0.5)
+        time.sleep(1.0)
+        send_pad_button(display, "start", 0.5)
+        time.sleep(1.0)
+        send_pad_button(display, "cross", 0.5)
         time.sleep(3.0)
     elif step_name == "single-player":
         # Main Menu -> Single Player
         wait_for_screen_ready(display, timeout=30.0, settle_after=2.0)
-        wx, wy = to_window_coords((458, 85))
+        wx, wy = 890, 172
         do_click(display, wx, wy, 0.4)
         time.sleep(0.5)
         send_pad_button(display, "cross", 0.4)
@@ -430,7 +404,7 @@ def do_step(display: str, action: str, argument, settle: float, step_name: str =
     elif step_name == "campaigns":
         # Single Player -> Campaigns
         wait_for_screen_ready(display, timeout=30.0, settle_after=2.0)
-        wx, wy = to_window_coords((418, 86))
+        wx, wy = 890, 168
         do_click(display, wx, wy, 0.4)
         time.sleep(0.5)
         send_pad_button(display, "cross", 0.4)
@@ -471,9 +445,9 @@ def do_step(display: str, action: str, argument, settle: float, step_name: str =
         send_pad_button(display, "start", 0.4)
     elif step_name.startswith("story-advance"):
         time.sleep(0.5)
+        wx, wy = to_window_coords((320, 224))
+        do_click(display, wx, wy, 0.4)
         send_pad_button(display, "cross", 0.4)
-        time.sleep(0.5)
-        send_pad_button(display, "start", 0.4)
     elif action == "pad":
         send_pad_button(display, str(argument), 0.35)
     elif action == "key":
@@ -538,17 +512,18 @@ def drive_scenario(
             def advance_story():
                 nonlocal story_clicks
                 story_clicks += 1
-                send_pad_button(display, "cross", 0.3)
-                send_pad_button(display, "start", 0.3)
+                wx, wy = to_window_coords((320, 224))
+                do_click(display, wx, wy, 0.4)
+                send_pad_button(display, "cross", 0.4)
                 shot = screenshots_dir / f"switch-{mode}-story-{story_clicks}.png"
                 capture_screenshot(shot, display)
                 print(f"[{mode}] Captured {shot.name}", flush=True)
 
             matched = follow_guest_event(
-                log_path, b"4 e-txt", timeout=300.0, on_wait=advance_story
+                log_path, b"[map-submit]", timeout=300.0, on_wait=advance_story, max_interval_seconds=4.0
             )
             if not matched:
-                sys.stderr.write(f"WARNING: 4 e-txt not reached before timeout\n")
+                sys.stderr.write(f"WARNING: [map-submit] not reached in story-until\n")
         elif action == "map-until":
             map_clicks = 0
 
