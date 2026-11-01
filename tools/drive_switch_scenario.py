@@ -382,28 +382,21 @@ def do_step(display: str, action: str, argument, settle: float, step_name: str =
             timeout=90.0,
         )
         if st == "select_player_ready":
-            time.sleep(1.0)
-            send_pad_button(display, "cross", 1.0)
-            wait_for_any_screen_state(display, {"new_player_dialog", "main_menu"}, timeout=60.0)
+            time.sleep(2.0)
+            send_pad_button(display, "cross", 0.5)
+            time.sleep(3.0)
     elif step_name == "profile-name-field":
-        st = wait_for_any_screen_state(display, {"new_player_dialog", "main_menu"}, timeout=60.0)
-        if st == "new_player_dialog":
-            time.sleep(1.0)
-            # In New Player popup, move focus from Name field down to [OK]
-            send_pad_button(display, "down", 0.8)
-            time.sleep(1.0)
+        time.sleep(1.0)
+        send_pad_button(display, "down", 0.5)
+        time.sleep(1.5)
     elif step_name == "profile-submit":
-        st = wait_for_any_screen_state(display, {"new_player_dialog", "main_menu"}, timeout=30.0)
-        if st == "new_player_dialog":
-            # Press Cross on [OK] to confirm default name "Anonymous"
-            send_pad_button(display, "cross", 1.0)
-            time.sleep(2.0)
+        time.sleep(1.0)
+        send_pad_button(display, "cross", 0.5)
+        time.sleep(2.0)
     elif step_name == "profile-confirm":
-        # Confirmation popup 'Is the name Anonymous correct?' appears
-        st, _ = get_current_screen_state(display)
-        if st not in ("main_menu", "single_player_menu"):
-            send_pad_button(display, "cross", 1.0)
-            time.sleep(2.0)
+        time.sleep(1.0)
+        send_pad_button(display, "cross", 0.5)
+        time.sleep(3.0)
     elif step_name == "profile-settle":
         # Wait until Main Menu is reached and has fully faded in
         deadline = time.monotonic() + 60.0
