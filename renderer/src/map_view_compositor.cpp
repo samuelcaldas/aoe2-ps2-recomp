@@ -45,7 +45,8 @@ void ValidateMap(const MapFrameSnapshot& snapshot) {
 void PaintMapRow(std::vector<uint8_t>& output, const MapFrameSnapshot& frame, uint32_t row) {
     const auto width = static_cast<uint32_t>(frame.layout.output.width);
     const auto top = static_cast<uint32_t>(frame.layout.map.y);
-    uint8_t* destination = output.data() + (uint64_t{row + top} * width) * 4;
+    const auto left = static_cast<uint32_t>(frame.layout.map.x);
+    uint8_t* destination = output.data() + (uint64_t{row + top} * width + left) * 4;
     const uint8_t* source = frame.indices.data() + uint64_t{row} * frame.pitch;
     for (uint32_t column = 0; column < frame.width; ++column) {
         const auto& foreground = frame.palette[source[column]];
