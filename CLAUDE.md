@@ -126,7 +126,9 @@ Every document in the repository links into a coherent chain leading back to thi
 
 - **System Architecture**: [`docs/architecture.md`](docs/architecture.md) (subsystems, EE/VU/GS/IOP notes, and layer boundaries).
 - **Verified Draw Seams**: [`docs/sot/high-level-draw-seams.md`](docs/sot/high-level-draw-seams.md) (map software rasterization, shape/UI calls, and the low-level `kt_gpu` presentation role).
+- **Graphics Binary Intervention Map**: [`docs/sot/graphics-binary-intervention-map.md`](docs/sot/graphics-binary-intervention-map.md) (comprehensive inventory of guest addresses, viewport/blits, UI quads, fonts, and frame presentation boundary in `AOK.ELF`).
 - **Real Rendering Pipeline**: [`docs/sot/caminho-real-de-desenho-pipeline.md`](docs/sot/caminho-real-de-desenho-pipeline.md) (end-to-end Genie Engine, RDRAM, DMA, GS, and interception analysis; Portuguese).
+- **GPU Semantics & Host Integration**: [`docs/sot/gpu-semantics.md`](docs/sot/gpu-semantics.md) (contract, packet formats, GS registers, and native presenter integration).
 - **Nintendo Switch Target**: [`docs/switch-target-architecture.md`](docs/switch-target-architecture.md) (Horizon OS services, `appletHook` 720p/1080p scaling, `audren` audio, Title Takeover memory protection, and touch/Joy-Con input).
 - **HD Asset Strategy & Viewport**: [`docs/sot/hd-assets-strategy.md`](docs/sot/hd-assets-strategy.md) (canonical SOT for HD 2013 assets, runtime playfield rasterization, and viewport expansion).
 - **KCET Native Boundary**: [`docs/adr/0001-kcet-boundary-replacement.md`](docs/adr/0001-kcet-boundary-replacement.md) (ADR governing the runtime replacement of the game's hardware abstraction layer).
