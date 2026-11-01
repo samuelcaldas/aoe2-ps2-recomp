@@ -383,29 +383,30 @@ def do_step(display: str, action: str, argument, settle: float, step_name: str =
         )
         if st == "select_player_ready":
             time.sleep(1.0)
-            send_pad_button(display, "cross", 1.2)
-            wait_for_any_screen_state(display, {"new_player_dialog", "main_menu"}, timeout=20.0)
+            send_pad_button(display, "cross", 1.0)
+            wait_for_any_screen_state(display, {"new_player_dialog", "main_menu"}, timeout=60.0)
     elif step_name == "profile-name-field":
-        st, _ = get_current_screen_state(display)
+        st = wait_for_any_screen_state(display, {"new_player_dialog", "main_menu"}, timeout=60.0)
         if st == "new_player_dialog":
+            time.sleep(1.0)
             # In New Player popup, move focus from Name field down to [OK]
             send_pad_button(display, "down", 0.8)
             time.sleep(1.0)
     elif step_name == "profile-submit":
-        st, _ = get_current_screen_state(display)
+        st = wait_for_any_screen_state(display, {"new_player_dialog", "main_menu"}, timeout=30.0)
         if st == "new_player_dialog":
             # Press Cross on [OK] to confirm default name "Anonymous"
-            send_pad_button(display, "cross", 1.2)
+            send_pad_button(display, "cross", 1.0)
             time.sleep(2.0)
     elif step_name == "profile-confirm":
-        # If memory card save/confirmation prompt appears, press Cross
+        # Confirmation popup 'Is the name Anonymous correct?' appears
         st, _ = get_current_screen_state(display)
         if st not in ("main_menu", "single_player_menu"):
-            send_pad_button(display, "cross", 1.2)
-            time.sleep(3.0)
+            send_pad_button(display, "cross", 1.0)
+            time.sleep(2.0)
     elif step_name == "profile-settle":
         # Wait until Main Menu is reached and has fully faded in
-        deadline = time.monotonic() + 45.0
+        deadline = time.monotonic() + 60.0
         while time.monotonic() < deadline:
             st, _ = get_current_screen_state(display)
             b = get_screen_brightness(display)
