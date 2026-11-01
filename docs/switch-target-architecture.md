@@ -50,6 +50,8 @@ flowchart TD
 ## 3. Subsystem Breakdown & Implementation Requirements
 
 ### 3.1 Graphics & Display Pipeline
+
+The target is GS-independent presentation for all screens. The current Switch provider is partial and can still obtain UI through GS; see the [canonical contract](sot/high-level-draw-seams.md#7-gs-independent-presentation-contract), [implementation gates](plans/gs-independent-rendering.md), and [current checkpoint](switch-manual-navigation-checkpoint.md). The platform guidance below describes intended integration and does not by itself establish a working renderer.
 * **API & Backend**: OpenGL ES 3 via `switch-mesa` (nouveau nvc0 driver) initialized over devkitPro's `switch-sdl2` or EGL (`gladProcessSwitch`).
 * **Docked vs. Handheld Mode**:
   - The Switch physical screen is 1280x720; docked mode outputs up to 1920x1080.

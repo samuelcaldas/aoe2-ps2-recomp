@@ -16,6 +16,7 @@ flowchart TD
     ROOT --> ADR["docs/adr/0001-kcet-boundary-replacement.md (KCET Native Boundary ADR)"]
     ROOT --> PROBE["docs/desktop-runtime-probe.md (Desktop Probe & Overlay Milestones)"]
     ROOT --> DRAW_SEAMS["docs/sot/high-level-draw-seams.md (Verified High-Level Draw Seams)"]
+    ROOT --> DRAW_PIPELINE["docs/sot/caminho-real-de-desenho-pipeline.md (Real Game Rendering Pipeline)"]
 
     ARCH --> SOT_INDEX["docs/sot/ (Source of Truth Directory)"]
     SOT_INDEX --> SOT_SEMANTICS["docs/sot/*-semantics.md (Module Specifications)"]
@@ -23,7 +24,7 @@ flowchart TD
     SOT_INDEX --> SOT_LAN["docs/sot/multiplayer-lan-architecture.md (i.LINK & LAN SOT)"]
     SOT_INDEX --> SOT_PLAY["docs/sot/play-emulator-sot.md (Hardware Reference Emulator SOT)"]
 
-    ARCH --> ACTIVE_PLAN["docs/plans/nifty-herding-pudding.md (Active RAM Expansion Plan)"]
+    ARCH --> ACTIVE_PLAN["docs/plans/gs-independent-rendering.md (GS-independent rendering handoff)"]
 ```
 
 ---
@@ -40,7 +41,8 @@ flowchart TD
 7. **[`docs/desktop-runtime-probe.md`](desktop-runtime-probe.md)**: Desktop Linux bring-up probe results, runtime initialization, and dynamic overlay milestones.
 8. **[`docs/ghidra-ps2recomp-workflow.md`](ghidra-ps2recomp-workflow.md)**: Headless Ghidra export, TOML configuration, and PS2Recomp codegen pipeline.
 9. **[`docs/multiplatform-build-isolation.md`](multiplatform-build-isolation.md)**: Multi-platform build artifact isolation and target switching strategy (Desktop, Nintendo Switch, Android).
-10. **[`docs/sot/high-level-draw-seams.md`](sot/high-level-draw-seams.md)**: Canonical analysis of the software map rasterizer, sprite/UI shape calls, and low-level `kt_gpu` presentation role.
+10. **[`docs/sot/high-level-draw-seams.md`](sot/high-level-draw-seams.md)**: Canonical GS-independent rendering contract, evidence and implementation status.
+11. **[`docs/sot/caminho-real-de-desenho-pipeline.md`](sot/caminho-real-de-desenho-pipeline.md)**: End-to-end account of Genie Engine software rasterization, RDRAM playfield output, and the GS/`kt_gpu` presentation path (Portuguese).
 
 ---
 
@@ -50,6 +52,7 @@ Subsystem-specific behavioral specifications:
 * **[`docs/sot/multiplayer-lan-architecture.md`](sot/multiplayer-lan-architecture.md)**: i.LINK / UDP network emulation and discovery.
 * **[`docs/sot/play-emulator-sot.md`](sot/play-emulator-sot.md)**: Play! emulator hardware reference behavior for SIF/IOP handshakes.
 * **[`docs/sot/high-level-draw-seams.md`](sot/high-level-draw-seams.md)**: Verified evidence for the high-level map, sprite, UI, and glyph draw paths; `kt_gpu` is not the gameplay draw seam.
+* **[`docs/sot/caminho-real-de-desenho-pipeline.md`](sot/caminho-real-de-desenho-pipeline.md)**: Detailed rendering pipeline and interception strategy, complementary to the seam analysis above.
 * **Subsystem Semantics**:
   - [`sot/gpu-semantics.md`](sot/gpu-semantics.md): GS drawing and texture uploads.
   - [`sot/hud-artifacts-clut-swizzle.md`](sot/hud-artifacts-clut-swizzle.md): HUD rendering artifacts, CLUT swizzling, and GLES modernization roadmap.
@@ -61,8 +64,10 @@ Subsystem-specific behavioral specifications:
 ---
 
 ### Plans & Work in Progress (`docs/plans/`)
-* **[`docs/plans/nifty-herding-pudding.md`](plans/nifty-herding-pudding.md)**: **Active implementation plan** for native-scale map viewport expansion after the 64 MiB RAM work.
-* **[`docs/native-map-view-checkpoint.md`](native-map-view-checkpoint.md)**: Legacy first-mission replay, executable identity, protected 8 MiB map reservation tests, and unresolved activation contracts. Native map mode is not implemented.
+* **[`docs/plans/gs-independent-rendering.md`](plans/gs-independent-rendering.md)**: Ordered implementation tasks and acceptance gates for every screen without GS visual processing.
+* **[`docs/plans/expanded-viewport-native-implementation.md`](plans/expanded-viewport-native-implementation.md)**: Active map-specific implementation and validation gates.
+* **[`docs/plans/nifty-herding-pudding.md`](plans/nifty-herding-pudding.md)**: Completed RAM-expansion work and its validation record.
+* **[`docs/native-map-view-checkpoint.md`](native-map-view-checkpoint.md)**: Partial opt-in native map implementation, baseline replay and unresolved mission acceptance.
 
 ---
 

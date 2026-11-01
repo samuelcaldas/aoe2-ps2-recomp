@@ -103,6 +103,30 @@ libraries and runtime headers; it does not rebuild or modify that cache.
 
 The 29 production command handlers at `0x38C740` are dispatched via `ktGpuDispatchCommand` (`0x1259C8`):
 
+### Frame Submission Call Sites and Frame Cycle
+
+In the `AOK.ELF` executable and matching decompilation (`src/render/render_manager_loop.cpp` and `src/app/tribe_app.cpp`):
+- The game message loop runs in `render_manager_loop::func_00185230`. After message pump processing and `self->OnIdle()`, the engine invokes `func_00388010()`.
+- Inside `func_00388010`, there are **only two direct calls** to `ktGpuDispatchCommand` (`0x1259C8`):
+  1. `0x00388134`: Dispatches handler with `flag=1`, configuring double-buffered display context swap (`FRAME_1` / `FRAME_2`).
+  2. `0x003881F0`: Dispatches handler with `flag=1`, triggering the hardware blit / DMA copy from the software-composed logical framebuffer into the active GS display buffer (640×512 PAL stretched from 640×448).
+- The low-level `kt_gpu` module never receives individual unit, building, or terrain draw calls. Sprites and terrain tiles are rasterized into RDRAM (`0x01F98C80` in legacy mode, or the 64 MiB expanded arena in Native mode) before `func_00388010()` is invoked.
+
+### Routing, Fallback and GLES Presentation Contract
+
+1. **Routing and Instrumentation**:
+   - `gpu_runtime_adapter.hpp` intercepts `0x1259C8` and tracks dispatch statistics per command kind via atomic counters (`g_dispatch_counts`).
+   - Every dispatch records whether it was handled natively (`native-interceptor`) or forwarded to the original guest handler (`original-handler`).
+   - If an interceptor returns `false`, execution automatically falls back to the original guest handler via `dispatchGuestBranch` without dropping commands.
+   - If an invalid command kind (`>= 29`) is encountered, the dispatcher reports an assertion failure matching `kt_gpu.c:630` (`kind < numberof(func_list)`) and halts.
+2. **Presentation Thread Ownership**:
+   - The GLES context (EGL/GLES2 on Nintendo Switch via `SwitchGlesPresenter`) is exclusively owned and operated by the host presentation thread.
+   - Guest hooks and KCET overrides **must not** make direct OpenGL ES calls from guest execution threads.
+   - Native frame submission is delivered through `PS2Runtime::setNativeFrameProvider` (consuming composed frames from `MapViewCompositor`).
+3. **Truthful Installation Reporting**:
+   - Installation logs report: `[aoe2] kt_gpu dispatcher: installed 7/7; command handlers still forward to original game; native draw interceptor=...`
+   - Logs never claim full native presentation while command handlers remain forwarded to the guest or the native draw interceptor is disconnected.
+
 ### Draw Primitives (Kinds 0–12)
 
 | Kind | Guest Address | Primitive Type (GS PRIM) | Description / Target Registers |

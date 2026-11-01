@@ -1,6 +1,6 @@
 # Native map view: reservation and baseline checkpoint
 
-Status: **partial implementation; native enlargement is available behind `AOE2_MAP_VIEW=native`, but mission parity and platform acceptance are unproven**. This checkpoint belongs to the [expanded viewport implementation plan](plans/expanded-viewport-native-implementation.md); see the [documentation index](README.md) and [presentation strategy](sot/hd-assets-strategy.md). The default remains legacy mode.
+Status: **partial implementation; native enlargement is available behind `AOE2_MAP_VIEW=native`, but mission parity and platform acceptance are unproven**. The latest playfield identity and snapshot timing correction is recorded in the [viewport plan](plans/expanded-viewport-native-implementation.md); earlier submission counts do not prove playfield capture. This checkpoint belongs to the [expanded viewport implementation plan](plans/expanded-viewport-native-implementation.md); see the [documentation index](README.md) and [presentation strategy](sot/hd-assets-strategy.md). The default remains legacy mode.
 
 ## Current implementation and validation (2026-10-29)
 

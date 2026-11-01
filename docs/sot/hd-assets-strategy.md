@@ -2,7 +2,7 @@
 
 ## 1. Executive Summary & Core Architectural Truth
 
-This document is the **single consolidated source of truth** regarding the integration of **Age of Empires II: HD Edition (2013)** assets, presentation geometry, and rendering pipeline in `aoe2-ps2-recomp`.
+This document is the source of truth for **Age of Empires II: HD Edition (2013)** asset strategy and presentation geometry. The [GS-independent rendering contract](high-level-draw-seams.md#7-gs-independent-presentation-contract) governs the frame pipeline and the [implementation handoff](../plans/gs-independent-rendering.md) governs its acceptance.
 
 It consolidates and supersedes the historical, exploratory, and fragmented documentation across:
 - `docs/architecture-hd-asset-decoupling.md` (initial conceptual decoupling proposal)
@@ -20,7 +20,7 @@ Early assumptions in this project presumed that:
 **Both assumptions were disproven by runtime evidence:**
 - **HD Edition 2013 uses 1999 PC asset resolutions**: Extracted SLP assets from HD Edition 2013 are identical in pixel dimensions to the 1999 original (e.g. units are ~85×56 px; menu interfaces are 800×600 px).
 - **The PS2 rendering model is a software span-rasterizer**: The playfield is not composed of independent 3D textured quads on the GS. Instead, the game software-renders the entire playfield (isometric terrain, units, buildings) into an 8-bit paletted RAM buffer (`0x01F98C80`), which is uploaded as a single 640×262 texture to the GS.
-- **The True "HD" Solution**: In HD Edition (2013), high definition on modern displays was achieved by **expanding the visible map viewport** (displaying more terrain at a 1:1 pixel scale), not by enlarging sprites. Consequently, the recompilation achieves high fidelity on modern displays (1080p desktop/docked, 720p Switch) by **expanding the engine's viewport**, presenting the playfield 1:1, and recomposing the HUD anchored to the display edges.
+- **The True "HD" Solution**: In HD Edition (2013), high definition on modern displays was achieved by **expanding the visible map viewport** (displaying more terrain at a 1:1 pixel scale), not by enlarging sprites. The planned approach is to **expand the engine's viewport**, present the playfield 1:1, and recompose the HUD at display edges. Live native mission parity remains unproven.
 
 ---
 
@@ -31,8 +31,8 @@ Early assumptions in this project presumed that:
 | **Asset Dimensions** | HD Edition has 1080p/4K redraws | Sprites are 1999 PC dimensions (`2296.slp`: 85×56 px, `50100.slp`: 800×600 px) | Inspection of `game/hd-edition/` SLP headers |
 | **PS2 Logical Canvas** | 640×480 fixed 4:3 | **640×448** logical canvas, stretched to 640×512 in PAL | `RenderManager` (`func_001847c0`), GS `FRAME_1` register |
 | **Playfield Rendering** | Hardware GS textured primitives | Software span-blitter into RAM buffer `0x01F98C80` (640×262 at y=40) | GS upload trace (`IMAGE` packets, `TRXREG` 640×262) |
-| **Shape Loader IDs** | Custom PS2 resource IDs | PS2 resource IDs match 1:1 with PC numeric IDs (`50100`, `2296`, `4652`) | Shape loader hook `func_0025D6D0` |
-| **Presentation Strategy** | High-res sprite replacement in fixed frame | **Expanded Viewport (PC-style)** + border-anchored HUD recomposition | Phase 0/1 validation in `docs/plans/nifty-herding-pudding.md` |
+| **Shape Loader IDs** | Custom PS2 resource IDs | Some observed PS2 resource IDs correspond to PC numeric IDs (`50100`, `2296`, `4652`); universal correspondence is unproven | Shape loader hook `func_0025D6D0` |
+| **Presentation Strategy** | High-res sprite replacement in fixed frame | **Expanded Viewport (PC-style)** + border-anchored HUD recomposition | Planned behavior; mission acceptance remains open in `docs/plans/expanded-viewport-native-implementation.md` |
 
 ---
 
@@ -83,7 +83,7 @@ python3 tools/verify_hd_stage.py --platform desktop|switch|android
 
 ## 5. Active Roadmap: Viewport Expansion & HUD Recomposition
 
-Following the strategic shift approved in `docs/plans/nifty-herding-pudding.md`, the pipeline progresses through four distinct phases:
+The following viewport milestones remain separate from complete GS-independent rendering; see the [implementation handoff](../plans/gs-independent-rendering.md) for boot, menus, text, ordering and synchronization:
 
 ```mermaid
 flowchart LR
@@ -93,24 +93,24 @@ flowchart LR
 ```
 
 ### Phase A: Configurable Engine Viewport
-- The [native map view plan](../plans/nifty-herding-pudding.md) requires opt-in native output with legacy as the default. The [2026-10-29 checkpoint](../native-map-view-checkpoint.md) records a successful replay into the first mission with the existing diagnostic executable, its exact hash, and the new fork reservation tests. That replay predates the reservation changes; it is not validation of the modified runtime or enlarged gameplay.
-- An exclusive 8 MiB guest interval below HLE is now excluded from heap allocation/reconfiguration and ELF segment writes. Surface ownership, pitch/guard validation, and initial 640×262 relocation parity are still pending; no larger draw area is activated.
+- The [native map view plan](../plans/expanded-viewport-native-implementation.md) requires opt-in native output with legacy as the default. The [2026-10-29 checkpoint](../native-map-view-checkpoint.md) records a successful replay into the first mission with the existing diagnostic executable, its exact hash, and the new fork reservation tests. That replay predates the reservation changes; it is not validation of the modified runtime or enlarged gameplay.
+- An exclusive 8 MiB guest interval below HLE is now excluded from heap allocation/reconfiguration and ELF segment writes. Opt-in relocation, arena ownership and expanded-surface code exist; live 640×262 relocation parity and expanded terrain remain unverified.
 - Width, height, pitch, backing address, clipping, and dimension-dependent tables must change coherently before initialization writes. Both area setup calls must use the correct storage; changing a pointer after an enlarged clear is unsafe.
-- Active map palette identity, upload identity, and completed-frame snapshot synchronization remain unverified. Do not substitute a presumed interface palette or use the existing post-present callback as a shared compositor.
+- Palette observations and upload hooks exist, but correct playfield identity, active palette association and completed-frame synchronization still require live proof. Do not substitute a presumed interface palette or use the existing post-present callback as a shared compositor.
 - Final native output must render more terrain and units at 1:1 pixel scale, preserve functional HUD/input, and bypass the GS texture-size ceiling. A reserved interval or larger window does not meet that criterion.
 
 ### Phase B: Direct Playfield Presentation
 - Bypass the PS2 Graphics Synthesizer's 4 MB eDRAM and 1024 px texture dimension restrictions.
-- The host runtime directly samples the 8-bit software playfield buffer, applies the active palette, and renders it 1:1 to the host framebuffer via OpenGL ES 3.
+- The planned path captures the 8-bit software playfield and its verified active palette, then composes an owned host frame for the existing presenter. This is partially implemented and not yet visually accepted.
 
 ### Phase C: Recomposed HUD
-- Intercept UI shape draws (`func_0025E640`) and text quad uploads at the KCET boundary.
+- Trace UI shapes, surface updates and glyph sources above GS; implement only seams whose source, lifetime, clipping and order are verified. The current UI capture delegates to GS and is transitional.
 - Anchor the top resource header to $(x=0, y=0, \text{width}=\text{screen\_width})$ and the bottom command panel to the lower screen edge, allowing the playfield to stretch seamlessly between them.
 - Where available, load uncompressed interface frames from `50100.slp` or widescreen variants (`50102.slp`).
 
 ### Phase D: Native Typography & Multiplatform Polish
-- Replace low-resolution bitmap font textures with modern TrueType / FreeType font rendering.
-- Verify identical visual parity across Desktop Linux (1080p), Nintendo Switch Handheld (720p), and Nintendo Switch Docked (1080p).
+- First reproduce PS2 glyphs without GS; optional TrueType / FreeType replacement is a later visual enhancement.
+- Verify visual and input parity across Desktop Linux and Nintendo Switch handheld/docked, accounting for documented output geometry.
 
 ---
 
@@ -125,7 +125,7 @@ A recurring architectural question concerns the interaction between Guest EE RAM
   Following the **Asset Decoupling** pattern ([ADR 0001](../adr/0001-kcet-boundary-replacement.md) and §4 above):
   1. The **guest game engine** executes solely the logical simulation: unit positions ($X, Y$), tile pathfinding, entity HP, damage formulas, and AI state.
   2. When the engine issues a draw call via `func_0025D6D0` (shape loader) or `func_0025E640` (shape draw), host hooks intercept the numeric resource ID (e.g. `2296` for an archer).
-  3. The host-side renderer ([`aoe2::renderer::IRenderer`](../../renderer/include/aoe2/renderer/renderer.hpp), backed by OpenGL ES 3 / Mesa on Desktop or `deko3d` on Nintendo Switch) binds and draws the high-resolution DE texture quad directly in **Host GPU VRAM** (leveraging the >3 GB available under Switch Title Takeover Mode).
+  3. A future host renderer could bind and draw decoded DE textures in host GPU memory; neither DE integration nor a Switch `IRenderer` backend is established.
   4. Guest EE RAM is never polluted with DE texture data.
 
 ### 6.2 The True Purpose of Expanding Guest RAM Beyond 64 MiB (e.g. 128 MiB)
@@ -141,4 +141,4 @@ While guest RAM expansion is not required for high-resolution DE sprites, expand
 ### 6.3 KCET Layer Strip vs. Genie Engine Viewport Redirection
 To maintain clear separation of concerns across the codebase:
 * **KCET Layer (`kt_*`)**: Represents the PS2 hardware abstraction layer (~2,000 LOC: `kt_mouse`, `kt_keybd`, `kt_libpad`, `kt_gpu`, `kt_file`, `kt_kernel`, `kt_mc_2`). The accepted architectural plan ([ADR 0001](../adr/0001-kcet-boundary-replacement.md) and [`docs/superpowers/specs/2026-10-24-kcet-native-layer-design.md`](../superpowers/specs/2026-10-24-kcet-native-layer-design.md)) is to **strip and replace the entire KCET layer** with native host C++ modules.
-* **Genie Engine (Ensemble Studios Game Engine)**: Represents the ~150,000 LOC simulation and software span-rasterizer (`TMapArea`, `TPanel`, `TViewPort`). The viewport expansion (Phase A) does not rewrite or cherry-pick hacks inside the simulation; rather, it **re-initializes the engine's built-in resolution parameters** with native 720p/1080p dimensions and redirects the backing buffer to the safe 64 MiB RAM arena (`0x02000000..0x03FFFFFF`), allowing the authentic engine to natively render high-resolution isometric terrain at 1:1 scale.
+* **Genie Engine (Ensemble Studios Game Engine)**: Represents the ~150,000 LOC simulation and software span-rasterizer (`TMapArea`, `TPanel`, `TViewPort`). The viewport expansion (Phase A) does not rewrite or cherry-pick hacks inside the simulation; it aims to adjust verified resolution parameters and redirect the backing buffer into the explicitly reserved map arena. Opt-in hooks exist, but expanded live terrain and all affected engine limits remain to be validated; the entire upper 32 MiB is not a free rendering arena.

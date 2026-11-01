@@ -105,13 +105,13 @@ Due to this architecture, naive instruction-level recompilation is insufficient 
 ## 5. High-Level Rendering Replacement Strategy
 
 A key architectural mandate of this project is:
-> **Rendering is to be replaced at a high level where feasible, rather than attempting full low-level Graphics Synthesizer (GS) emulation first.**
+> **The final graphics path must produce all screens without GS visual processing.** The [rendering contract](sot/high-level-draw-seams.md#7-gs-independent-presentation-contract) and [implementation handoff](plans/gs-independent-rendering.md) define the transition and acceptance gates.
 
 * **Rationale**: Complete GS emulation requires reproducing eDRAM addressing, complex pixel pipeline alpha tests, bit-exact blending modes, and micro-packet GIF parsing. For Age of Empires II (a 2D isometric RTS that was originally written for PC Win32 DirectX/GDI and later adapted to PS2), game rendering operates over discrete sprite blits, tile planes, fonts, and 2D UI elements.
 * **Approach**:
   1. Identify high-level engine draw commands, sprite blit loops, and tile renderers in the recompiled code.
-  2. Map these operations directly to modern renderers (SDL2/Vulkan on desktop, deko3d on Nintendo Switch) via `IRenderer`.
-  3. Bypassing low-level GS register emulation eliminates extreme shader complexity and yields optimal performance and native high-resolution rendering.
+  2. Capture the software map and verified high-level UI operations, preserving their guest order, then compose host-owned frames in the existing presentation path. `IRenderer` is not currently the Switch presenter.
+  3. Replace GS visual processing and preserve required guest synchronization independently. Performance and native high-resolution output require separate validation.
 
 ---
 
@@ -164,7 +164,7 @@ Switch touchscreen (libnx HID, 1280x720)        Desktop mouse / touch (SDL)
 
 ## 7. Widescreen (Future Option)
 
-> **Status:** design note only. It is out of scope for the bootstrap phase (see README non-goals: no asset upscaling and no gameplay-visible changes). Nothing here is implemented.
+> **Status:** viewport expansion and inverse input mapping have partial opt-in implementations; live mission parity and platform acceptance remain open. See the [viewport plan](plans/expanded-viewport-native-implementation.md) and [checkpoint](native-map-view-checkpoint.md).
 
 ### 7.1 How PC widescreen mods work (reference)
 
@@ -175,14 +175,14 @@ On PC, the community patch AoE2Wide patches the resolution constants (`1280`, `1
 Because rendering is replaced at a high level (§5), widescreen does not need GS changes:
 
 1. Locate the guest's viewport and screen-size values in the recompiled code. These are the PS2 equivalent of the constants AoE2Wide patches: map view rectangle, scroll limits, visible-tile culling bounds, cursor clamp. Override them through runtime hooks, not by editing generated sources.
-2. Widen the guest extent (e.g. 640x448 → 800x448 or dynamic 16:9) so the game simulates and culls a wider view, and `IRenderer` draws it at native host resolution.
-3. Input keeps working unchanged: `SurfaceMapping` takes the guest extent as a parameter, so a 16:9 guest fills the 1280x720 Switch screen without pillarbox bars. `GuestMouseAdapter` clamps to the new extent.
+2. Expand the software playfield and compose its snapshot at native output resolution after validating clipping, culling and memory bounds.
+3. Publish a matching input layout only after successful composition; map playfield and relocated HUD input through the inverse transform. Validate real interactions and transitions.
 
 Gameplay impact (more of the map visible) matches the PC widescreen mods. It must be an optional setting, and the default stays 4:3 for parity with the original PS2 game.
 
 ### 7.3 HD and widescreen assets from Age of Empires II (2013)
 
-Age of Empires II (2013) is the primary target source of higher-resolution, widescreen-ready, and modern decoupled assets. Its openage converter ID is `HD`. Detailed architectural specification for decoupling and platform layout: see `docs/sot/hd-assets-strategy.md`.
+Age of Empires II (2013) is an optional source of compatible, widescreen-ready assets; its classic sprites generally retain their original pixel dimensions. Its openage converter ID is `HD`. Detailed architectural specification for decoupling and platform layout: see `docs/sot/hd-assets-strategy.md`.
 
 Rationale:
 
