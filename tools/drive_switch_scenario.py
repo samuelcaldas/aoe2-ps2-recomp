@@ -204,79 +204,108 @@ def do_click(display: str, wx: int, wy: int, duration: float = 0.4) -> None:
     subprocess.run(["xdotool", "mouseup", "1"], env=env)
 
 
-def is_memory_card_busy(display: str) -> bool:
-    """Check if memory card is still displaying '---KB' (busy dashes)."""
-    tmp_path = Path("/tmp/mc_check.png")
+def detect_screen_state(arr) -> str:
+    """Classify current emulator screen into known states."""
+    mean_brightness = float(arr.mean())
+    if mean_brightness < 2.0:
+        return "black"
+
+    center_color = arr[380, 640]
+    if center_color[0] > 200 and center_color[1] > 180 and center_color[2] > 120:
+        return "new_player_dialog"
+
+    if 40 < center_color[0] < 90 and 35 < center_color[1] < 80 and 25 < center_color[2] < 65:
+        mc_crop = arr[140:190, 700:850].mean()
+        if mc_crop < 95.0:
+            return "select_player_mc_busy"
+        return "select_player_ready"
+
+    # Book has dark title 'Campaigns' (mean < 60) and bright map page (mean > 75)
+    title_mean = arr[85:125, 550:730].mean()
+    map_mean = arr[250:450, 250:550].mean()
+    if title_mean < 60.0 and map_mean > 75.0:
+        return "campaigns_book"
+
+    # Menus have bright title banner (> 80)
+    gold_menu = (
+        (arr[150:210, 730:1060, 0] > 100)
+        & (arr[150:210, 730:1060, 1] > 100)
+        & (arr[150:210, 730:1060, 2] < 45)
+    ).sum()
+    if gold_menu > 200:
+        if title_mean > 100.0:
+            return "main_menu"
+        return "single_player_menu"
+
+    return "unknown"
+
+
+def get_current_screen_state(display: str) -> tuple[str, any]:
+    """Capture screen and detect current UI state."""
+    tmp_path = Path("/tmp/screen_check.png")
     if not capture_screenshot(tmp_path, display):
-        return True
+        return ("black", None)
     try:
         from PIL import Image
         import numpy as np
-        arr = np.array(Image.open(tmp_path).convert("L"))
-        if arr.mean() < 5.0:
-            return True
-        top_pixels = int((arr[135, 768:795] < 100).sum())
-        dash_pixels = int((arr[139, 768:795] < 100).sum())
-        if dash_pixels >= 15 and top_pixels <= 2:
-            return True
-        return False
+
+        img = Image.open(tmp_path).convert("RGB")
+        arr = np.array(img)
+        return (detect_screen_state(arr), arr)
     except Exception:
-        return False
+        return ("unknown", None)
+
+
+def wait_for_any_screen_state(
+    display: str, target_states: set[str], timeout: float = 60.0, poll_interval: float = 1.5
+) -> str:
+    """Poll until screen state matches one of target_states or timeout expires."""
+    deadline = time.monotonic() + timeout
+    last_state = ""
+    while time.monotonic() < deadline:
+        state, _ = get_current_screen_state(display)
+        if state != last_state:
+            print(f"  [ui-state] {state} (targets: {sorted(target_states)})", flush=True)
+            last_state = state
+        if state in target_states:
+            return state
+        time.sleep(poll_interval)
+    return last_state
+
+
+def is_memory_card_busy(display: str) -> bool:
+    """Check if memory card is still displaying '---KB' (busy dashes)."""
+    state, _ = get_current_screen_state(display)
+    return state in ("select_player_mc_busy", "black")
 
 
 def wait_for_card_ready(display: str, timeout: float = 60.0, settle_after: float = 3.0) -> bool:
     """Wait until memory card check completes."""
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if not is_memory_card_busy(display):
-            if settle_after > 0:
-                time.sleep(settle_after)
-            return True
-        time.sleep(1.0)
+    st = wait_for_any_screen_state(
+        display, {"select_player_ready", "new_player_dialog", "main_menu"}, timeout=timeout
+    )
+    if st in ("select_player_ready", "new_player_dialog", "main_menu"):
+        if settle_after > 0:
+            time.sleep(settle_after)
+        return True
     return False
 
 
 def is_osk_open(display: str) -> bool:
     """Check if on-screen keyboard overlay is open."""
-    tmp_path = Path("/tmp/osk_check.png")
-    if not capture_screenshot(tmp_path, display):
-        return False
-    try:
-        from PIL import Image
-        import numpy as np
-        arr = np.array(Image.open(tmp_path).convert("RGB"))
-        return float(arr[100:200, 500:800, 0].mean()) < 80.0
-    except Exception:
-        return False
+    return False
 
 
 def is_dialog_open(display: str) -> bool:
     """Check if centered parchment dialog (New Player / Confirm) is open."""
-    tmp_path = Path("/tmp/dialog_check.png")
-    if not capture_screenshot(tmp_path, display):
-        return False
-    try:
-        from PIL import Image
-        import numpy as np
-        arr = np.array(Image.open(tmp_path).convert("RGB"))
-        return bool(arr[360, 640, 0] > 180 and arr[360, 640, 1] > 150)
-    except Exception:
-        return False
+    state, _ = get_current_screen_state(display)
+    return state == "new_player_dialog"
 
 
 def is_select_player_open(display: str) -> bool:
     """Check if Select Player screen is displayed."""
-    tmp_path = Path("/tmp/sp_check.png")
-    if not capture_screenshot(tmp_path, display):
-        return False
-    try:
-        from PIL import Image
-        import numpy as np
-        arr = np.array(Image.open(tmp_path).convert("RGB"))
-        px = arr[75, 640]
-        return bool(px[0] > 100 and px[1] > 50 and px[2] < 50)
-    except Exception:
-        return False
+    state, _ = get_current_screen_state(display)
+    return state in ("select_player_mc_busy", "select_player_ready", "new_player_dialog")
 
 
 def follow_guest_event(
@@ -322,113 +351,75 @@ def do_step(display: str, action: str, argument, settle: float, step_name: str =
         subprocess.run(["xdotool", "windowfocus", "--sync", win], env=env)
 
     if step_name in ("key-return-1", "key-return-2"):
-        send_pad_button(display, "start", 0.35)
+        send_pad_button(display, "start", 0.5)
         time.sleep(0.5)
-        send_pad_button(display, "cross", 0.35)
+        send_pad_button(display, "cross", 0.5)
     elif step_name in ("osk-letter-a", "osk-enter"):
         time.sleep(0.5)
-        send_pad_button(display, "start", 0.35)
-    elif step_name == "card-ok":
-        wait_for_card_ready(display, timeout=60.0, settle_after=2.0)
-        # Select Player list is shown with "1. New Player" highlighted.
-        time.sleep(1.0)
-        wx, wy = to_window_coords((251, 312))
-        do_click(display, wx, wy, 0.4)
-        time.sleep(0.5)
-        send_pad_button(display, "cross", 0.4)
-    elif step_name == "profile-new-player":
-        # New Player button / dialog
-        time.sleep(1.5)
-        wx, wy = to_window_coords((251, 350))
-        do_click(display, wx, wy, 0.4)
-        time.sleep(0.5)
-        send_pad_button(display, "cross", 0.4)
-    elif step_name == "profile-name-field":
-        # Click Name text field to open OSK
-        time.sleep(1.5)
-        wx, wy = to_window_coords((335, 237))
-        do_click(display, wx, wy, 0.4)
-        time.sleep(0.5)
-        send_pad_button(display, "cross", 0.4)
-        time.sleep(2.0)
-        # Type character 'a' (cursor starts at Row 1, Col 1 'a')
-        send_pad_button(display, "cross", 0.4)
-        time.sleep(0.4)
-        # Navigate down 3 rows and right 3 columns to hit ENTER on the OSK
-        for _ in range(3):
-            send_pad_button(display, "down", 0.3)
-            time.sleep(0.2)
-        for _ in range(3):
-            send_pad_button(display, "right", 0.3)
-            time.sleep(0.2)
-        send_pad_button(display, "cross", 0.4)
-        time.sleep(1.5)
-    elif step_name in ("profile-name-a", "profile-name-o", "profile-name-k", "profile-name-enter"):
-        time.sleep(0.5)
-    elif step_name == "profile-submit":
-        # Screen is back on New Player dialog with Name: [ a ].
-        # Submit the dialog by clicking [ OK ] directly at (245, 315) -> (517, 541).
-        time.sleep(1.0)
-        wx, wy = to_window_coords((245, 315))
-        do_click(display, wx, wy, 0.4)
-        time.sleep(0.8)
-        subprocess.run(["xdotool", "key", "Return"], env=env)
-        send_pad_button(display, "cross", 0.4)
-        time.sleep(1.0)
-    elif step_name == "profile-confirm":
-        # "Save to Memory Card? [Yes] [No]" prompt
-        time.sleep(1.5)
-        wx, wy = to_window_coords((245, 315))
-        do_click(display, wx, wy, 0.4)
-        time.sleep(0.5)
-        send_pad_button(display, "cross", 0.4)
-        time.sleep(1.0)
-    elif step_name == "profile-settle":
-        # Return to Select Player list with player "1. a" selected.
-        # Use Switch B / Enter to confirm loading profile and enter Main Menu.
-        time.sleep(2.0)
-        send_pad_button(display, "cross", 0.5)
-        time.sleep(1.0)
         send_pad_button(display, "start", 0.5)
-        time.sleep(1.0)
-        send_pad_button(display, "cross", 0.5)
-        time.sleep(3.0)
+    elif step_name == "card-ok":
+        # Wait until memory card check completes (select_player_ready) or already at main menu
+        st = wait_for_any_screen_state(
+            display,
+            {"select_player_ready", "new_player_dialog", "main_menu"},
+            timeout=90.0,
+        )
+        if st == "select_player_ready":
+            time.sleep(1.0)
+            send_pad_button(display, "cross", 1.2)
+            wait_for_any_screen_state(display, {"new_player_dialog", "main_menu"}, timeout=20.0)
+    elif step_name == "profile-name-field":
+        st, _ = get_current_screen_state(display)
+        if st == "new_player_dialog":
+            # In New Player popup, move focus from Name field down to [OK]
+            send_pad_button(display, "down", 0.8)
+            time.sleep(1.0)
+    elif step_name == "profile-submit":
+        st, _ = get_current_screen_state(display)
+        if st == "new_player_dialog":
+            # Press Cross on [OK] to confirm default name "Anonymous"
+            send_pad_button(display, "cross", 1.2)
+            time.sleep(2.0)
+    elif step_name == "profile-confirm":
+        # If memory card save/confirmation prompt appears, press Cross
+        st, _ = get_current_screen_state(display)
+        if st not in ("main_menu", "single_player_menu"):
+            send_pad_button(display, "cross", 1.2)
+            time.sleep(3.0)
+    elif step_name == "profile-settle":
+        # Wait until Main Menu is reached
+        wait_for_any_screen_state(display, {"main_menu"}, timeout=45.0)
+        time.sleep(1.5)
     elif step_name == "single-player":
-        # Main Menu -> Single Player
-        wait_for_screen_ready(display, timeout=30.0, settle_after=2.0)
-        wx, wy = 890, 172
-        do_click(display, wx, wy, 0.4)
-        time.sleep(0.5)
-        send_pad_button(display, "cross", 0.4)
-        time.sleep(2.0)
+        wait_for_any_screen_state(display, {"main_menu"}, timeout=30.0)
+        time.sleep(1.0)
+        send_pad_button(display, "cross", 1.2)
+        wait_for_any_screen_state(display, {"single_player_menu"}, timeout=20.0)
+        time.sleep(1.0)
     elif step_name == "campaigns":
-        # Single Player -> Campaigns
-        wait_for_screen_ready(display, timeout=30.0, settle_after=2.0)
-        wx, wy = 890, 168
-        do_click(display, wx, wy, 0.4)
-        time.sleep(0.5)
-        send_pad_button(display, "cross", 0.4)
+        wait_for_any_screen_state(display, {"single_player_menu"}, timeout=20.0)
+        time.sleep(1.0)
+        send_pad_button(display, "cross", 1.2)
+        wait_for_any_screen_state(display, {"campaigns_book"}, timeout=30.0)
         time.sleep(2.0)
     elif step_name == "wallace-marker":
-        # Campaigns -> William Wallace
-        wait_for_screen_ready(display, timeout=30.0, settle_after=2.0)
-        wx, wy = to_window_coords((221, 77))
-        do_click(display, wx, wy, 0.4)
-        time.sleep(0.5)
-        send_pad_button(display, "cross", 0.4)
-        time.sleep(0.5)
-        send_pad_button(display, "start", 0.4)
-        time.sleep(2.0)
+        wait_for_any_screen_state(display, {"campaigns_book"}, timeout=20.0)
+        time.sleep(1.0)
+        # On Campaigns book, focus starts on "Main Menu" at the bottom.
+        # Press Up 5 times to reach William Wallace at the top!
+        for _ in range(5):
+            send_pad_button(display, "up", 0.8)
+            time.sleep(0.8)
+        time.sleep(1.0)
+        # Select William Wallace
+        send_pad_button(display, "cross", 1.5)
+        time.sleep(3.0)
     elif step_name == "scenario-1":
-        # Scenario 1 -> Start
-        wait_for_screen_ready(display, timeout=30.0, settle_after=2.0)
-        wx, wy = to_window_coords((183, 57))
-        do_click(display, wx, wy, 0.4)
-        time.sleep(0.5)
-        send_pad_button(display, "cross", 0.4)
-        time.sleep(0.5)
-        send_pad_button(display, "start", 0.4)
-        time.sleep(5.0)
+        # Start Scenario 1 Marching and Fighting
+        send_pad_button(display, "cross", 1.5)
+        time.sleep(2.0)
+        send_pad_button(display, "cross", 1.5)
+        time.sleep(3.0)
     elif step_name in (
         "briefing",
         "briefing-next",
@@ -512,39 +503,52 @@ def drive_scenario(
             def advance_story():
                 nonlocal story_clicks
                 story_clicks += 1
+                # Story/narrative slides require mouse click at screen centre to advance.
+                # The PS2 mouse driver processes the click; pad Cross alone is ignored.
                 wx, wy = to_window_coords((320, 224))
                 do_click(display, wx, wy, 0.4)
+                time.sleep(0.3)
                 send_pad_button(display, "cross", 0.4)
                 shot = screenshots_dir / f"switch-{mode}-story-{story_clicks}.png"
                 capture_screenshot(shot, display)
                 print(f"[{mode}] Captured {shot.name}", flush=True)
 
             matched = follow_guest_event(
-                log_path, b"[map-submit]", timeout=300.0, on_wait=advance_story, max_interval_seconds=4.0
-            )
-            if not matched:
-                sys.stderr.write(f"WARNING: [map-submit] not reached in story-until\n")
-        elif action == "map-until":
-            map_clicks = 0
-
-            def advance_map():
-                nonlocal map_clicks
-                map_clicks += 1
-                send_pad_button(display, "cross", 0.3)
-                shot = screenshots_dir / f"switch-{mode}-map-wait-{map_clicks}.png"
-                capture_screenshot(shot, display)
-                print(f"[{mode}] Captured {shot.name}", flush=True)
-
-            matched = follow_guest_event(
-                log_path, b"[map-submit]", timeout=run_seconds, on_wait=advance_map
+                log_path, b"[map-submit]", timeout=600.0, on_wait=advance_story, max_interval_seconds=3.0
             )
             if matched:
                 results["map_submitted"] = True
+                print(f"[{mode}] [map-submit] event detected during story-until!", flush=True)
+            else:
+                sys.stderr.write(f"WARNING: [map-submit] not reached in story-until\n")
+        elif action == "map-until":
+            if results.get("map_submitted"):
+                print(f"[{mode}] Map already submitted; settling 5s before capture...", flush=True)
+                time.sleep(5.0)
                 submit_shot = screenshots_dir / f"switch-{mode}-map-submitted.png"
                 capture_screenshot(submit_shot, display)
                 print(f"[{mode}] Captured {submit_shot.name} [SUCCESS]!", flush=True)
             else:
-                sys.stderr.write(f"WARNING: [map-submit] not reached before timeout\n")
+                map_clicks = 0
+
+                def advance_map():
+                    nonlocal map_clicks
+                    map_clicks += 1
+                    send_pad_button(display, "cross", 0.8)
+                    shot = screenshots_dir / f"switch-{mode}-map-wait-{map_clicks}.png"
+                    capture_screenshot(shot, display)
+                    print(f"[{mode}] Captured {shot.name}", flush=True)
+
+                matched = follow_guest_event(
+                    log_path, b"[map-submit]", timeout=run_seconds, on_wait=advance_map
+                )
+                if matched:
+                    results["map_submitted"] = True
+                    submit_shot = screenshots_dir / f"switch-{mode}-map-submitted.png"
+                    capture_screenshot(submit_shot, display)
+                    print(f"[{mode}] Captured {submit_shot.name} [SUCCESS]!", flush=True)
+                else:
+                    sys.stderr.write(f"WARNING: [map-submit] not reached before timeout\n")
         else:
             do_step(display, action, argument, effective_settle, step_name=name, log_path=log_path)
             if name == "profile-settle":
