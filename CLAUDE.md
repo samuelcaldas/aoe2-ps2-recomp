@@ -51,17 +51,20 @@ For the current Switch navigation and rendering limitations, see
 
 ## What this is & Project Philosophy
 
-Bootstrap foundation for a native static-recompilation port of *Age of Empires II: The Age of Kings*, PS2 PAL (`SLES-50282`, `AOK.ELF`, SHA-1 `f478e19f2059d52899b691483ef5c7522e30e17c`). Primary target: Nintendo Switch homebrew. Bring-up proceeds through desktop Linux x86-64 and ARM64 validation. Playable gameplay is not established. The desktop initialization probe loads the ELF and resolves its entry point without calling `run()`; separate game-runtime runs have executed guest code. The ELF also loads code overlays from disc at runtime (see `docs/desktop-runtime-probe.md` §7.1). Preserve the guarded generation pipeline without adding game-specific stubs. Build the full desktop probe only with `python3 tools/run_desktop_probe_build.py --jobs N` (memory-capped systemd scope, C locale).
+Bootstrap foundation for a native static-recompilation port of _Age of Empires II: The Age of Kings_, PS2 PAL (`SLES-50282`, `AOK.ELF`, SHA-1 `f478e19f2059d52899b691483ef5c7522e30e17c`). Primary target: Nintendo Switch homebrew. Bring-up proceeds through desktop Linux x86-64 and ARM64 validation. Playable gameplay is not established. The desktop initialization probe loads the ELF and resolves its entry point without calling `run()`; separate game-runtime runs have executed guest code. The ELF also loads code overlays from disc at runtime (see `docs/desktop-runtime-probe.md` §7.1). Preserve the guarded generation pipeline without adding game-specific stubs. Build the full desktop probe only with `python3 tools/run_desktop_probe_build.py --jobs N` (memory-capped systemd scope, C locale).
 
 ### 1. Why PS2 Recompilation instead of PC Decompilation?
+
 - **Console-Native Architecture & Binary Structure**: The PS2 port was engineered by KCET (Konami Computer Entertainment Tokyo). The binary is a self-contained, statically-linked MIPS ELF (`AOK.ELF`) with a clean abstraction layer (the `kt_*` hardware libraries for graphics, sound, file I/O, memory card, and peripherals). Unlike the 1999 PC Win32 release—which is tightly bound to legacy DirectDraw, Win32 message loops, legacy GDI, DirectPlay, and x86 inline assembly—the PS2 codebase was already structured for a closed console runtime.
 - **Console-Tailored UI & Input Schemes**: The PS2 version is the only classic edition of Age of Empires II with native gamepad navigation (DualShock 2 pad maps, radial/context menus, console shortcuts, and auto-targeting) while also retaining native USB keyboard and mouse support. For handheld devices like the Nintendo Switch, having an interface and gameplay loop already designed and balanced for controllers and fixed-resolution displays is infinitely superior to retrofitting a 1999 mouse-only Win32 desktop UI.
 
 ### 2. Recompilation & Decompilation Hand-in-Hand
+
 - **Surgical Replacement of Architectural Bottlenecks**: Recompilation and decompilation are not mutually exclusive; they work together. PS2Recomp automatically translates the vast majority (~17,000 game logic functions) into C++ without human error or years of manual decompilation.
 - **Native Host Subsystem Overrides**: Portions of the PS2 code constrained by hardware limitations (the 32 MB EE RAM boundary, KCET GS software rasterization blitters, low-level IOP/RPC calls, and CDVD streaming) are replaced surgically with native host implementations based directly on the matching decompilation (`samuelcaldas/age-of-empires-2-decomp`, local `../aoe`). Host-side C++ interceptors replace verified boundaries. For graphics, `kt_gpu` handles GS register setup and final framebuffer transfer; the high-level shape seam is `func_0025E640`, while map pixels use software rasterization and the native map-view path. See [`docs/sot/high-level-draw-seams.md`](docs/sot/high-level-draw-seams.md).
 
 ### 3. HD Assets Strategy & High-Resolution Presentation
+
 - **Asset Provenance & Scaling Realities**: The 2013 "HD Edition" on PC used the exact same 1999 sprite assets (`~85×56` px units, `800×600` UI art, 1:1 SLP tiles). The PS2 version rendered a letterboxed 640×262 software playfield at $y=40$ within a 640×448 logical framebuffer (PAL stretched to 640×512).
 - **Engine Viewport Expansion**: Achieving a crisp, native HD/1080p experience on modern displays (desktop and docked Switch) does **not** mean naive upscaling or replacing 1:1 sprites with distorted textures. Following the canonical strategy ([`docs/sot/hd-assets-strategy.md`](docs/sot/hd-assets-strategy.md)), the engine's internal map viewport is expanded (rendering more map area at 1:1 native scale), while HUD elements are anchored cleanly to display borders and UI screens use high-resolution assets or clean aspect-ratio preservation.
 
@@ -98,21 +101,23 @@ No linter is configured. Style is set by `.editorconfig` (4-space indent, 2 for 
 ## Mandatory Debug Builds & High Output Policy
 
 All bring-up, compilation, and testing across all platforms MUST use **Debug builds with high-level output verbosity**:
+
 - **Debug Build Mandate**: Always compile with `-DCMAKE_BUILD_TYPE=Debug` (or `--diagnostics` / `assembleDebug`). Never use uninstrumented release builds for bring-up or troubleshooting. Debug symbols (`-g`), assertions (`assert()` active; never `-DNDEBUG`), and stack traces must be preserved so crashes, illegal memory access, or missing functions fail fast and are immediately diagnosable.
 - **High Output & Verbosity**:
-  - Build verbosity: Always pass `-v` to `cmake --build` / `ninja` and use `ctest --output-on-failure -V` (verbose mode).
-  - Runtime diagnostics: Enable `-DAOE2_RUNTIME_DIAGNOSTICS=ON` for aggressive PS2Recomp runtime logging (`PS2X_ENABLE_AGRESSIVE_LOGS=ON`), IOP RPC traces (`PS2X_ENABLE_IOP_RPC_TRACE=ON`), EE DECI2 TTY output (`AOE2_GAME_TTY=ON`), and `StopOnMissingFunction`. The Docker build script accepts `--diagnostics` for desktop; Switch builds enable diagnostics without that flag.
-  - Rich trace variables: Utilize runtime environment variables for high output capture:
-    - `AOE2_CALL_TRACE_FIRST=N`: Log first N calls per guest function (default 3).
-    - `AOE2_CALL_TRACE_MEM=1`: Hex dump 16 bytes at `$a0` arguments.
-    - `AOE2_SHAPE_TRACE=1`: SLP shape loader and draw entry-point logging.
-  - Full output logging: Pipe complete build and test outputs to dedicated log files (`build.log`, `switch_validation.log`, `desktop_validation.log`) and classify compiler or runtime diagnostics via `tools/classify_diagnostics.py`.
+    - Build verbosity: Always pass `-v` to `cmake --build` / `ninja` and use `ctest --output-on-failure -V` (verbose mode).
+    - Runtime diagnostics: Enable `-DAOE2_RUNTIME_DIAGNOSTICS=ON` for aggressive PS2Recomp runtime logging (`PS2X_ENABLE_AGRESSIVE_LOGS=ON`), IOP RPC traces (`PS2X_ENABLE_IOP_RPC_TRACE=ON`), EE DECI2 TTY output (`AOE2_GAME_TTY=ON`), and `StopOnMissingFunction`. The Docker build script accepts `--diagnostics` for desktop; Switch builds enable diagnostics without that flag.
+    - Rich trace variables: Utilize runtime environment variables for high output capture:
+        - `AOE2_CALL_TRACE_FIRST=N`: Log first N calls per guest function (default 3).
+        - `AOE2_CALL_TRACE_MEM=1`: Hex dump 16 bytes at `$a0` arguments.
+        - `AOE2_SHAPE_TRACE=1`: SLP shape loader and draw entry-point logging.
+    - Full output logging: Pipe complete build and test outputs to dedicated log files (`build.log`, `switch_validation.log`, `desktop_validation.log`) and classify compiler or runtime diagnostics via `tools/classify_diagnostics.py`.
 
 ## Architecture
 
 Pipeline: user-owned `AOK.ELF` → Ghidra headless (`MIPS:LE:64:64-32addr`) + PS2Recomp's `ExportPS2Functions.java` → `analysis/generated/function_map.csv` + `SLES-50282.toml` → `ps2_recomp` → `generated/SLES-50282/*.cpp` (~17k files, one per function) → host runtime/platform layers.
 
 Layers (C++ namespaces `aoe2::<layer>`, headers under `<layer>/include/aoe2/<layer>/`, all compiled into the single static lib `aoe2_interfaces` in `CMakeLists.txt`):
+
 - `core/` — single source of truth for target metadata. `core/target.py` (`SINGLE_TARGET`) is imported by every Python tool; `core/include/aoe2/core/target.hpp` mirrors it for C++. Keep both in sync. No host OS dependencies.
 - `runtime/` — `GuestMemory` (64 MiB EE RAM) and the abstract `PlatformServices` (logging, clock).
 - `platform/desktop/` — concrete `PlatformServices` + `ActionRecorderInputSink`; `src/main.cpp` is the `aoe2_smoke_test` ctest executable. `platform/switch/` and `platform/android/` contain target integration.
@@ -135,7 +140,8 @@ Every document in the repository links into a coherent chain leading back to thi
 - **Prior Art, Reuse & Permissions**: [`docs/sot/prior-art-and-reuse.md`](docs/sot/prior-art-and-reuse.md) (provenance, clean-room rules, dependency licenses, and authorized decompilation reuse).
 - **Recompilation Workflow**: [`docs/ghidra-ps2recomp-workflow.md`](docs/ghidra-ps2recomp-workflow.md) (Ghidra headless export, TOML configuration, and PS2Recomp codegen).
 - **Desktop Probe & Overlays**: [`docs/desktop-runtime-probe.md`](docs/desktop-runtime-probe.md) (Linux host probe and dynamic code overlay milestones).
-- **Graphics Implementation Plan**: [`docs/plans/gs-independent-rendering.md`](docs/plans/gs-independent-rendering.md) (complete GS-independent presentation); [viewport plan](docs/plans/expanded-viewport-native-implementation.md) tracks map expansion and validation.
+- **Experimental Graphics Plans**: [`docs/plans/gs-independent-rendering.md`](docs/plans/gs-independent-rendering.md) (GS-independent presentation) and [viewport plan](docs/plans/expanded-viewport-native-implementation.md); both are opt-in. See the [active Switch baseline](docs/plans/switch-functional-baseline.md).
+- **Active Switch Baseline**: [`docs/plans/switch-functional-baseline.md`](docs/plans/switch-functional-baseline.md) (functional gameplay gates, standard GS path, experimental build flags, and Joy-Con/pointer requirements).
 
 ## Legal / provenance rules (enforced by tooling — do not weaken)
 

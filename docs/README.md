@@ -25,6 +25,7 @@ flowchart TD
     SOT_INDEX --> SOT_PLAY["docs/sot/play-emulator-sot.md (Hardware Reference Emulator SOT)"]
 
     ARCH --> ACTIVE_PLAN["docs/plans/gs-independent-rendering.md (GS-independent rendering handoff)"]
+    ARCH --> SWITCH_PLAN["docs/plans/switch-functional-baseline.md (Switch functional baseline)"]
 ```
 
 ---
@@ -32,6 +33,7 @@ flowchart TD
 ## 2. Directory Structure & Key Documents
 
 ### Core Architectural Documents (Directly Linked in `CLAUDE.md`)
+
 1. **[`CLAUDE.md`](../CLAUDE.md)**: The root instructions, build commands, layer boundaries, and non-negotiable legal/provenance invariants.
 2. **[`docs/architecture.md`](architecture.md)**: Deep architectural overview of the Emotion Engine (R5900, VU0/VU1, GS, IOP), layer isolation, and runtime design.
 3. **[`docs/switch-target-architecture.md`](switch-target-architecture.md)**: The definitive blueprint for the Nintendo Switch target (Horizon OS services, `appletHook` 720p/1080p scaling, `audren` audio, Title Takeover memory protection, and touch/Joy-Con input).
@@ -47,28 +49,32 @@ flowchart TD
 ---
 
 ### Sources of Truth (`docs/sot/`)
+
 Subsystem-specific behavioral specifications:
-* **[`docs/sot/overlay-recompilation.md`](sot/overlay-recompilation.md)**: Multi-menu, lobby, and scenario dynamic overlay recompilation and dispatch.
-* **[`docs/sot/multiplayer-lan-architecture.md`](sot/multiplayer-lan-architecture.md)**: i.LINK / UDP network emulation and discovery.
-* **[`docs/sot/play-emulator-sot.md`](sot/play-emulator-sot.md)**: Play! emulator hardware reference behavior for SIF/IOP handshakes.
-* **[`docs/sot/high-level-draw-seams.md`](sot/high-level-draw-seams.md)**: GS-independent rendering contract and known evidence.
-* **[`docs/sot/graphics-binary-intervention-map.md`](sot/graphics-binary-intervention-map.md)**: ELF/decomp-checked intervention candidates, direct-call bypasses, and unresolved coverage.
-* **[`docs/sot/caminho-real-de-desenho-pipeline.md`](sot/caminho-real-de-desenho-pipeline.md)**: Detailed rendering pipeline and interception strategy, complementary to the seam analysis above.
-* **Subsystem Semantics**:
-  - [`sot/gpu-semantics.md`](sot/gpu-semantics.md): GS drawing and texture uploads.
-  - [`sot/hud-artifacts-clut-swizzle.md`](sot/hud-artifacts-clut-swizzle.md): HUD rendering artifacts, CLUT swizzling, and GLES modernization roadmap.
-  - `file-cdvd-semantics.md`: CDVD streaming, sector reads, and file tables.
-  - `pad-libpad-semantics.md` & `input-modules-semantics.md`: Controller polling and DualShock 2 registers.
-  - `mc-semantics.md`: Memory card storage and save serialization.
-  - `hd-semantics.md`: Virtual hard drive and host storage model.
+
+- **[`docs/sot/overlay-recompilation.md`](sot/overlay-recompilation.md)**: Multi-menu, lobby, and scenario dynamic overlay recompilation and dispatch.
+- **[`docs/sot/multiplayer-lan-architecture.md`](sot/multiplayer-lan-architecture.md)**: i.LINK / UDP network emulation and discovery.
+- **[`docs/sot/play-emulator-sot.md`](sot/play-emulator-sot.md)**: Play! emulator hardware reference behavior for SIF/IOP handshakes.
+- **[`docs/sot/high-level-draw-seams.md`](sot/high-level-draw-seams.md)**: GS-independent rendering contract and known evidence.
+- **[`docs/sot/graphics-binary-intervention-map.md`](sot/graphics-binary-intervention-map.md)**: ELF/decomp-checked intervention candidates, direct-call bypasses, and unresolved coverage.
+- **[`docs/sot/caminho-real-de-desenho-pipeline.md`](sot/caminho-real-de-desenho-pipeline.md)**: Detailed rendering pipeline and interception strategy, complementary to the seam analysis above.
+- **Subsystem Semantics**:
+    - [`sot/gpu-semantics.md`](sot/gpu-semantics.md): GS drawing and texture uploads.
+    - [`sot/hud-artifacts-clut-swizzle.md`](sot/hud-artifacts-clut-swizzle.md): HUD rendering artifacts, CLUT swizzling, and GLES modernization roadmap.
+    - `file-cdvd-semantics.md`: CDVD streaming, sector reads, and file tables.
+    - `pad-libpad-semantics.md` & `input-modules-semantics.md`: Controller polling and DualShock 2 registers.
+    - `mc-semantics.md`: Memory card storage and save serialization.
+    - `hd-semantics.md`: Virtual hard drive and host storage model.
 
 ---
 
 ### Plans & Work in Progress (`docs/plans/`)
-* **[`docs/plans/gs-independent-rendering.md`](plans/gs-independent-rendering.md)**: Ordered implementation tasks and acceptance gates for every screen without GS visual processing.
-* **[`docs/plans/expanded-viewport-native-implementation.md`](plans/expanded-viewport-native-implementation.md)**: Active map-specific implementation and validation gates.
-* **[`docs/plans/nifty-herding-pudding.md`](plans/nifty-herding-pudding.md)**: Completed RAM-expansion work and its validation record.
-* **[`docs/native-map-view-checkpoint.md`](native-map-view-checkpoint.md)**: Partial opt-in native map implementation, baseline replay and unresolved mission acceptance.
+
+- **[`docs/plans/switch-functional-baseline.md`](plans/switch-functional-baseline.md)**: Active project objective, build-time graphics flags, Joy-Con/pointer requirements, and visually verified Switch acceptance gates.
+- **[`docs/plans/gs-independent-rendering.md`](plans/gs-independent-rendering.md)**: Ordered implementation tasks and acceptance gates for every screen without GS visual processing.
+- **[`docs/plans/expanded-viewport-native-implementation.md`](plans/expanded-viewport-native-implementation.md)**: Experimental map-specific implementation and validation gates.
+- **[`docs/plans/nifty-herding-pudding.md`](plans/nifty-herding-pudding.md)**: Completed RAM-expansion work and its validation record.
+- **[`docs/native-map-view-checkpoint.md`](native-map-view-checkpoint.md)**: Partial opt-in native map implementation, baseline replay and unresolved mission acceptance.
 
 ---
 
