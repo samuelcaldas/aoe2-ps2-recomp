@@ -18,8 +18,10 @@ All build outputs and artifacts are quarantined under dedicated, git-ignored sub
 | :--- | :--- | :--- | :--- |
 | **Desktop (Debug)** | Docker (`aoe2-build-desktop`) | `build/docker-desktop/` | `aoe2_game`, `desktop_runtime_probe`, `aoe2_input_tests` |
 | **Desktop (Diagnostics)** | Docker (`aoe2-build-desktop`) | `build/docker-desktop-diagnostics/` | `aoe2_game` (with `-DAOE2_RUNTIME_DIAGNOSTICS=ON`) |
+| **Desktop (Release / RelWithDebInfo)** | Docker (type-specific name) | `build/docker-desktop-release/`, `build/docker-desktop-relwithdebinfo/` | `aoe2_game` |
 | **Desktop Probe (Host)** | Local host systemd scope | `build/desktop-probe/` | `desktop_runtime_probe` (headless initialization check) |
 | **Nintendo Switch** | Docker (`aoe2-build-switch`) | `build/docker-switch/` | `aoe2_game_nro` (`aoe2_game.nro`), devkitA64 object cache |
+| **Nintendo Switch (Release / RelWithDebInfo)** | Docker (type-specific name) | `build/docker-switch-release/`, `build/docker-switch-relwithdebinfo/` | `aoe2_game.nro` |
 | **Android** | Docker (`aoe2-build-android`) | `build/docker-android/` & `platform/android/build/` | `build/docker-android/aoe2-recomp-debug.apk` |
 | **Host Scaffolding / Tests** | Local host developer shell | `build/` (or user-defined `build/local/`) | `aoe2_smoke_test`, `aoe2_input_tests` |
 
@@ -132,9 +134,9 @@ For autonomous agent and pair-programming workflows, dedicated skills are provid
 
 ---
 
-## 9. Mandatory Debug Builds & High Output Policy
+## 9. Build Type Selection & Output Policy
 
-To accelerate bring-up, overlay analysis, and bug localization across all targets, the codebase mandates **Debug builds** with **high-level output logging**:
+Debug remains the default for bring-up and diagnostics. Desktop and Switch also accept `--build-type Release` or `--build-type RelWithDebInfo`; each type has a dedicated directory and container name, so a change of configuration cannot reuse incompatible objects. Release disables runtime diagnostics unless explicitly requested where supported. Android currently uses its Gradle debug variant.
 
 ### 1. Rationale
 Recompiling ~17,000 to ~58,000 guest functions alongside native KCET shims requires maximum transparency:
@@ -146,9 +148,18 @@ Recompiling ~17,000 to ~58,000 guest functions alongside native KCET shims requi
 
 | Target | Build Configuration | Verbosity & Output Flags | Artifacts / Logs |
 | :--- | :--- | :--- | :--- |
-| **Desktop / PC** | `-DCMAKE_BUILD_TYPE=Debug`<br/>`-DAOE2_RUNTIME_DIAGNOSTICS=ON` | `cmake --build ... -v`<br/>`ctest --output-on-failure -V` | `build/docker-desktop-diagnostics/`<br/>`desktop_validation.log` |
-| **Nintendo Switch**| `-DCMAKE_BUILD_TYPE=Debug` (devkitA64) | Full symbols (`-g`), assertions active | `build/docker-switch/`<br/>`switch_validation.log` |
+| **Desktop / PC** | `--build-type Debug` (default), `Release`, or `RelWithDebInfo`; `--diagnostics` is explicit | `cmake --build ... -v`<br/>`ctest --output-on-failure -V` | `build/docker-desktop[-<type>[-diagnostics]]/` |
+| **Nintendo Switch**| `--build-type Debug` (default), `Release`, or `RelWithDebInfo` | `cmake --build ... -v`; runtime diagnostics off in Release | `build/docker-switch[-<type>]/` |
 | **Android** | `assembleDebug` (Gradle) | RelWithDebInfo / Debug symbols, JNI logs | `build/docker-android/aoe2-recomp-debug.apk` |
+
+HD asset staging and loader initialization are compile-time opt-ins, disabled by default. Pass `--enable-hd-assets` to stage the local catalog and configure `AOE2_ENABLE_HD_ASSETS=ON`; a normal build does not inspect or load the optional HD asset tree.
+
+Example optimized Switch build:
+
+```bash
+python3 tools/docker_build.py --platform switch --build-type Release --jobs 8
+# build/docker-switch-release/aoe2_game.nro
+```
 
 ### 3. High-Output Runtime Environment Variables
 When executing or validating binaries, enable rich trace logging:

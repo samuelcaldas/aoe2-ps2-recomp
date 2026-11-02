@@ -45,7 +45,7 @@ class TestDockerBuildCommands(unittest.TestCase):
         args = docker_build.parse_args(["--platform", "pc"])
         self.assertEqual(docker_build.canonical_platform_name(args.platform), "desktop")
         spec = docker_build.select_spec(args.platform, diagnostics=False)
-        self.assertEqual(spec, docker_build.PLATFORMS["desktop"])
+        self.assertEqual(spec.build_dir, docker_build.PLATFORMS["desktop"].build_dir)
         self.assertEqual(docker_build.container_name_for(args), "aoe2-build-desktop")
 
     def test_concurrent_platforms_have_distinct_container_identifications(self):
@@ -126,17 +126,17 @@ class TestDockerBuildCommands(unittest.TestCase):
         script = docker_build.build_script(self.spec, jobs=6)
         stage = "python3 tools/stage_hd_assets.py --platform desktop"
         verify = "python3 tools/verify_hd_stage.py --platform desktop"
-        self.assertIn(stage, script)
-        self.assertIn(verify, script)
-        self.assertLess(script.index(stage), script.index(verify))
-        self.assertLess(script.index(verify), script.index("cmake -S"))
-        self.assertIn("game/hd-edition/catalog.json", script)
+        self.assertNotIn(stage, script)
+        self.assertNotIn(verify, script)
+        self.assertIn("HD assets disabled at build time", script)
+        self.assertIn("-DAOE2_ENABLE_HD_ASSETS=OFF", docker_build.build_script(
+            docker_build.PLATFORMS["switch"], jobs=1))
 
     def test_android_and_switch_build_specs_stage_their_platform_assets(self):
         for platform in ("android", "switch"):
             script = docker_build.build_script(docker_build.PLATFORMS[platform], jobs=2)
-            self.assertIn(f"python3 tools/stage_hd_assets.py --platform {platform}", script)
-            self.assertIn(f"python3 tools/verify_hd_stage.py --platform {platform}", script)
+            self.assertNotIn(f"python3 tools/stage_hd_assets.py --platform {platform}", script)
+            self.assertNotIn(f"python3 tools/verify_hd_stage.py --platform {platform}", script)
 
     def test_every_platform_declares_a_dockerfile_that_exists(self):
         for name, spec in docker_build.PLATFORMS.items():
@@ -181,6 +181,22 @@ class TestDockerBuildCommands(unittest.TestCase):
     def test_parse_args_accepts_diagnostics_flag(self):
         args = docker_build.parse_args(["--platform", "desktop", "--diagnostics"])
         self.assertTrue(args.diagnostics)
+
+    def test_release_build_has_separate_directory_and_disables_runtime_diagnostics(self):
+        spec = docker_build.select_spec("switch", diagnostics=False, build_type="Release")
+        script = build_script_for(spec)
+        self.assertEqual(spec.build_dir, "build/docker-switch-release")
+        self.assertIn("-DCMAKE_BUILD_TYPE=Release", script)
+        self.assertIn("-DAOE2_RUNTIME_DIAGNOSTICS=OFF", script)
+        self.assertIn("-DAOE2_ENABLE_HD_ASSETS=OFF", script)
+        self.assertIn("-DCMAKE_CXX_FLAGS_RELEASE=-O2 -DNDEBUG -g0", script)
+
+    def test_hd_assets_are_staged_only_after_explicit_opt_in(self):
+        spec = docker_build.select_spec("switch", diagnostics=False, enable_hd_assets=True)
+        script = docker_build.build_script(spec, jobs=1, enable_hd_assets=True)
+        self.assertIn("python3 tools/stage_hd_assets.py --platform switch", script)
+        self.assertIn("python3 tools/verify_hd_stage.py --platform switch", script)
+        self.assertIn("-DAOE2_ENABLE_HD_ASSETS=ON", script)
 
     def test_unknown_platform_is_rejected(self):
         with self.assertRaises(SystemExit):

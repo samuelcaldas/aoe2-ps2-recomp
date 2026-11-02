@@ -1,7 +1,9 @@
 #include <aoe2/core/target.hpp>
+#if defined(AOE2_ENABLE_HD_ASSETS)
 #include <aoe2/assets/asset_path_resolver.hpp>
 #include <aoe2/assets/asset_resolver.hpp>
 #include <aoe2/assets/loose_hd_asset_provider.hpp>
+#endif
 #include <aoe2/input/actions.hpp>
 #include <aoe2/platform/desktop.hpp>
 #include <aoe2/renderer/gles_renderer.hpp>
@@ -63,13 +65,15 @@ int main() {
     assert(gles_renderer.GetDrawCallCount() == 1);
     services.LogInfo("GLES Renderer (1280x720) initialized and tested successfully.");
 
-    // 5. Test HD Asset Provider & Resolver
+    // 5. Test HD Asset Provider & Resolver only in opt-in builds.
+#if defined(AOE2_ENABLE_HD_ASSETS)
     aoe2::assets::LooseHdAssetProvider asset_provider;
     aoe2::assets::AssetPathResolver path_resolver;
     const std::string root_str = path_resolver.ResolveRoot().string();
     asset_provider.Initialize(root_str);
     aoe2::assets::AssetResolver asset_resolver(asset_provider);
     services.LogInfo("Asset resolver initialized successfully.");
+#endif
 
     // 6. Test input sink
     aoe2::platform::desktop::ActionRecorderInputSink input_sink;

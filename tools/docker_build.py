@@ -13,6 +13,7 @@ Exit codes: 0 success, 2 preflight failed, otherwise the failing docker exit cod
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 import os
 import shlex
 import shutil
@@ -62,7 +63,7 @@ def cmake_commands(*configure_args: str, targets: tuple = ("aoe2_game",)) -> tup
 
 
 def hd_stage_command(platform: str) -> str:
-    """Stage imported HD assets when a local catalog exists; leave PS2-only builds unchanged."""
+    """Stage imported HD assets when explicitly enabled and a local catalog exists."""
     return (
         "if [ -f game/hd-edition/catalog.json ]; then "
         f"python3 tools/stage_hd_assets.py --platform {platform} && "
@@ -76,10 +77,10 @@ def with_hd_stage(platform: str, commands: tuple) -> tuple:
 
 
 def desktop_commands(*extra_configure: str) -> tuple:
-    return with_hd_stage("desktop", cmake_commands(
+    return cmake_commands(
         "-DCMAKE_BUILD_TYPE=Debug", "-DAOE2_BUILD_GAME=ON", "-DAOE2_BUILD_DESKTOP_PROBE=ON", *extra_configure,
         targets=("aoe2_game", "desktop_runtime_probe", "aoe2_input_tests"),
-    ))
+    )
 
 
 # Diagnostic variants build into their own directory so the normal artifacts stay untouched.
@@ -105,12 +106,12 @@ PLATFORMS = {
         dockerfile="docker/android/Dockerfile",
         image="aoe2-build-android",
         build_dir="build/docker-android",
-        commands=with_hd_stage("android", (
+        commands=(
             "export GRADLE_USER_HOME={build_dir}/gradle-home",
             "cd platform/android && gradle --build-cache --no-daemon --console=plain assembleDebug "
             "-Paoe2NativeJobs={jobs} -Paoe2Abis=arm64-v8a,x86_64",
             "mkdir -p {build_dir} && cp app/build/outputs/apk/debug/app-debug.apk {build_dir}/aoe2-recomp-debug.apk",
-        )),
+        ),
         test_commands=(
             "cd platform/android && gradle --build-cache --no-daemon --console=plain testDebugUnitTest",
         ),
@@ -119,13 +120,13 @@ PLATFORMS = {
         dockerfile="docker/switch/Dockerfile",
         image="aoe2-build-switch",
         build_dir="build/docker-switch",
-        commands=with_hd_stage("switch", cmake_commands(
+        commands=cmake_commands(
             "-DCMAKE_TOOLCHAIN_FILE=/opt/devkitpro/cmake/Switch.cmake", "-DCMAKE_BUILD_TYPE=Debug",
             "-DAOE2_RUNTIME_DIAGNOSTICS=ON",
             "-DAOE2_BUILD_GAME=ON", "-DAOE2_DEFAULT_BOOT_ELF=AOK.ELF",
             "-DPLATFORM=SDL", "-DPS2X_ENABLE_FFMPEG=OFF",
             targets=("aoe2_game_nro",),
-        )),
+        ),
         test_commands=(
             "printf '%s\\n' 'Switch NRO tests run in emulator container; run python3 tools/validate_switch.py'",
         ),
@@ -140,7 +141,10 @@ def canonical_platform_name(platform: str) -> str:
 def container_name_for(args: argparse.Namespace) -> str:
     """Distinct container identifier per platform/variant so parallel runs do not collide."""
     platform = canonical_platform_name(args.platform)
-    suffix = "-diagnostics" if getattr(args, "diagnostics", False) else ""
+    build_type = getattr(args, "build_type", "Debug").lower()
+    suffix = "" if build_type == "debug" else f"-{build_type}"
+    if getattr(args, "diagnostics", False):
+        suffix += "-diagnostics"
     return f"aoe2-build-{platform}{suffix}"
 
 
@@ -182,14 +186,35 @@ def check_preflight(args: argparse.Namespace) -> None:
         ensure_container_clean(container_name_for(args))
 
 
-def select_spec(platform: str, diagnostics: bool) -> PlatformSpec:
+def select_spec(platform: str, diagnostics: bool, build_type: str = "Debug", enable_hd_assets: bool = False) -> PlatformSpec:
     """Return the build spec for a platform, or its diagnostic variant; raises PreflightError if none exists."""
     canonical = canonical_platform_name(platform)
-    if not diagnostics:
-        return PLATFORMS[canonical]
-    if canonical not in DIAGNOSTIC_VARIANTS:
+    if diagnostics and canonical not in DIAGNOSTIC_VARIANTS:
         raise PreflightError(f"--diagnostics is only available for: {', '.join(sorted(DIAGNOSTIC_VARIANTS))}")
-    return DIAGNOSTIC_VARIANTS[canonical]
+    base = DIAGNOSTIC_VARIANTS[canonical] if diagnostics else PLATFORMS[canonical]
+    build_type_name = build_type.lower()
+    if canonical == "android" and build_type_name != "debug":
+        raise PreflightError("Android currently supports only its Gradle debug build")
+    suffix = "" if build_type_name == "debug" else f"-{build_type_name}"
+    if diagnostics:
+        suffix += "-diagnostics"
+    build_dir = f"build/docker-{canonical}{suffix}"
+    commands = list(base.commands)
+    if canonical in ("desktop", "switch"):
+        for index, command in enumerate(commands):
+            if command.startswith("cmake -S "):
+                command = command.replace("-DCMAKE_BUILD_TYPE=Debug", f"-DCMAKE_BUILD_TYPE={build_type}")
+                command = command.replace("-DAOE2_RUNTIME_DIAGNOSTICS=ON", "-DAOE2_RUNTIME_DIAGNOSTICS=OFF")
+                if build_type_name == "release":
+                    command += " " + shlex.join((
+                        "-DCMAKE_C_FLAGS_RELEASE=-O2 -DNDEBUG -g0",
+                        "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -DNDEBUG -g0",
+                    ))
+                if diagnostics:
+                    command += " -DAOE2_RUNTIME_DIAGNOSTICS=ON"
+                command += " -DAOE2_ENABLE_HD_ASSETS=" + ("ON" if enable_hd_assets else "OFF")
+                commands[index] = command
+    return replace(base, build_dir=build_dir, commands=tuple(commands))
 
 
 def image_build_command(spec: PlatformSpec, uid: int, gid: int) -> list:
@@ -209,6 +234,8 @@ def build_script(
     test: bool = False,
     experimental_expanded_viewport: bool = False,
     experimental_native_graphics: bool = False,
+    build_type: str = "Debug",
+    enable_hd_assets: bool = False,
 ) -> str:
     """Shell script run inside the container, failing on the first error."""
     build_dir = f"{CONTAINER_ROOT}/{spec.build_dir}"
@@ -216,16 +243,26 @@ def build_script(
     if test:
         commands.extend(spec.test_commands)
     graphics_options = []
-    if experimental_expanded_viewport or experimental_native_graphics:
-        if spec is not PLATFORMS["switch"]:
-            raise PreflightError("experimental graphics options are available only for Switch")
-    if spec is PLATFORMS["switch"]:
+    is_switch = "docker-switch" in spec.build_dir
+    if (experimental_expanded_viewport or experimental_native_graphics) and not is_switch:
+        raise PreflightError("experimental graphics options are available only for Switch")
+    if is_switch:
         graphics_options.extend((
             "-DAOE2_EXPERIMENTAL_EXPANDED_VIEWPORT=" + ("ON" if experimental_expanded_viewport else "OFF"),
             "-DAOE2_EXPERIMENTAL_NATIVE_GRAPHICS=" + ("ON" if experimental_native_graphics else "OFF"),
         ))
         configure_index = next(i for i, command in enumerate(commands) if command.startswith("cmake -S "))
         commands[configure_index] += " " + shlex.join(graphics_options)
+    platform = "android" if spec.dockerfile.endswith("android/Dockerfile") else ("switch" if is_switch else "desktop")
+    if spec.dockerfile.endswith("android/Dockerfile"):
+        android_command_index = next(i for i, command in enumerate(commands) if "gradle --build-cache" in command)
+        commands[android_command_index] += " -Paoe2EnableHdAssets=" + str(enable_hd_assets).lower()
+    else:
+        configure_index = next(i for i, command in enumerate(commands) if command.startswith("cmake -S "))
+        if "-DAOE2_ENABLE_HD_ASSETS=" not in commands[configure_index]:
+            commands[configure_index] += " -DAOE2_ENABLE_HD_ASSETS=" + ("ON" if enable_hd_assets else "OFF")
+    commands.insert(0, hd_stage_command(platform) if enable_hd_assets else
+                    "printf '%s\\n' 'HD assets disabled at build time; skipping staging'")
     steps = [command.format(jobs=jobs, build_dir=build_dir) for command in commands]
     return "set -euo pipefail\n" + "\n".join(steps) + "\n"
 
@@ -251,6 +288,8 @@ def container_run_command(spec: PlatformSpec, args: argparse.Namespace) -> list:
             getattr(args, "test", False),
             getattr(args, "experimental_expanded_viewport", False),
             getattr(args, "experimental_native_graphics", False),
+            getattr(args, "build_type", "Debug"),
+            getattr(args, "enable_hd_assets", False),
         ),
     ]
 
@@ -264,6 +303,10 @@ def parse_args(argv: list) -> argparse.Namespace:
                         help=f"number of parallel build jobs (default: {DEFAULT_JOBS})")
     parser.add_argument("--diagnostics", action="store_true",
                         help="build with verbose runtime traces into build/docker-<platform>-diagnostics")
+    parser.add_argument("--build-type", choices=("Debug", "Release", "RelWithDebInfo"), default="Debug",
+                        help="CMake build configuration; each non-default type uses its own output directory")
+    parser.add_argument("--enable-hd-assets", action="store_true",
+                        help="opt in to HD asset staging and loader initialization (default: disabled)")
     parser.add_argument("--test", action="store_true",
                         help="run test suite inside the container after build")
     parser.add_argument("--experimental-expanded-viewport", action="store_true",
@@ -278,7 +321,7 @@ def main(argv: list | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
     try:
         check_preflight(args)
-        spec = select_spec(args.platform, args.diagnostics)
+        spec = select_spec(args.platform, args.diagnostics, args.build_type, args.enable_hd_assets)
     except PreflightError as error:
         sys.stderr.write(f"PREFLIGHT FAILED: {error}\n")
         return EXIT_PREFLIGHT

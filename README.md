@@ -186,13 +186,13 @@ This workflow uses a legally owned **PAL PS2 disc** (`SLES-50282`) and a Switch 
 
    Generated code and analysis files remain local and untracked. Once they exist, this generation step is needed only after changing the owned input, generation configuration, or pipeline.
 
-3. Build the default Switch NRO in Debug configuration. The two experimental graphics/viewport flags are OFF unless explicitly requested; leave them off for the normal Switch build.
+3. Build a Switch NRO. Debug remains the default for bring-up; use `--build-type Release` for an uninstrumented build. Each CMake build type has its own output directory, and HD asset staging/loading stays disabled unless `--enable-hd-assets` is passed. The two experimental graphics/viewport flags are also OFF unless explicitly requested.
 
    ```bash
-   python3 tools/docker_build.py --platform switch --jobs 8
+   python3 tools/docker_build.py --platform switch --build-type Release --jobs 8
    ```
 
-   The artifact is `build/docker-switch/aoe2_game.nro`. Docker uses the `docker-dev` context and the repository's pinned devkitPro image. A successful build only confirms compilation; boot and gameplay still need to be checked on the target.
+   The Release artifact is `build/docker-switch-release/aoe2_game.nro`; Debug uses `build/docker-switch/aoe2_game.nro`, and `RelWithDebInfo` uses `build/docker-switch-relwithdebinfo/aoe2_game.nro`. HD assets can be opted in with `--enable-hd-assets`. Docker uses the `docker-dev` context and the repository's pinned devkitPro image. A successful build only confirms compilation; boot and gameplay still need to be checked on the target.
 
 4. Power off the Switch, insert its SD card in the computer, and copy the NRO and the contents of the imported game directory to the following layout. Do not rename the data directory: the application mounts `sdmc:/switch/aoe2/` as its game root. Preserve the original directory hierarchy from the disc extraction.
 
@@ -207,7 +207,7 @@ This workflow uses a legally owned **PAL PS2 disc** (`SLES-50282`) and a Switch 
    For example, from the repository root with the Switch SD mounted at `/media/$USER/SWITCH`, copy the generated NRO, then merge the imported directory contents:
 
    ```bash
-   install -D build/docker-switch/aoe2_game.nro "/media/$USER/SWITCH/switch/aoe2/aoe2_game.nro"
+   install -D build/docker-switch-release/aoe2_game.nro "/media/$USER/SWITCH/switch/aoe2/aoe2_game.nro"
    cp -a game/SLES-50282/. "/media/$USER/SWITCH/switch/aoe2/"
    mkdir -p "/media/$USER/SWITCH/switch/aoe2/mc0" "/media/$USER/SWITCH/switch/aoe2/mc1"
    sync

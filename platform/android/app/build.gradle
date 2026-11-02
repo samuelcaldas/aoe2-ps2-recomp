@@ -10,6 +10,7 @@ def applicationPackage = 'com.aoe2.recomp'
 def bootElf = project.findProperty('aoe2BootElf') ?: "/storage/emulated/0/Android/data/${applicationPackage}/files/AOK.ELF"
 def abis = (project.findProperty('aoe2Abis') ?: 'arm64-v8a').split(',')
 def nativeJobs = project.findProperty('aoe2NativeJobs') ?: '8'
+def enableHdAssets = (project.findProperty('aoe2EnableHdAssets') ?: 'false').toBoolean()
 
 android {
     namespace applicationPackage
@@ -29,6 +30,7 @@ android {
                         '-DANDROID_CPP_FEATURES=rtti exceptions',
                         '-DANDROID_STL=c++_shared',
                         "-DAOE2_DEFAULT_BOOT_ELF=${bootElf}",
+                        "-DAOE2_ENABLE_HD_ASSETS=${enableHdAssets ? 'ON' : 'OFF'}",
                         // AGP runs ninja without -j; a job pool keeps compiles within the container memory cap.
                         "-DCMAKE_JOB_POOLS=compile=${nativeJobs};link=1",
                         '-DCMAKE_JOB_POOL_COMPILE=compile',
