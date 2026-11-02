@@ -5,7 +5,7 @@ Verifies:
 - Function map source must be strictly 'ghidra_export' (rejects 'fallback_analyzer').
 - Target ID matches expected target (SLES-50282).
 - ELF SHA-1 matches expected SHA-1.
-- PS2Recomp commit matches third-party lockfile.
+- PS2Recomp code-generation subtree matches the pinned dependency; runtime-only fork commits may advance independently.
 - Ghidra version and Java version are present.
 - Exporter script path and SHA-256 hash are present.
 - Function map SHA-256 and TOML SHA-256 hashes are present.
@@ -32,6 +32,20 @@ def is_path_git_ignored(rel_path: str) -> bool:
         cwd=REPO_ROOT,
     )
     return res.returncode == 0
+
+def git_tree(commit: str) -> str | None:
+    """Return the PS2Recomp code-generation subtree identity for a recorded revision."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(REPO_ROOT / "third_party/PS2Recomp"), "rev-parse", f"{commit}:ps2xRecomp"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Verify generation manifest metadata.")
@@ -139,12 +153,16 @@ def main():
             expected_ps2recomp_sha = lock_data["dependencies"]["PS2Recomp"]["commit_sha"]
             manifest_ps2recomp_sha = data.get("ps2recomp_commit")
             if manifest_ps2recomp_sha != expected_ps2recomp_sha:
-                sys.stderr.write(
-                    f"Error: PS2Recomp commit mismatch against lockfile.\n"
-                    f"Lockfile: {expected_ps2recomp_sha}\n"
-                    f"Manifest: {manifest_ps2recomp_sha}\n"
-                )
-                sys.exit(1)
+                recorded_tree = data.get("ps2recomp_codegen_tree")
+                manifest_tree = git_tree(str(manifest_ps2recomp_sha or ""))
+                locked_tree = git_tree(str(expected_ps2recomp_sha))
+                if not recorded_tree or manifest_tree != recorded_tree or locked_tree != recorded_tree:
+                    sys.stderr.write(
+                        "Error: PS2Recomp code-generation sources differ from the generation manifest.\n"
+                        f"Lockfile commit: {expected_ps2recomp_sha}\n"
+                        f"Manifest commit: {manifest_ps2recomp_sha}\n"
+                    )
+                    sys.exit(1)
         except Exception as e:
             sys.stderr.write(f"Warning: Could not check lockfile: {e}\n")
 

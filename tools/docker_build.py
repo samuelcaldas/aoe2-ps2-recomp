@@ -176,6 +176,8 @@ def check_preflight(args: argparse.Namespace) -> None:
         raise PreflightError(f"docker context '{DOCKER_CONTEXT}' not found")
     if args.jobs < 1:
         raise PreflightError("--jobs must be at least 1")
+    if (args.experimental_expanded_viewport or args.experimental_native_graphics) and canonical_platform_name(args.platform) != "switch":
+        raise PreflightError("experimental graphics options are available only for Switch")
     if not getattr(args, "dry_run", False):
         ensure_container_clean(container_name_for(args))
 
@@ -201,12 +203,29 @@ def image_build_command(spec: PlatformSpec, uid: int, gid: int) -> list:
     ]
 
 
-def build_script(spec: PlatformSpec, jobs: int, test: bool = False) -> str:
+def build_script(
+    spec: PlatformSpec,
+    jobs: int,
+    test: bool = False,
+    experimental_expanded_viewport: bool = False,
+    experimental_native_graphics: bool = False,
+) -> str:
     """Shell script run inside the container, failing on the first error."""
     build_dir = f"{CONTAINER_ROOT}/{spec.build_dir}"
     commands = list(spec.commands)
     if test:
         commands.extend(spec.test_commands)
+    graphics_options = []
+    if experimental_expanded_viewport or experimental_native_graphics:
+        if spec is not PLATFORMS["switch"]:
+            raise PreflightError("experimental graphics options are available only for Switch")
+    if spec is PLATFORMS["switch"]:
+        graphics_options.extend((
+            "-DAOE2_EXPERIMENTAL_EXPANDED_VIEWPORT=" + ("ON" if experimental_expanded_viewport else "OFF"),
+            "-DAOE2_EXPERIMENTAL_NATIVE_GRAPHICS=" + ("ON" if experimental_native_graphics else "OFF"),
+        ))
+        configure_index = next(i for i, command in enumerate(commands) if command.startswith("cmake -S "))
+        commands[configure_index] += " " + shlex.join(graphics_options)
     steps = [command.format(jobs=jobs, build_dir=build_dir) for command in commands]
     return "set -euo pipefail\n" + "\n".join(steps) + "\n"
 
@@ -226,7 +245,13 @@ def container_run_command(spec: PlatformSpec, args: argparse.Namespace) -> list:
         "-v", f"{REPO_ROOT}:{CONTAINER_ROOT}",
         *[flag for device in spec.devices for flag in ("--device", device)],
         "-w", CONTAINER_ROOT,
-        spec.image, "bash", "-c", build_script(spec, args.jobs, getattr(args, "test", False)),
+        spec.image, "bash", "-c", build_script(
+            spec,
+            args.jobs,
+            getattr(args, "test", False),
+            getattr(args, "experimental_expanded_viewport", False),
+            getattr(args, "experimental_native_graphics", False),
+        ),
     ]
 
 
@@ -241,6 +266,10 @@ def parse_args(argv: list) -> argparse.Namespace:
                         help="build with verbose runtime traces into build/docker-<platform>-diagnostics")
     parser.add_argument("--test", action="store_true",
                         help="run test suite inside the container after build")
+    parser.add_argument("--experimental-expanded-viewport", action="store_true",
+                        help="enable AOE2_EXPERIMENTAL_EXPANDED_VIEWPORT (Switch only)")
+    parser.add_argument("--experimental-native-graphics", action="store_true",
+                        help="enable AOE2_EXPERIMENTAL_NATIVE_GRAPHICS (Switch only)")
     parser.add_argument("--dry-run", action="store_true", help="print the docker commands without running them")
     return parser.parse_args(argv)
 

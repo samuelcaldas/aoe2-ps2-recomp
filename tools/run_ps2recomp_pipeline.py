@@ -256,6 +256,12 @@ def main():
         "elf_sha1": elf_sha1,
         "function_map_source": "ghidra_export",
         "ps2recomp_commit": actual_ps2recomp_sha,
+        "ps2recomp_codegen_tree": subprocess.run(
+            ["git", "-C", str(ps2recomp_dir), "rev-parse", f"{actual_ps2recomp_sha}:ps2xRecomp"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip(),
         "ghidra_version": ghidra_path.name,
         "java_version": get_java_version(),
         "exporter_script": str(exporter_script.relative_to(REPO_ROOT)),

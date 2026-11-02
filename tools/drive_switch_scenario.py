@@ -354,7 +354,8 @@ def follow_guest_event(
                 return False
             if on_wait is not None:
                 if now - last_action >= max_interval_seconds:
-                    on_wait()
+                    if on_wait() is False:
+                        return False
                     last_action = time.monotonic()
                 else:
                     time.sleep(min(0.2, max(0.0, deadline - now)))
@@ -564,6 +565,10 @@ def drive_scenario(
     for name, action, argument, settle in steps:
         effective_settle = (settle * speed_factor) if settle else 0.0
         print(f"[{mode}] Step {name}: {action} (settle={effective_settle:.1f}s)", flush=True)
+        before_shot = screenshots_dir / f"switch-{mode}-{name}-before.png"
+        capture_screenshot(before_shot, display)
+        before_state, _ = get_current_screen_state(display)
+        print(f"[{mode}] Before {name}: state={before_state}; captured {before_shot.name}", flush=True)
 
         if is_screen_loading(display):
             print(f"[{mode}] Screen is in loading transition; waiting for render before {name}...", flush=True)
@@ -574,16 +579,33 @@ def drive_scenario(
 
             def advance_story():
                 nonlocal story_clicks
+                if story_clicks >= 12:
+                    print(f"[{mode}] Story action limit reached; stopping blind input", flush=True)
+                    return False
+                prior_state, prior = get_current_screen_state(display)
+                if prior is None or prior_state == "black":
+                    print(f"[{mode}] Story screen is not visible; withholding input", flush=True)
+                    return False
                 story_clicks += 1
-                # Story/narrative slides require mouse click at screen centre to advance.
-                # The PS2 mouse driver processes the click; pad Cross alone is ignored.
+                before = screenshots_dir / f"switch-{mode}-story-{story_clicks}-before.png"
+                capture_screenshot(before, display)
+                # Story screens advance with the absolute pointer click; Cross
+                # is sent only after the click has been visually captured.
                 wx, wy = to_window_coords((320, 224))
                 do_click(display, wx, wy, 0.4)
-                time.sleep(0.3)
-                send_pad_button(display, "cross", 0.4)
-                shot = screenshots_dir / f"switch-{mode}-story-{story_clicks}.png"
+                time.sleep(0.5)
+                shot = screenshots_dir / f"switch-{mode}-story-{story_clicks}-after.png"
                 capture_screenshot(shot, display)
-                print(f"[{mode}] Captured {shot.name}", flush=True)
+                after_state, after = get_current_screen_state(display)
+                print(f"[{mode}] Story action {story_clicks}: {prior_state} -> {after_state}; captured before/after", flush=True)
+                if after is None or after_state == "black":
+                    return False
+                import numpy as np
+                changed = float(np.abs(prior.astype(np.int16) - after.astype(np.int16)).mean()) >= 3.0
+                if not changed:
+                    print(f"[{mode}] No visible transition after story click; withholding further input", flush=True)
+                    return False
+                return True
 
             matched = follow_guest_event(
                 log_path, b"[map-submit]", timeout=600.0, on_wait=advance_story, max_interval_seconds=3.0
@@ -601,20 +623,20 @@ def drive_scenario(
                 capture_screenshot(submit_shot, display)
                 print(f"[{mode}] Captured {submit_shot.name} [SUCCESS]!", flush=True)
             else:
-                map_clicks = 0
+                map_checks = 0
 
                 def advance_map():
-                    nonlocal map_clicks
-                    map_clicks += 1
-                    send_pad_button(display, "cross", 0.8)
-                    wx, wy = to_window_coords((320, 224))
-                    do_click(display, wx, wy, 0.4)
-                    shot = screenshots_dir / f"switch-{mode}-map-wait-{map_clicks}.png"
+                    nonlocal map_checks
+                    map_checks += 1
+                    shot = screenshots_dir / f"switch-{mode}-map-wait-{map_checks}.png"
                     capture_screenshot(shot, display)
-                    print(f"[{mode}] Captured {shot.name}", flush=True)
+                    state, _ = get_current_screen_state(display)
+                    print(f"[{mode}] Map checkpoint {map_checks}: state={state}; captured {shot.name}; no input sent", flush=True)
+                    return True
 
                 matched = follow_guest_event(
-                    log_path, b"[map-submit]", timeout=run_seconds, on_wait=advance_map
+                    log_path, b"[map-submit]", timeout=run_seconds, on_wait=advance_map,
+                    max_interval_seconds=10.0
                 )
                 if matched:
                     results["map_submitted"] = True
