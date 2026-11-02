@@ -164,9 +164,9 @@ Switch touchscreen (libnx HID, 1280x720)        Desktop mouse / touch (SDL)
 
 ---
 
-## 7. Widescreen (Future Option)
+## 7. Experimental Widescreen Viewport
 
-> **Status:** viewport expansion and inverse input mapping have partial opt-in implementations; live mission parity and platform acceptance remain open. See the [viewport plan](plans/expanded-viewport-native-implementation.md) and [checkpoint](native-map-view-checkpoint.md).
+> **Status:** viewport expansion and inverse input mapping are opt-in through `AOE2_EXPERIMENTAL_EXPANDED_VIEWPORT`, OFF by default. The current Switch target uses the PS2Recomp GS framebuffer; visual gameplay and physical-console acceptance remain open. See the [active Switch baseline](plans/switch-functional-baseline.md), [viewport plan](plans/expanded-viewport-native-implementation.md), and [checkpoint](native-map-view-checkpoint.md).
 
 ### 7.1 How PC widescreen mods work (reference)
 
