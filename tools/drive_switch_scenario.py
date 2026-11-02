@@ -36,8 +36,7 @@ BOOT_TO_MENU = [
     ("card-ok", "click", (251, 350), 30),
     ("profile-new-player", "click", (251, 350), 5),
     ("profile-name-field", "click", (335, 237), 3),
-    ("profile-name-a", "click", (176, 64), 2),
-    ("profile-name-enter", "click", (500, 153), 3),
+    ("profile-name-a", "type", "Teste", 2),
     ("profile-submit", "click", (245, 315), 5),
     ("profile-confirm", "click", (245, 315), 10),
     ("profile-settle", "wait", None, 10),
@@ -364,7 +363,7 @@ def follow_guest_event(
                     time.sleep(min(1.0, max(0.0, deadline - now)))
 
 
-def do_step(display: str, action: str, argument, settle: float, step_name: str = "", log_path: Path | None = None) -> None:
+def do_step(display: str, action: str, argument, settle: float, step_name: str = "", log_path: Path | None = None) -> bool | None:
     """Execute a scenario action via native controller buttons / arrows and calibrated clicks."""
     env = {**os.environ, "DISPLAY": display}
     win = find_window(display, timeout=5.0)
@@ -409,35 +408,55 @@ def do_step(display: str, action: str, argument, settle: float, step_name: str =
             send_pad_button(display, "cross", 0.5)
             time.sleep(1.5)
     elif step_name == "profile-name-a":
-        wx, wy = to_window_coords((176, 64))
-        do_click(display, wx, wy, 0.4)
-        time.sleep(0.5)
-        send_pad_button(display, "cross", 0.5)
-        time.sleep(1.0)
-    elif step_name == "profile-name-enter":
-        wx, wy = to_window_coords((500, 153))
-        do_click(display, wx, wy, 0.4)
-        time.sleep(0.3)
-        send_pad_button(display, "start", 0.5)
-        time.sleep(2.0)
+        state, before = get_current_screen_state(display)
+        if state != "new_player_dialog" or before is None:
+            print(f"[{step_name}] Dialog not visible; withholding text input", flush=True)
+            return False
+        else:
+            subprocess.run(["xdotool", "type", "--clearmodifiers", "--delay", "100", str(argument)], env=env)
+            time.sleep(0.5)
+            state, after = get_current_screen_state(display)
+            capture_screenshot(REPO_ROOT / ".playwright-mcp" / "switch" / f"switch-{step_name}-typed.png", display)
+            if state != "new_player_dialog" or after is None:
+                print(f"[{step_name}] Dialog changed unexpectedly; stopping scenario", flush=True)
+                return False
+            # A typed character must change pixels in the name field. A bright-pixel threshold is
+            # unreliable because the parchment behind the field is bright and the caret blinks.
+            import numpy as np
+            field_before = before[405:442, 575:817]
+            field_after = after[405:442, 575:817]
+            changed_pixels = int(np.count_nonzero(np.any(field_before != field_after, axis=2)))
+            if changed_pixels < 12:
+                print(f"[{step_name}] No visible name entered; withholding profile submission", flush=True)
+                return False
     elif step_name == "profile-submit":
+        state, _ = get_current_screen_state(display)
+        if state != "new_player_dialog":
+            print("[profile-submit] Dialog not visible; withholding confirmation", flush=True)
+            return False
         wx, wy = to_window_coords((245, 315))
         do_click(display, wx, wy, 0.4)
         time.sleep(0.3)
         send_pad_button(display, "cross", 0.5)
         time.sleep(2.0)
+        state, _ = get_current_screen_state(display)
+        if state == "new_player_dialog":
+            print("[profile-submit] Dialog remains open; stopping instead of repeating confirmation", flush=True)
+            return False
     elif step_name == "profile-confirm":
-        # Keep confirming until dialog closes and transitions
-        deadline = time.monotonic() + 30.0
-        while time.monotonic() < deadline:
-            wx, wy = to_window_coords((245, 315))
-            do_click(display, wx, wy, 0.4)
-            time.sleep(0.3)
-            send_pad_button(display, "cross", 0.5)
-            time.sleep(2.0)
-            st, _ = get_current_screen_state(display)
-            if st != "new_player_dialog":
-                break
+        state, _ = get_current_screen_state(display)
+        if state != "new_player_dialog":
+            print("[profile-confirm] Dialog not visible; withholding confirmation", flush=True)
+            return False
+        wx, wy = to_window_coords((245, 315))
+        do_click(display, wx, wy, 0.4)
+        time.sleep(0.3)
+        send_pad_button(display, "cross", 0.5)
+        time.sleep(2.0)
+        state, _ = get_current_screen_state(display)
+        if state == "new_player_dialog":
+            print("[profile-confirm] No visible transition after one confirmation; stopping", flush=True)
+            return False
     elif step_name == "profile-settle":
         # Wait until Main Menu is reached and has fully faded in
         wait_for_any_screen_state(display, {"main_menu"}, timeout=45.0)
@@ -451,9 +470,8 @@ def do_step(display: str, action: str, argument, settle: float, step_name: str =
         send_pad_button(display, "cross", 0.5)
         st = wait_for_any_screen_state(display, {"single_player_menu"}, timeout=30.0)
         if st != "single_player_menu":
-            do_click(display, wx, wy, 0.4)
-            send_pad_button(display, "cross", 0.5)
-            wait_for_any_screen_state(display, {"single_player_menu"}, timeout=20.0)
+            print("[single-player] Menu transition not observed; withholding retry", flush=True)
+            return False
         time.sleep(2.0)
     elif step_name == "campaigns":
         wait_for_any_screen_state(display, {"single_player_menu"}, timeout=30.0)
@@ -646,7 +664,7 @@ def drive_scenario(
                 else:
                     sys.stderr.write(f"WARNING: [map-submit] not reached before timeout\n")
         else:
-            do_step(display, action, argument, effective_settle, step_name=name, log_path=log_path)
+            step_ok = do_step(display, action, argument, effective_settle, step_name=name, log_path=log_path)
             if name == "profile-settle":
                 wait_for_screen_ready(display, timeout=45.0, settle_after=4.0)
             elif name == "map-stability":
@@ -665,6 +683,9 @@ def drive_scenario(
         fps_info = f" | Emulator FPS: {fps}" if fps else ""
         print(f"[{mode}] Captured {step_shot.name} (brightness={get_screen_brightness(display):.1f}{fps_info})", flush=True)
         results["completed_steps"].append(name)
+        if step_ok is False:
+            print(f"[{mode}] Stopping after {name}: expected visual transition was not observed", flush=True)
+            break
 
     results["success"] = results.get("map_submitted", False) if scenario_name in ("campaign", "campaign-auto") else True
     return results
