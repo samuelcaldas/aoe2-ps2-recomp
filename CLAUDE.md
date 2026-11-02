@@ -93,6 +93,7 @@ python3 tools/install_ghidra_ee_extension.py       # pinned Emotion Engine (R590
 python3 tools/import_owned_disc.py --iso /path/to/aoe2.iso  # extract the owned disc next to AOK.ELF (CD root)
 python3 tools/resolve_kcet_hooks.py                # KCET hook addresses from ../aoe decomp -> ignored game/SLES-50282/kcet_hooks.ini
 python3 tools/docker_build.py --platform desktop|android|switch|pc [--jobs N] [--test] [--diagnostics]  # containerized debug/diagnostic builds (docker-dev, default -j8)
+python3 tools/docker_build.py --platform switch [--experimental-expanded-viewport] [--experimental-native-graphics]  # opt-in graphics variants; both OFF by default
 python3 tools/classify_diagnostics.py --log build.log [--out report.json]
 ```
 
