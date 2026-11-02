@@ -39,6 +39,9 @@ python3 tools/docker_build.py --platform pc
 
 # 4. Nintendo Switch Homebrew NRO (devkitA64 / libnx)
 python3 tools/docker_build.py --platform switch
+# Experimental graphics variants (both feature flags remain OFF in the default build)
+python3 tools/docker_build.py --platform switch --experimental-expanded-viewport
+python3 tools/docker_build.py --platform switch --experimental-native-graphics
 
 # 5. Android APK (arm64-v8a / x86_64 Gradle debug build)
 python3 tools/docker_build.py --platform android
