@@ -66,7 +66,8 @@ The target is GS-independent presentation for all screens. The current Switch pr
 ### 3.2 Input & Controls
 * **Touchscreen Handheld Mode**:
   - `libnx` provides `hidTouchScreenRead(&state, 1)`.
-  - In handheld mode, touch coordinates $(0..1280, 0..720)$ are pushed into `TouchGestureTranslator`, translated into guest 640x448 coordinates via `SurfaceMapping`, and fed to `GuestMouseAdapter` to drive the in-game cursor.
+  - In handheld mode, `SampleHostMouse` sends libnx touch samples through `TouchGestureTranslator`; generated transitions enter `UsbMouseRpcModel` and the existing `kt_mouse` guest poll. Tap is left click, drag is left-button selection, and a 500 ms hold is right-button input. ZL does not change touch semantics.
+  - For Ryujinx viewed from Chrome mobile, use `/mobile/` instead of `/vnc.html`. It supplies the same pointer gestures and a soft-keyboard text field with special-key controls.
 * **Joy-Cons & Pro Controller**:
   - Map physical buttons to PS2 DualShock 2 buttons (`kt_libpad`):
     - Right stick: relative mouse motion, integrated over the poll interval with an 18% radial deadzone and a 50 ms maximum step. The guest cursor therefore stays where it was when the stick returns to center. Its centered DS2 axis report must remain zero so the game cannot snap the cursor back.
@@ -95,7 +96,7 @@ The target is GS-independent presentation for all screens. The current Switch pr
   - Call `fsdevMountSdmc()` at initialization.
   - Assets (`aoe2.iso`, extracted game assets, and `kcet_hooks.ini`) must be resolved relative to `sdmc:/switch/aoe2/`.
 * **Memory Card & Persistent Saves**:
-  - Emulate PS2 `mc0:` and `mc1:` directories by redirecting writes to `sdmc:/switch/aoe2/saves/` or mounting Nintendo Switch user save data storage via `fsMountSaveData(&fs, ...)` to ensure saves survive SD card swaps.
+  - Emulate PS2 `mc0:` and `mc1:` as persistent directories on the SD card: `sdmc:/switch/aoe2/mc0/` and `sdmc:/switch/aoe2/mc1/`. The runtime creates both directories during startup and reports creation failures. The memory-card backend writes there directly; Switch user SaveData is not used.
 
 ### 3.5 Memory Mode: Title Takeover vs. Applet Mode (OOM Prevention)
 * **The Problem**: Launching homebrew through the Album applet (*Applet Mode*) imposes an OS memory cap of approximately **400 MB**. Attempting to load 32 MB of EE RAM, guest code segments, dynamic overlays, GLES texture surfaces, and audio buffers under Applet Mode can trigger an immediate out-of-memory kernel panic (Error `2168-0002`).

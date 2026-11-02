@@ -6,6 +6,7 @@
 #endif
 #include <aoe2/input/presentation_transform.hpp>
 #include <aoe2/input/switch_hid_geometry.hpp>
+#include <aoe2/input/touch_gestures.hpp>
 #include <aoe2/input/usb_mouse_rpc.hpp>
 #include "input_synthetic.hpp"
 #include "native_input_internal.hpp"
@@ -17,9 +18,12 @@
 #endif
 
 #include <algorithm>
+#include <array>
 #include <atomic>
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <iostream>
 #include <mutex>
 
@@ -175,6 +179,87 @@ void SteerGuestCursor(uint8_t* rdram, Vector2 position, uint32_t buttons) {
         std::cerr << "[host-mouse] unknown exception in SteerGuestCursor" << std::endl;
     }
 }
+
+#if defined(__SWITCH__)
+aoe2::input::GuestPoint g_switch_touch_position{};
+uint32_t g_switch_touch_held_buttons = 0;
+uint32_t g_switch_touch_reported_buttons = 0;
+struct SwitchTouchMouseSample {
+    aoe2::input::GuestPoint position;
+    uint32_t buttons;
+};
+std::deque<SwitchTouchMouseSample> g_switch_touch_button_transitions;
+
+class SwitchTouchMouseSink final : public aoe2::input::InputSink {
+public:
+    void SubmitEvent(const aoe2::input::ActionEvent& event) override {
+        g_switch_touch_position = {event.x, event.y};
+        switch (event.type) {
+            case aoe2::input::ActionType::PointerDown:
+                g_switch_touch_held_buttons |= aoe2::input::kMouseButtonLeft;
+                Queue(g_switch_touch_held_buttons);
+                break;
+            case aoe2::input::ActionType::PointerUp:
+                g_switch_touch_held_buttons &= ~aoe2::input::kMouseButtonLeft;
+                Queue(g_switch_touch_held_buttons);
+                break;
+            case aoe2::input::ActionType::SecondaryDown:
+                g_switch_touch_held_buttons |= aoe2::input::kMouseButtonRight;
+                Queue(g_switch_touch_held_buttons);
+                break;
+            case aoe2::input::ActionType::SecondaryUp:
+                g_switch_touch_held_buttons &= ~aoe2::input::kMouseButtonRight;
+                Queue(g_switch_touch_held_buttons);
+                break;
+            case aoe2::input::ActionType::PrimaryClick:
+                Queue(g_switch_touch_held_buttons | aoe2::input::kMouseButtonLeft);
+                Queue(g_switch_touch_held_buttons);
+                break;
+            case aoe2::input::ActionType::SecondaryClick:
+                Queue(g_switch_touch_held_buttons | aoe2::input::kMouseButtonRight);
+                Queue(g_switch_touch_held_buttons);
+                break;
+            case aoe2::input::ActionType::DoubleClick:
+                for (int click = 0; click < 2; ++click) {
+                    Queue(g_switch_touch_held_buttons | aoe2::input::kMouseButtonLeft);
+                    Queue(g_switch_touch_held_buttons);
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
+private:
+    static void Queue(uint32_t buttons) {
+        g_switch_touch_button_transitions.push_back(
+            SwitchTouchMouseSample{g_switch_touch_position, buttons});
+    }
+};
+
+SwitchTouchMouseSink g_switch_touch_sink;
+aoe2::input::TouchGestureTranslator g_switch_touch_translator(
+    g_switch_touch_sink,
+    aoe2::input::SurfaceMapping({1280.0f, 720.0f}, {1280.0f, 720.0f}));
+bool g_switch_touch_active = false;
+bool g_switch_touch_multitouch_blocked = false;
+uint32_t g_switch_touch_finger_id = 0;
+
+uint64_t SwitchTouchTimestampUs() {
+    return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count());
+}
+
+SwitchTouchMouseSample NextSwitchTouchSample() {
+    if (g_switch_touch_button_transitions.empty()) {
+        return {g_switch_touch_position, g_switch_touch_reported_buttons};
+    }
+    const SwitchTouchMouseSample sample = g_switch_touch_button_transitions.front();
+    g_switch_touch_button_transitions.pop_front();
+    g_switch_touch_reported_buttons = sample.buttons;
+    return sample;
+}
+#endif
 }  // namespace
 
 namespace aoe2::game_hooks::detail {
@@ -193,6 +278,65 @@ void SampleHostMouse(uint8_t* rdram) {
 
         HidTouchScreenState touch_states[1];
         size_t touch_count = hidGetTouchScreenStates(touch_states, 1);
+
+        const uint64_t touch_timestamp_us = SwitchTouchTimestampUs();
+        const bool has_touch_state = touch_count > 0;
+        const int active_touches = has_touch_state
+            ? std::clamp(touch_states[0].count, 0, 16) : 0;
+        if (active_touches > 1) {
+            if (g_switch_touch_active) {
+                g_switch_touch_translator.Submit({g_switch_touch_finger_id,
+                    g_switch_touch_position.x, g_switch_touch_position.y,
+                    aoe2::input::TouchPhase::Cancelled, touch_timestamp_us});
+            }
+            g_switch_touch_active = false;
+            g_switch_touch_multitouch_blocked = true;
+        } else if (active_touches == 1 && !g_switch_touch_multitouch_blocked) {
+            const HidTouchState& touch = touch_states[0].touches[0];
+            const auto phase = g_switch_touch_active &&
+                    g_switch_touch_finger_id == touch.finger_id
+                ? aoe2::input::TouchPhase::Moved
+                : aoe2::input::TouchPhase::Began;
+            if (g_switch_touch_active && phase == aoe2::input::TouchPhase::Began) {
+                g_switch_touch_translator.Submit({g_switch_touch_finger_id,
+                    g_switch_touch_position.x, g_switch_touch_position.y,
+                    aoe2::input::TouchPhase::Cancelled, touch_timestamp_us});
+            }
+            g_switch_touch_finger_id = touch.finger_id;
+            g_switch_touch_position = {static_cast<float>(touch.x), static_cast<float>(touch.y)};
+            g_switch_touch_translator.Submit({touch.finger_id,
+                static_cast<float>(touch.x), static_cast<float>(touch.y),
+                phase, touch_timestamp_us});
+            g_switch_touch_active = true;
+        } else if (active_touches == 0) {
+            if (g_switch_touch_active) {
+                g_switch_touch_translator.Submit({g_switch_touch_finger_id,
+                    g_switch_touch_position.x, g_switch_touch_position.y,
+                    aoe2::input::TouchPhase::Ended, touch_timestamp_us});
+                g_switch_touch_active = false;
+            }
+            g_switch_touch_multitouch_blocked = false;
+        }
+
+        if (g_switch_touch_active || !g_switch_touch_button_transitions.empty() ||
+            (has_touch_state && active_touches == 0 && g_switch_touch_reported_buttons != 0)) {
+            g_mouse_model.SetConnected(true);
+            const SwitchTouchMouseSample touch_sample = NextSwitchTouchSample();
+            const uint32_t touch_buttons = touch_sample.buttons;
+            const Vector2 touch_position{touch_sample.position.x, touch_sample.position.y};
+            LogButtonChange(touch_buttons);
+            if (rdram != nullptr) {
+                SteerGuestCursor(rdram, touch_position, touch_buttons);
+            } else {
+                const Vector2 last = g_has_last_position ? g_last_position : touch_position;
+                g_last_position = touch_position;
+                g_has_last_position = true;
+                g_mouse_model.Submit(HostMouseReport{
+                    touch_position.x - last.x, touch_position.y - last.y,
+                    touch_buttons, 0, 0.0f});
+            }
+            return;
+        }
 
         Vector2 position{0.0f, 0.0f};
         uint32_t buttons = 0;

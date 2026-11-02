@@ -84,12 +84,6 @@ public:
         float host_x, float host_y,
         ConsoleOperationMode mode = ConsoleOperationMode::Handheld) const;
 
-    // Gesture and selection mode configuration
-    void SetSelectionActive(bool active);
-    void SetTouchRegion(aoe2::input::TouchRegion region);
-    void SetOneFingerPan(bool enable);
-    void SetModifierState(uint64_t switch_keys_down);
-
     aoe2::input::TouchGestureTranslator& HandheldTranslator() { return *handheld_translator_; }
     aoe2::input::TouchGestureTranslator& DockedTranslator() { return *docked_translator_; }
 

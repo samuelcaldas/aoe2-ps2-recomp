@@ -19,6 +19,14 @@ void GuestMouseAdapter::SubmitEvent(const ActionEvent& event) {
             MoveTo(event);
             SetButtons(false, false);
             break;
+        case ActionType::SecondaryDown:
+            MoveTo(event);
+            SetButtons(false, true);
+            break;
+        case ActionType::SecondaryUp:
+            MoveTo(event);
+            SetButtons(false, false);
+            break;
         case ActionType::PrimaryClick:
             MoveTo(event);
             SetButtons(true, false);

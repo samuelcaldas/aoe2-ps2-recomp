@@ -29,7 +29,7 @@ struct TouchContact {
 struct GestureConfig {
     // Movement (guest pixels) before a touch becomes a drag instead of a tap.
     float drag_slop_px{8.0f};
-    // Hold time before a stationary release counts as a secondary (right) click.
+    // Hold time before a stationary contact becomes a secondary-button gesture.
     uint64_t long_press_us{500000};
     // Double-tap maximum duration between releases (microseconds).
     uint64_t double_tap_threshold_us{280000};
@@ -37,41 +37,21 @@ struct GestureConfig {
     float double_tap_max_distance_px{16.0f};
     // Vertical targeting offset (guest pixels) so the finger doesn't obscure the target tile.
     float vertical_target_offset_px{0.0f};
-    // Whether 1-finger drag acts as camera Pan instead of Marquee selection.
-    bool one_finger_pan{false};
-};
-
-enum class TouchRegion : uint32_t {
-    Map,
-    Hud
 };
 
 // Turns touchscreen contacts into the pointer actions the PS2 build expects
 // from its USB mouse:
-//   tap               -> PointerMove + PrimaryClick (or SecondaryClick if units selected)
+//   tap               -> PointerMove + PrimaryClick
 //   double tap        -> PointerMove + DoubleClick (mass unit select)
-//   two-finger tap    -> AttackMove
-//   long press        -> PointerMove + SecondaryClick
-//   one-finger drag   -> PointerDown / PointerMove... / PointerUp (box select or pan)
-//   two-finger drag   -> Pan (delta in guest pixels)
+//   long press        -> SecondaryDown ... SecondaryUp
+//   one-finger drag   -> PointerDown / PointerMove... / PointerUp (box select)
+//   multi-touch       -> cancel the active gesture without leaving a button held
 // Touch has no hover, so the cursor jumps to the contact point.
 class TouchGestureTranslator {
 public:
     TouchGestureTranslator(InputSink& sink, SurfaceMapping mapping, GestureConfig config = {});
 
     void Submit(const TouchContact& contact);
-
-    // Contextual selection state for Smart-Command dispatch
-    void SetHasActiveSelection(bool has_selection);
-    void SetSelectionActive(bool active) { SetHasActiveSelection(active); }
-    bool HasActiveSelection() const;
-    bool IsSelectionActive() const { return HasActiveSelection(); }
-
-    void SetTouchRegion(TouchRegion region);
-    TouchRegion GetTouchRegion() const;
-
-    void SetOneFingerPan(bool enable);
-    bool IsOneFingerPan() const;
 
     void SetVerticalTargetOffset(float offset_px);
     float GetVerticalTargetOffset() const;
@@ -80,7 +60,7 @@ public:
     TouchInteractionModality GetModality() const;
 
 private:
-    enum class Mode { Idle, Pending, Dragging, Panning };
+    enum class Mode { Idle, Pending, Dragging, SecondaryDragging, Suppressed };
 
     struct TrackedContact {
         uint32_t id;
@@ -110,17 +90,9 @@ private:
     Mode mode_{Mode::Idle};
     std::array<std::optional<TrackedContact>, 2> contacts_{};
 
-    // Smart-command context state
-    bool has_active_selection_{false};
-    TouchRegion touch_region_{TouchRegion::Map};
-
     // Double-tap tracking
     std::optional<GuestPoint> last_tap_point_;
     uint64_t last_tap_timestamp_us_{0};
-
-    // Two-finger tap candidate tracking
-    bool two_finger_candidate_{false};
-    uint64_t two_finger_began_us_{0};
 
     // Modality & liveness
     bool is_touch_active_{false};

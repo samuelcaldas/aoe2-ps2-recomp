@@ -11,7 +11,7 @@ Read [docs/multiplatform-build-isolation.md](../../../docs/multiplatform-build-i
 
 ## Build Types & High Output Policy
 
-Use Debug by default for bring-up and runtime diagnostics. Desktop and Switch accept `--build-type Debug|Release|RelWithDebInfo`; each CMake build type has a separate output directory. Android currently supports its Gradle debug variant. Use Release when explicitly requested for optimized performance builds; it disables runtime diagnostics by default.
+Use Debug by default for bring-up and runtime diagnostics. Desktop and Switch accept `--build-type Debug|Release|RelWithDebInfo`; the wrapper maps this selection to `-DCMAKE_BUILD_TYPE=Debug` (or the selected type) and keeps a separate output directory for each type. Android currently supports its Gradle debug variant. Use Release when explicitly requested for optimized performance builds; it disables runtime diagnostics by default.
 - **High Output & Verbosity**:
   - Build verbosity: Pass `-v` to `ninja` / `cmake --build` and use `ctest --output-on-failure -V` (verbose mode).
   - Runtime diagnostics: Pass `--diagnostics` (`-DAOE2_RUNTIME_DIAGNOSTICS=ON`) to enable aggressive PS2Recomp runtime logging (`PS2X_ENABLE_AGRESSIVE_LOGS=ON`), IOP RPC traces (`PS2X_ENABLE_IOP_RPC_TRACE=ON`), EE DECI2 TTY output (`AOE2_GAME_TTY=ON`), and `StopOnMissingFunction`.

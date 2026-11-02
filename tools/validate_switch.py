@@ -285,7 +285,10 @@ def container_command(
     ]
 
 
-def check_preflight(keys_path: Path = REPO_ROOT / PROD_KEYS_DEFAULT) -> None:
+def check_preflight(
+    keys_path: Path = REPO_ROOT / PROD_KEYS_DEFAULT,
+    nro_path: Path | None = None,
+) -> None:
     if shutil.which("docker") is None:
         raise PreflightError("docker CLI not found")
     contexts = subprocess.run(
@@ -295,10 +298,13 @@ def check_preflight(keys_path: Path = REPO_ROOT / PROD_KEYS_DEFAULT) -> None:
     )
     if DOCKER_CONTEXT not in contexts.stdout.split():
         raise PreflightError(f"docker context '{DOCKER_CONTEXT}' not found")
-    nro = REPO_ROOT / NRO_PATH
-    if not nro.exists():
+    if nro_path is None:
+        nro_path = REPO_ROOT / NRO_PATH
+    elif not nro_path.is_absolute():
+        nro_path = REPO_ROOT / nro_path
+    if not nro_path.exists():
         raise PreflightError(
-            f"missing Switch binary {nro.relative_to(REPO_ROOT)}; run python3 tools/docker_build.py --platform switch"
+            f"missing Switch binary {nro_path}; build the requested configuration first"
         )
     if keys_path is not None and not keys_path.exists():
         print(
@@ -346,12 +352,18 @@ def main(argv: list | None = None) -> int:
         help="path to Switch prod.keys",
     )
     parser.add_argument(
+        "--nro",
+        type=Path,
+        default=Path(NRO_PATH),
+        help="NRO path relative to the repository root (default: Debug build)",
+    )
+    parser.add_argument(
         "--dry-run", action="store_true", help="print commands without executing them"
     )
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
 
     try:
-        check_preflight(args.keys)
+        check_preflight(args.keys, args.nro)
     except PreflightError as error:
         sys.stderr.write(f"PREFLIGHT FAILED: {error}\n")
         return EXIT_PREFLIGHT
@@ -375,6 +387,7 @@ def main(argv: list | None = None) -> int:
     cmd = container_command(
         args.run_seconds,
         jobs=args.jobs,
+        nro=(args.nro if not args.nro.is_absolute() else args.nro.relative_to(REPO_ROOT)).as_posix(),
         port=args.port,
         mode=args.mode,
         scenario=args.scenario,

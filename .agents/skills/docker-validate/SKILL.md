@@ -52,7 +52,7 @@ Starts a live visual inspection session with Ryujinx running inside the `aoe2-vi
 python3 tools/view_switch_novnc.py --port 6080
 ```
 - **Container Name**: `aoe2-view-switch`
-- **Access**: Open `http://localhost:6080/vnc.html` in the host browser to observe live rendering, UI positioning, and 60 FPS gameplay.
+- **Access**: Open `http://localhost:6080/vnc.html` for the standard desktop client or `http://localhost:6080/mobile/` for Chrome mobile touch gestures and the phone soft keyboard. From another device, replace `localhost` with the host machine's reachable address.
 - **Stop**: Press `Ctrl+C` in the terminal to cleanly terminate the container.
 
 ### 4. Android APK & Emulator Validation

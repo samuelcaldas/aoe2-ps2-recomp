@@ -67,6 +67,22 @@ sequences. Do not treat the observations above as an idempotent replay: state
 recognition, the existing-card path, narrative completion, and native rendering
 must be implemented and validated separately.
 
+## Touch and mobile noVNC input
+
+The Switch `kt_mouse` hook now routes libnx touchscreen contacts through the
+shared gesture translator. A tap is a left click, a one-finger drag is left
+button selection, a 500 ms hold is right button (and can continue moving while
+held), and a second contact or cancelled touch releases any held button. The
+right stick remains relative pointer motion. The in-game behavior and edge
+scrolling still require visual validation on the map.
+
+New noVNC sessions started with `tools/view_switch_novnc.py` expose
+`http://<host>:6080/mobile/`. The page gives Chrome mobile the same tap/drag/
+hold mapping and a text field that opens the phone keyboard, with explicit
+buttons for Escape, Backspace, Tab, Enter, and arrows. The standard `/vnc.html`
+page remains the desktop client. Existing viewer containers do not gain the
+new page until restarted with the updated runner.
+
 The configuration maps keyboard Z to Switch B and enables the emulated USB
 keyboard too. The runtime logged USB keyboard Z events during those presses.
 Consequently prior mixed keyboard/controller trials cannot establish controller

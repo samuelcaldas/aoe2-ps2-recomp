@@ -133,8 +133,8 @@ Switch touchscreen (libnx HID, 1280x720)        Desktop mouse / touch (SDL)
   TouchGestureTranslator ── SurfaceMapping ──▶ ActionEvent (guest pixels)
                                                           │
                                                           ▼
-                                                 GuestMouseAdapter
-                                                          │ GuestMouseState per frame
+                                           GuestMouseAdapter / Switch RPC model
+                                                          │ mouse state per poll
                                                           ▼
                                          recompiled game's mouse poll
 ```
@@ -145,22 +145,24 @@ Switch touchscreen (libnx HID, 1280x720)        Desktop mouse / touch (SDL)
     | Touch gesture                         | Action(s)                                    | Guest mouse equivalent                    |
     | :------------------------------------ | :------------------------------------------- | :---------------------------------------- |
     | Tap (< 500 ms, < 8 guest px movement) | `PointerMove` + `PrimaryClick`               | Move cursor, left click                   |
-    | Long press (≥ 500 ms, stationary)     | `PointerMove` + `SecondaryClick`             | Move cursor, right click                  |
+    | Long press (≥ 500 ms)                 | `SecondaryDown` … `SecondaryUp`              | Hold right button; move may carry the order |
     | One-finger drag                       | `PointerDown` → `PointerMove`… → `PointerUp` | Left-button drag (box select)             |
-    | Two-finger drag                       | `Pan` (delta in guest px)                    | None — routed to a high-level camera hook |
+    | Two-finger contact                    | Cancels the pending one-finger gesture      | Avoid accidental mouse clicks             |
 
     Touch has no hover, so the cursor jumps to the contact point. Thresholds live in `GestureConfig`. Pinch is not mapped: the original game has no camera zoom.
 
-- **`GuestMouseAdapter`** keeps the cursor position and button state and queues every button transition, so a tap that presses and releases within one host frame is still observed by the guest as one pressed poll followed by one released poll. `Pan`, `Zoom`, and menu actions do not touch the guest mouse.
+- A short tap always means left click, regardless of selection state. A one-finger drag always means left-button drag; controller modifiers do not change that mapping. Touch cancellation releases either held button.
+- **`GuestMouseAdapter`** keeps cursor/button state for host-side integrations and tests. The live Switch `SampleHostMouse` hook feeds the same gesture events to `UsbMouseRpcModel`, queuing button transitions across game polls. At a map edge, the pointer remains mapped to that edge so the game's own edge-scroll behavior can run; no synthetic camera pan is injected.
 
 ### 6.3 Platform behavior
 
-- **Switch handheld**: the touchscreen is the primary pointer, via the pipeline above. A future `platform/switch/` only converts libnx touch states into `TouchContact`s.
+- **Switch handheld**: `SampleHostMouse` reads libnx touch states and runs `TouchGestureTranslator` before feeding the native mouse RPC model. ZL does not change touch gesture semantics.
 - **Switch docked** (no touchscreen): Left Stick drives an accelerated virtual cursor that emits the same pointer actions; Right Stick emits `Pan`; A/B map to `MenuAccept`/`MenuBack`. A USB mouse and keyboard plugged into the dock mirror the PS2's USB peripherals (`SourcesFor(OperationMode::Docked)` enables them; handheld uses touch + Joy-Cons):
     - **`UsbMouseTranslator`** takes libnx-style relative reports (`HostMouseReport`: motion in counts plus a button mask), keeps an absolute cursor clamped to the guest framebuffer (sensitivity in `MouseConfig`), and emits the same actions as touch: left button `PointerDown`/`PointerMove`/`PointerUp`, right button `SecondaryClick` on press. Its sink is normally `GuestMouseAdapter`. The wheel is not mapped.
     - **`GuestKeyboardAdapter`** produces USB HID boot-protocol reports (modifier bits for usages `0xE0`–`0xE7`, six key slots, `ErrorRollOver` beyond six) and queues transitions. `UsbKeyboardRpcModel` answers the five keyboard service requests and queues changed reports with a three-record bound; the resolver identifies its six guest hook roles from the owned ELF.
     - Mouse and keyboard handlers are separate modules applied by one KCET registry. Its host-tested parser accepts known mouse/keyboard roles and an allowlist of runtime pad aliases; malformed, duplicate, or unknown entries and failed replacements stop loading rather than silently omitting input. Addresses remain in the ignored local hook file only. Host tests and syntax checks pass; in-game keyboard input, pad alias resolution, and Switch input remain unvalidated. These hooks do not add an IOP USB stack.
 - **Desktop host**: the host mouse emits pointer actions straight into `GuestMouseAdapter`; touch input can be exercised through the same translator for testing.
+- **Chrome mobile noVNC**: `tools/novnc_mobile/` provides equivalent tap, drag, and long-press gestures on the VNC canvas, plus a text field that opens the phone's soft keyboard and explicit special-key buttons. The stock `/vnc.html` remains available for desktop access.
 
 ---
 

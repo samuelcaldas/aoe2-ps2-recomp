@@ -84,7 +84,26 @@ class TestSwitchValidationScript(unittest.TestCase):
         self.assertIn("cfg['enable_keyboard'] = True", script)
         self.assertIn("cfg['enable_mouse'] = True", script)
         self.assertIn("export AOE2_LOG_POINTER=1", script)
+        self.assertIn("/tools/novnc_mobile/mobile.js", script)
+        self.assertIn("http://localhost:6080/mobile/", script)
         self.assertIn("manual-run.log", script)
+
+    def test_mobile_view_has_touch_mouse_gestures_and_soft_keyboard(self):
+        mobile = Path(__file__).resolve().parents[1] / "tools" / "novnc_mobile"
+        page = (mobile / "index.html").read_text(encoding="utf-8")
+        script = (mobile / "mobile.js").read_text(encoding="utf-8")
+        self.assertIn("id=\"keyboard-toggle\"", page)
+        self.assertIn("id=\"text-entry\"", page)
+        self.assertIn("touchstart", script)
+        self.assertIn("touchmove", script)
+        self.assertIn("500", script)
+        self.assertIn("rfb.sendKey", script)
+
+    def test_manual_view_accepts_separate_build_artifacts(self):
+        script = view_switch_novnc.novnc_runner_script(
+            "build/docker-switch-release/aoe2_game.nro"
+        )
+        self.assertIn("/src/build/docker-switch-release/aoe2_game.nro", script)
 
     def test_collects_screenshots_and_checks_liveness(self):
         self.assertIn("xwd -root", self.script)
@@ -96,7 +115,11 @@ class TestSwitchValidationScript(unittest.TestCase):
         self.assertEqual(validation.SCREENSHOT_DIR, ".playwright-mcp/switch")
 
     def test_container_command_options(self):
-        command = validation.container_command(run_seconds=60, jobs=4)
+        command = validation.container_command(
+            run_seconds=60,
+            jobs=4,
+            nro="build/docker-switch-release/aoe2_game.nro",
+        )
         self.assertIn("--memory=12g", command)
         self.assertIn("--cpus=4", command)
         self.assertIn("aoe2-switch-emulator", command)
@@ -104,6 +127,7 @@ class TestSwitchValidationScript(unittest.TestCase):
         self.assertIn("--hostname=aoe2-validate-switch", command)
         self.assertIn("--label=aoe2.platform=switch", command)
         self.assertIn("--label=aoe2.role=validate", command)
+        self.assertIn("/src/build/docker-switch-release/aoe2_game.nro", command[-1])
 
     def test_default_jobs_is_eight(self):
         self.assertEqual(validation.DEFAULT_JOBS, 8)

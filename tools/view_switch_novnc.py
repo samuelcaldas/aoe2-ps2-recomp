@@ -61,6 +61,7 @@ def novnc_runner_script(nro: str = NRO_PATH) -> str:
     config_dir = f"{evidence}/ryujinx-data"
     system_dir = f"{config_dir}/system"
     sdcard_dir = f"{config_dir}/sdcard/switch/aoe2"
+    novnc_webroot = f"{evidence}/novnc-webroot"
 
     return (
         "\n".join(
@@ -80,9 +81,14 @@ def novnc_runner_script(nro: str = NRO_PATH) -> str:
                 f'timeout 2 "$RYUJINX_BIN" --root-data-dir {config_dir} > /dev/null 2>&1 || true',
                 *validation.ryujinx_config_setup(config_dir),
                 f"x11vnc -display {DISPLAY} -nopw -forever -shared -rfbport 5900 > /dev/null 2>&1 &",
-                "websockify --web /usr/share/novnc 6080 localhost:5900 > /dev/null 2>&1 &",
+                f"mkdir -p {novnc_webroot}",
+                f"cp -R /usr/share/novnc/. {novnc_webroot}/",
+                f"mkdir -p {novnc_webroot}/mobile",
+                f"cp -f {CONTAINER_ROOT}/tools/novnc_mobile/index.html {CONTAINER_ROOT}/tools/novnc_mobile/mobile.css {CONTAINER_ROOT}/tools/novnc_mobile/mobile.js {novnc_webroot}/mobile/",
+                f"websockify --web {novnc_webroot} 6080 localhost:5900 > /dev/null 2>&1 &",
                 "echo '================================================================='",
-                "echo 'noVNC ready! Open Google Chrome at: http://localhost:6080/vnc.html'",
+                "echo 'Mobile controls: http://localhost:6080/mobile/'",
+                "echo 'Desktop noVNC:    http://localhost:6080/vnc.html'",
                 "echo '================================================================='",
                 f'"$RYUJINX_BIN" --root-data-dir {config_dir} {CONTAINER_ROOT}/{nro} 2>&1 | tee {evidence}/manual-run.log',
             ]
@@ -109,15 +115,29 @@ def main() -> int:
         help=f"CPU quota (default: {DEFAULT_JOBS})",
     )
     parser.add_argument(
+        "--nro",
+        type=Path,
+        default=Path(NRO_PATH),
+        help="NRO path relative to the repository root (default: Debug build)",
+    )
+    parser.add_argument(
+        "--container-name",
+        default=CONTAINER_NAME,
+        help=f"Docker container name (default: {CONTAINER_NAME})",
+    )
+    parser.add_argument(
         "--dry-run", action="store_true", help="print commands without executing them"
     )
     args = parser.parse_args()
 
-    nro = REPO_ROOT / NRO_PATH
-    if not nro.exists():
-        sys.stderr.write(
-            f"Missing Switch binary: {nro}\nRun: python3 tools/docker_build.py --platform switch\n"
-        )
+    nro_path = args.nro if args.nro.is_absolute() else REPO_ROOT / args.nro
+    if not nro_path.exists():
+        sys.stderr.write(f"Missing Switch binary: {nro_path}\n")
+        return 1
+    try:
+        nro_relative = nro_path.resolve().relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        sys.stderr.write("--nro must point to a file inside the repository\n")
         return 1
 
     cmd = [
@@ -127,11 +147,11 @@ def main() -> int:
         "run",
         "--rm",
         "-it",
-        f"--name={CONTAINER_NAME}",
-        f"--hostname={CONTAINER_NAME}",
+        f"--name={args.container_name}",
+        f"--hostname={args.container_name}",
         "--label=aoe2.platform=switch",
         "--label=aoe2.role=view",
-        f"--label=aoe2.container={CONTAINER_NAME}",
+        f"--label=aoe2.container={args.container_name}",
         f"--memory={MEMORY_LIMIT}",
         f"--memory-swap={MEMORY_LIMIT}",
         f"--cpus={args.jobs}",
@@ -150,7 +170,7 @@ def main() -> int:
         IMAGE,
         "bash",
         "-c",
-        novnc_runner_script(NRO_PATH),
+        novnc_runner_script(nro_relative),
     ]
 
     print("Starting Nintendo Switch Ryujinx emulator with noVNC...")
@@ -158,7 +178,7 @@ def main() -> int:
     if args.dry_run:
         print("+ " + shlex.join(cmd))
         return 0
-    ensure_container_clean(CONTAINER_NAME)
+    ensure_container_clean(args.container_name)
     return subprocess.run(cmd).returncode
 
 

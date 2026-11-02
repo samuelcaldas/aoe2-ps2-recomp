@@ -230,5 +230,12 @@ if(AOE2_BUILD_GAME)
         nx_create_nro(aoe2_game
             NACP "${CMAKE_CURRENT_BINARY_DIR}/aoe2_game.nacp"
             ROMFS "${CMAKE_CURRENT_BINARY_DIR}/romfs_aoe2")
+
+        if(CMAKE_BUILD_TYPE STREQUAL "Release" AND CMAKE_STRIP)
+            add_custom_command(TARGET aoe2_game POST_BUILD
+                COMMAND "${CMAKE_STRIP}" --strip-debug "$<TARGET_FILE:aoe2_game>"
+                COMMENT "Removing debug sections from the Switch Release ELF"
+                VERBATIM)
+        endif()
     endif()
 endif()

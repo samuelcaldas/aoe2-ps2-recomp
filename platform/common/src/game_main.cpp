@@ -20,6 +20,7 @@ extern "C" void switch_early_terminate(void) noexcept;
 #endif
 
 #include <iostream>
+#include <filesystem>
 #include <stdexcept>
 
 namespace {
@@ -50,6 +51,15 @@ void use_disc_image(const std::filesystem::path& image) {
     tty.reset();
     if (!runtime.loadELF(path.string())) throw std::runtime_error("Failed to load ELF: " + path.string());
 #if defined(__SWITCH__)
+    // loadELF derives all I/O roots from the ELF; restore the user-facing SD
+    // card root after that setup so both ports remain persistent across runs.
+    {
+        PS2Runtime::IoPaths paths = PS2Runtime::getIoPaths();
+        paths.mcRoot = "sdmc:/switch/aoe2/mc0";
+        PS2Runtime::setIoPaths(paths);
+        std::cerr << "[switch-storage] active mc0=" << paths.mcRoot.string()
+                  << " mc1=sdmc:/switch/aoe2/mc1\n";
+    }
     svcOutputDebugString("[aoe2-switch] PS2Runtime ELF loaded\n", 36);
 #endif
 #if defined(AOE2_EXPERIMENTAL_MAP_VIEW)
@@ -78,6 +88,22 @@ int main(int count, char* arguments[]) {
     std::set_terminate(switch_early_terminate);
     aoe2::platform::switch_env::SwitchPlatform::Instance().Initialize(count, arguments);
     svcOutputDebugString("[aoe2-switch] SwitchPlatform initialized.\n", 42);
+    {
+        PS2Runtime::IoPaths paths = PS2Runtime::getIoPaths();
+        paths.mcRoot = "sdmc:/switch/aoe2/mc0";
+        std::error_code ec;
+        std::filesystem::create_directories(paths.mcRoot, ec);
+        if (!ec) std::filesystem::create_directories("sdmc:/switch/aoe2/mc1", ec);
+        if (ec) {
+            std::cerr << "[switch-storage] failed to create memory card directory: " << ec.message() << '\n';
+            svcOutputDebugString("[aoe2-switch] memory card directory creation failed\n", 51);
+            aoe2::platform::switch_env::SwitchPlatform::Instance().Shutdown();
+            aoe2::platform::finish_game_process(1);
+        }
+        PS2Runtime::setIoPaths(paths);
+        std::cerr << "[switch-storage] mc0=" << paths.mcRoot.string()
+                  << " mc1=sdmc:/switch/aoe2/mc1\n";
+    }
 #endif
     try {
         aoe2::platform::initialize_game_logging();

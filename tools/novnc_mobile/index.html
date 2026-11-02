@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#101820">
+  <title>AoE II — controle remoto</title>
+  <link rel="stylesheet" href="./mobile.css">
+</head>
+<body>
+  <header>
+    <strong>AoE II</strong>
+    <span id="status">Conectando…</span>
+    <button id="keyboard-toggle" type="button">Teclado</button>
+  </header>
+  <main id="screen" aria-label="Tela do jogo"></main>
+  <section id="keyboard-panel" hidden>
+    <label for="text-entry">Digite no jogo</label>
+    <input id="text-entry" type="text" enterkeyhint="done" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <div class="special-keys">
+      <button data-key="Escape">Esc</button>
+      <button data-key="Backspace">⌫</button>
+      <button data-key="Tab">Tab</button>
+      <button data-key="Enter">Enter</button>
+      <button data-key="ArrowUp">↑</button>
+      <button data-key="ArrowLeft">←</button>
+      <button data-key="ArrowDown">↓</button>
+      <button data-key="ArrowRight">→</button>
+    </div>
+  </section>
+  <footer>Toque = clique · arraste = selecionar · segure = botão direito</footer>
+  <script type="module" src="./mobile.js"></script>
+</body>
+</html>

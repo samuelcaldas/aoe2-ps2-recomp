@@ -7,6 +7,8 @@ const char* ToString(ActionType action) {
         case ActionType::PointerDown: return "PointerDown";
         case ActionType::PointerMove: return "PointerMove";
         case ActionType::PointerUp: return "PointerUp";
+        case ActionType::SecondaryDown: return "SecondaryDown";
+        case ActionType::SecondaryUp: return "SecondaryUp";
         case ActionType::PrimaryClick: return "PrimaryClick";
         case ActionType::SecondaryClick: return "SecondaryClick";
         case ActionType::DoubleClick: return "DoubleClick";

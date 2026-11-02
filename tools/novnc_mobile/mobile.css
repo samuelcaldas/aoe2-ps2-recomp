@@ -1,0 +1,16 @@
+:root { color-scheme: dark; font: 16px system-ui, sans-serif; background: #101820; color: #eef3f5; }
+* { box-sizing: border-box; }
+html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+body { display: flex; flex-direction: column; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+header { min-height: 46px; display: flex; align-items: center; gap: 12px; padding: 5px 10px; background: #1d2a33; }
+header strong { white-space: nowrap; }
+#status { flex: 1; font-size: 13px; color: #c2d2db; }
+button, input { min-height: 38px; border: 1px solid #647986; border-radius: 7px; background: #263944; color: inherit; font: inherit; padding: 6px 10px; }
+#screen { flex: 1; min-height: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; touch-action: none; }
+#screen canvas { display: block; max-width: 100%; max-height: 100%; touch-action: none; }
+#keyboard-panel { background: #1d2a33; padding: 8px 10px; }
+#keyboard-panel[hidden] { display: none; }
+#keyboard-panel label { display: block; margin-bottom: 4px; font-size: 13px; }
+#text-entry { width: 100%; min-height: 44px; background: #fff; color: #111; font-size: 18px; }
+.special-keys { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-top: 6px; }
+footer { min-height: 28px; padding: 5px 8px; text-align: center; color: #c2d2db; font-size: 12px; }

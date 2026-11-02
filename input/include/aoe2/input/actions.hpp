@@ -9,6 +9,8 @@ enum class ActionType : uint32_t {
     PointerDown,
     PointerMove,
     PointerUp,
+    SecondaryDown,
+    SecondaryUp,
     PrimaryClick,
     SecondaryClick,
     DoubleClick,

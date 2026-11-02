@@ -33,46 +33,45 @@ void TouchGestureTranslator::Submit(const TouchContact& contact) {
 }
 
 void TouchGestureTranslator::OnBegan(const TouchContact& contact, GuestPoint point) {
-    if (mode_ == Mode::Dragging) {
-        return;
+    if (mode_ == Mode::Dragging || mode_ == Mode::SecondaryDragging) {
+        for (const auto& existing : contacts_) {
+            if (!existing) continue;
+            Emit(mode_ == Mode::Dragging ? ActionType::PointerUp
+                                         : ActionType::SecondaryUp,
+                 existing->last, contact.timestamp_us);
+            break;
+        }
     }
     if (!Track(contact, point)) {
         return;
     }
     if (mode_ == Mode::Idle) {
         mode_ = Mode::Pending;
-        two_finger_candidate_ = false;
     } else if (mode_ == Mode::Pending) {
-        mode_ = Mode::Panning;
-        two_finger_candidate_ = true;
-        two_finger_began_us_ = contact.timestamp_us;
+        mode_ = Mode::Suppressed;
+    } else if (mode_ == Mode::Dragging || mode_ == Mode::SecondaryDragging) {
+        mode_ = Mode::Suppressed;
     }
 }
 
 void TouchGestureTranslator::OnMoved(TrackedContact& tracked, GuestPoint point,
                                      uint64_t timestamp_us) {
-    const GuestPoint previous = tracked.last;
     tracked.last = point;
-    if (mode_ == Mode::Panning) {
-        // Each finger contributes half of the two-finger centroid motion.
-        Emit(ActionType::Pan, point, timestamp_us,
-             (point.x - previous.x) / 2.0f, (point.y - previous.y) / 2.0f);
-        if (ExceedsSlop(tracked, point)) {
-            two_finger_candidate_ = false;
-        }
+    if (mode_ == Mode::Suppressed) {
         return;
     }
+    if (mode_ == Mode::Pending &&
+        timestamp_us - tracked.began_us >= config_.long_press_us) {
+        mode_ = Mode::SecondaryDragging;
+        Emit(ActionType::SecondaryDown, point, timestamp_us);
+    }
     if (mode_ == Mode::Pending && ExceedsSlop(tracked, point)) {
-        if (config_.one_finger_pan) {
-            mode_ = Mode::Panning;
-            Emit(ActionType::Pan, point, timestamp_us,
-                 point.x - previous.x, point.y - previous.y);
-        } else {
-            mode_ = Mode::Dragging;
-            Emit(ActionType::PointerDown, tracked.origin, timestamp_us);
-        }
+        mode_ = Mode::Dragging;
+        Emit(ActionType::PointerDown, tracked.origin, timestamp_us);
     }
     if (mode_ == Mode::Dragging) {
+        Emit(ActionType::PointerMove, point, timestamp_us);
+    } else if (mode_ == Mode::SecondaryDragging) {
         Emit(ActionType::PointerMove, point, timestamp_us);
     }
 }
@@ -85,21 +84,17 @@ void TouchGestureTranslator::OnEnded(const TouchContact& contact, GuestPoint poi
     const TrackedContact tracked = *found;
     Release(contact.id);
 
-    if (two_finger_candidate_ && mode_ == Mode::Panning) {
-        if (contact.timestamp_us - two_finger_began_us_ < config_.long_press_us) {
-            Emit(ActionType::AttackMove, point, contact.timestamp_us);
-            two_finger_candidate_ = false;
-        }
-    } else if (mode_ == Mode::Pending) {
+    if (mode_ == Mode::Pending) {
         ReleaseTap(tracked, point, contact.timestamp_us);
     }
 
     if (mode_ == Mode::Dragging) {
         Emit(ActionType::PointerUp, point, contact.timestamp_us);
+    } else if (mode_ == Mode::SecondaryDragging) {
+        Emit(ActionType::SecondaryUp, point, contact.timestamp_us);
     }
     if (!HasTrackedContacts()) {
         mode_ = Mode::Idle;
-        two_finger_candidate_ = false;
         is_touch_active_ = false;
     }
 }
@@ -109,10 +104,11 @@ void TouchGestureTranslator::OnCancelled(const TouchContact& contact, GuestPoint
     // Never leave the guest mouse button stuck down.
     if (mode_ == Mode::Dragging) {
         Emit(ActionType::PointerUp, point, contact.timestamp_us);
+    } else if (mode_ == Mode::SecondaryDragging) {
+        Emit(ActionType::SecondaryUp, point, contact.timestamp_us);
     }
     if (!HasTrackedContacts()) {
         mode_ = Mode::Idle;
-        two_finger_candidate_ = false;
         is_touch_active_ = false;
     }
 }
@@ -123,7 +119,8 @@ void TouchGestureTranslator::ReleaseTap(const TrackedContact& tracked, GuestPoin
     Emit(ActionType::PointerMove, point, timestamp_us);
 
     if (long_press) {
-        Emit(ActionType::SecondaryClick, point, timestamp_us);
+        Emit(ActionType::SecondaryDown, point, timestamp_us);
+        Emit(ActionType::SecondaryUp, point, timestamp_us);
         last_tap_point_.reset();
         last_tap_timestamp_us_ = 0;
         return;
@@ -139,11 +136,7 @@ void TouchGestureTranslator::ReleaseTap(const TrackedContact& tracked, GuestPoin
     last_tap_point_ = point;
     last_tap_timestamp_us_ = timestamp_us;
 
-    if (has_active_selection_ && touch_region_ == TouchRegion::Map) {
-        Emit(ActionType::SecondaryClick, point, timestamp_us);
-    } else {
-        Emit(ActionType::PrimaryClick, point, timestamp_us);
-    }
+    Emit(ActionType::PrimaryClick, point, timestamp_us);
 }
 
 void TouchGestureTranslator::Release(uint32_t id) {
@@ -196,30 +189,6 @@ bool TouchGestureTranslator::IsDoubleTap(GuestPoint point, uint64_t timestamp_us
     }
     const float dist = std::hypot(point.x - last_tap_point_->x, point.y - last_tap_point_->y);
     return dist <= config_.double_tap_max_distance_px;
-}
-
-void TouchGestureTranslator::SetHasActiveSelection(bool has_selection) {
-    has_active_selection_ = has_selection;
-}
-
-bool TouchGestureTranslator::HasActiveSelection() const {
-    return has_active_selection_;
-}
-
-void TouchGestureTranslator::SetTouchRegion(TouchRegion region) {
-    touch_region_ = region;
-}
-
-TouchRegion TouchGestureTranslator::GetTouchRegion() const {
-    return touch_region_;
-}
-
-void TouchGestureTranslator::SetOneFingerPan(bool enable) {
-    config_.one_finger_pan = enable;
-}
-
-bool TouchGestureTranslator::IsOneFingerPan() const {
-    return config_.one_finger_pan;
 }
 
 void TouchGestureTranslator::SetVerticalTargetOffset(float offset_px) {
