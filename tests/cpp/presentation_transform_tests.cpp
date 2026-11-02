@@ -1,4 +1,5 @@
 #include <aoe2/input/presentation_transform.hpp>
+#include <aoe2/input/switch_hid_geometry.hpp>
 
 #include <cmath>
 #include <cstdlib>
@@ -98,6 +99,16 @@ void TestFilledFrameStretchesLogicalScreen() {
   CHECK(Near(corner.x, 1635.0f) && Near(corner.y, 1080.0f));
 }
 
+void TestSwitchAbsoluteHidCoordinatesStayInPanelSpaceWhenDocked() {
+  const PresentationTransform transform =
+      PresentationTransform::LogicalFillsFrame(kSwitchHidCoordinateExtent,
+                                               {640.0f, 512.0f}, kLogical);
+  const GuestPoint center = transform.ToLogical(640.0f, 360.0f);
+  CHECK(Near(center.x, 320.0f) && Near(center.y, 224.0f));
+  const GuestPoint right = transform.ToLogical(1280.0f, 360.0f);
+  CHECK(Near(right.x, 639.0f) && Near(right.y, 224.0f));
+}
+
 template <typename Body> bool Throws(Body body) {
   try {
     body();
@@ -127,6 +138,7 @@ int main() {
   TestOffsetLogicalRectInFrame();
   TestRejectsInvalidGeometry();
   TestFilledFrameStretchesLogicalScreen();
+  TestSwitchAbsoluteHidCoordinatesStayInPanelSpaceWhenDocked();
   if (g_failures != 0) {
     std::cerr << g_failures << " check(s) failed" << std::endl;
     return EXIT_FAILURE;

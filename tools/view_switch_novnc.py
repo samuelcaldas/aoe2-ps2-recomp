@@ -71,6 +71,7 @@ def novnc_runner_script(nro: str = NRO_PATH) -> str:
                 *validation.persistent_sdcard_setup(config_dir),
                 f"echo 'mode=legacy' > {sdcard_dir}/map_view.ini",
                 "export AOE2_MAP_VIEW=legacy",
+                "export AOE2_LOG_POINTER=1",
                 f"Xvfb {DISPLAY} -screen 0 1280x760x24 > /dev/null 2>&1 &",
                 "sleep 1",
                 f"export DISPLAY={DISPLAY}",

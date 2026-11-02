@@ -5,6 +5,7 @@
 #include <aoe2/input/map_input_router.hpp>
 #endif
 #include <aoe2/input/presentation_transform.hpp>
+#include <aoe2/input/switch_hid_geometry.hpp>
 #include <aoe2/input/usb_mouse_rpc.hpp>
 #include "input_synthetic.hpp"
 #include "native_input_internal.hpp"
@@ -93,12 +94,13 @@ void LogPointer(Vector2 window, aoe2::input::GuestPoint target, int32_t cursor_x
               << " cursor=" << cursor_x << "," << cursor_y << std::endl;
 }
 
-// Window dimensions: on Switch or fallback, return valid non-zero dimensions
+// Extent of the coordinate space reported by the active host pointer.
 Vector2 WindowDimensions() {
 #if defined(__SWITCH__)
-    const AppletOperationMode mode = appletGetOperationMode();
-    return mode == AppletOperationMode_Console ? Vector2{1920.0f, 1080.0f}
-                                                : Vector2{1280.0f, 720.0f};
+    // libnx/Ryujinx absolute HID mouse coordinates use the 1280x720 panel
+    // domain even when the emulated applet renders a docked 1920x1080 frame.
+    return {aoe2::input::kSwitchHidCoordinateExtent.width,
+            aoe2::input::kSwitchHidCoordinateExtent.height};
 #else
     const float w = static_cast<float>(GetScreenWidth());
     const float h = static_cast<float>(GetScreenHeight());

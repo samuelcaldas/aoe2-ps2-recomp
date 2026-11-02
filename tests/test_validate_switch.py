@@ -83,6 +83,7 @@ class TestSwitchValidationScript(unittest.TestCase):
         )
         self.assertIn("cfg['enable_keyboard'] = True", script)
         self.assertIn("cfg['enable_mouse'] = True", script)
+        self.assertIn("export AOE2_LOG_POINTER=1", script)
         self.assertIn("manual-run.log", script)
 
     def test_collects_screenshots_and_checks_liveness(self):
