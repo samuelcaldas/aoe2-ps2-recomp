@@ -29,5 +29,6 @@
     "analysis/generated/SLES-50282.toml",
     "analysis/ghidra",
     "generated/SLES-50282"
-  ]
+  ],
+  "ps2recomp_codegen_tree": "e808f9529cd7a6d6cc00aa0f5222d8f5930f6035"
 }
