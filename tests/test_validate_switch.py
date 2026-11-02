@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 """Tests for the Nintendo Switch emulator validation driver."""
+
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from tools import validate_switch as validation
+from tools import view_switch_novnc
 
 
 def histogram(counts: dict) -> str:
-    return "\n".join(f"{count:>10}: ({r},{g},{b}) #000000 x" for (r, g, b), count in counts.items())
+    return "\n".join(
+        f"{count:>10}: ({r},{g},{b}) #000000 x" for (r, g, b), count in counts.items()
+    )
 
 
 class FakeImageMagick:
@@ -27,7 +31,9 @@ class FakeImageMagick:
 
 REAL_COLORS = {(0, 0, 0): 1000, **{(index * 3, 90, 200): 50 for index in range(40)}}
 FALLBACK_COLORS = {(0, 0, 0): 1000, (255, 0, 255): 60000}
-PROGRESSING_LOG = "".join(f"ps2x: [run:tick] tick={i} pc=0x{0x100008 + 0x40 * i:08x}\n" for i in range(6))
+PROGRESSING_LOG = "".join(
+    f"ps2x: [run:tick] tick={i} pc=0x{0x100008 + 0x40 * i:08x}\n" for i in range(6)
+)
 
 
 class TestSwitchValidationScript(unittest.TestCase):
@@ -42,6 +48,42 @@ class TestSwitchValidationScript(unittest.TestCase):
 
     def test_copies_keys_if_provided(self):
         self.assertIn("prod.keys", self.script)
+
+    def test_memory_cards_use_persistent_non_overwriting_sdcard(self):
+        self.assertIn("persistent memory cards", self.script)
+        self.assertIn(
+            'if [ ! -e "/src/build/switch-validation/ryujinx-data/sdcard/switch/aoe2/$name" ]',
+            self.script,
+        )
+        self.assertIn(
+            "mkdir -p /src/build/switch-validation/ryujinx-data/sdcard/switch/aoe2/mc0 "
+            "/src/build/switch-validation/ryujinx-data/sdcard/switch/aoe2/mc1",
+            self.script,
+        )
+
+    def test_cleanup_preserves_memory_cards_and_removes_transient_ryujinx_data(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "ryujinx-data"
+            card = root / "sdcard" / "switch" / "aoe2" / "mc0" / "PLAYER.psu"
+            config = root / "Config.json"
+            card.parent.mkdir(parents=True)
+            card.write_bytes(b"saved-card")
+            config.write_text("transient")
+
+            validation.clean_ryujinx_transient_data(root)
+
+            self.assertEqual(card.read_bytes(), b"saved-card")
+            self.assertFalse(config.exists())
+
+    def test_manual_view_loads_the_persistent_cards_and_configures_input(self):
+        script = view_switch_novnc.novnc_runner_script()
+        self.assertIn("persistent memory cards", script)
+        self.assertIn(
+            "--root-data-dir /src/build/switch-validation/ryujinx-data", script
+        )
+        self.assertIn("cfg['enable_keyboard'] = True", script)
+        self.assertIn("cfg['enable_mouse'] = True", script)
+        self.assertIn("manual-run.log", script)
 
     def test_collects_screenshots_and_checks_liveness(self):
         self.assertIn("xwd -root", self.script)
@@ -69,22 +111,38 @@ class TestSwitchValidationScript(unittest.TestCase):
 
     def test_verdict_passes_only_with_progress_and_changing_real_frames(self):
         with tempfile.TemporaryDirectory() as directory:
-            shots = [str(Path(directory) / f"screen-native-{index}.png") for index in (1, 2)]
+            shots = [
+                str(Path(directory) / f"screen-native-{index}.png") for index in (1, 2)
+            ]
             magick = FakeImageMagick(
-                {"screen-native-1.png": histogram(REAL_COLORS), "screen-native-2.png": histogram(REAL_COLORS)},
+                {
+                    "screen-native-1.png": histogram(REAL_COLORS),
+                    "screen-native-2.png": histogram(REAL_COLORS),
+                },
                 metric="5000",
             )
-            self.assertTrue(validation.evidence_passed(True, PROGRESSING_LOG, shots, magick))
-            self.assertFalse(validation.evidence_passed(False, PROGRESSING_LOG, shots, magick))
+            self.assertTrue(
+                validation.evidence_passed(True, PROGRESSING_LOG, shots, magick)
+            )
+            self.assertFalse(
+                validation.evidence_passed(False, PROGRESSING_LOG, shots, magick)
+            )
             self.assertFalse(validation.evidence_passed(True, "", shots, magick))
 
     def test_fallback_screenshots_fail_even_when_the_process_is_alive(self):
         with tempfile.TemporaryDirectory() as directory:
-            shots = [str(Path(directory) / f"screen-native-{index}.png") for index in (1, 2)]
+            shots = [
+                str(Path(directory) / f"screen-native-{index}.png") for index in (1, 2)
+            ]
             magick = FakeImageMagick(
-                {"screen-native-1.png": histogram(FALLBACK_COLORS), "screen-native-2.png": histogram(FALLBACK_COLORS)}
+                {
+                    "screen-native-1.png": histogram(FALLBACK_COLORS),
+                    "screen-native-2.png": histogram(FALLBACK_COLORS),
+                }
             )
-            self.assertFalse(validation.evidence_passed(True, PROGRESSING_LOG, shots, magick))
+            self.assertFalse(
+                validation.evidence_passed(True, PROGRESSING_LOG, shots, magick)
+            )
 
     def test_preflight_fails_fast_on_missing_binary(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -117,56 +175,103 @@ class TestSwitchValidationScript(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             shots = [str(Path(directory) / f"screen-native-{i}.png") for i in (1, 2)]
             magick = FakeImageMagick(
-                {"screen-native-1.png": histogram(REAL_COLORS), "screen-native-2.png": histogram(REAL_COLORS)},
+                {
+                    "screen-native-1.png": histogram(REAL_COLORS),
+                    "screen-native-2.png": histogram(REAL_COLORS),
+                },
                 metric="5000",
             )
-            failing_log = PROGRESSING_LOG + "Native map view snapshot failed; runtime fallback to GS is prohibited in native mode\n"
-            self.assertFalse(validation.evidence_passed(True, failing_log, shots, magick, mode="native"))
+            failing_log = (
+                PROGRESSING_LOG
+                + "Native map view snapshot failed; runtime fallback to GS is prohibited in native mode\n"
+            )
+            self.assertFalse(
+                validation.evidence_passed(
+                    True, failing_log, shots, magick, mode="native"
+                )
+            )
 
     def test_campaign_rejects_false_positive_if_map_not_reached(self):
         with tempfile.TemporaryDirectory() as directory:
-            shots = [str(Path(directory) / f"screen-native-{index}.png") for index in (1, 2)]
+            shots = [
+                str(Path(directory) / f"screen-native-{index}.png") for index in (1, 2)
+            ]
             magick = FakeImageMagick(
-                {"screen-native-1.png": histogram(REAL_COLORS), "screen-native-2.png": histogram(REAL_COLORS)},
+                {
+                    "screen-native-1.png": histogram(REAL_COLORS),
+                    "screen-native-2.png": histogram(REAL_COLORS),
+                },
                 metric="5000",
             )
             # Progressing log without [map-submit] and screenshots without map in filename
-            self.assertFalse(validation.evidence_passed(
-                True, PROGRESSING_LOG, shots, magick, scenario="campaign-auto"
-            ))
+            self.assertFalse(
+                validation.evidence_passed(
+                    True, PROGRESSING_LOG, shots, magick, scenario="campaign-auto"
+                )
+            )
 
             # A map marker and changing frames do not prove a visible map.
             map_log = PROGRESSING_LOG + "[map-submit] call=1 area=0x1000\n"
-            self.assertFalse(validation.evidence_passed(
-                True, map_log, shots, magick, scenario="campaign-auto"
-            ))
+            self.assertFalse(
+                validation.evidence_passed(
+                    True, map_log, shots, magick, scenario="campaign-auto"
+                )
+            )
 
             # Prohibited GS fallback fails even if [map-submit] was reached
-            prohibited_fallback_log = map_log + "Native map view snapshot failed; runtime fallback to GS is prohibited in native mode\n"
-            self.assertFalse(validation.evidence_passed(
-                True, prohibited_fallback_log, shots, magick, mode="native", scenario="campaign-auto"
-            ))
+            prohibited_fallback_log = (
+                map_log
+                + "Native map view snapshot failed; runtime fallback to GS is prohibited in native mode\n"
+            )
+            self.assertFalse(
+                validation.evidence_passed(
+                    True,
+                    prohibited_fallback_log,
+                    shots,
+                    magick,
+                    mode="native",
+                    scenario="campaign-auto",
+                )
+            )
 
     def test_native_rejects_observed_guest_framebuffer_and_gs_paths(self):
         shots = [f"screen-native-{index}.png" for index in (1, 2)]
         magick = FakeImageMagick(
             {name: histogram(REAL_COLORS) for name in shots}, metric="5000"
         )
-        for marker in ("presentation: guest framebuffer fallback", "GS::latchHostPresentationFrame",
-                       "map-only: menus and HUD are not implemented"):
-            self.assertFalse(validation.evidence_passed(True, PROGRESSING_LOG + marker, shots, magick))
+        for marker in (
+            "presentation: guest framebuffer fallback",
+            "GS::latchHostPresentationFrame",
+            "map-only: menus and HUD are not implemented",
+        ):
+            self.assertFalse(
+                validation.evidence_passed(
+                    True, PROGRESSING_LOG + marker, shots, magick
+                )
+            )
 
     def test_rejects_screenshots_without_mode_tagging(self):
         with tempfile.TemporaryDirectory() as directory:
             shots = [str(Path(directory) / f"screen-{index}.png") for index in (1, 2)]
             magick = FakeImageMagick(
-                {"screen-1.png": histogram(REAL_COLORS), "screen-2.png": histogram(REAL_COLORS)},
+                {
+                    "screen-1.png": histogram(REAL_COLORS),
+                    "screen-2.png": histogram(REAL_COLORS),
+                },
                 metric="5000",
             )
             # screen-1.png does not contain -native-
-            self.assertFalse(validation.evidence_passed(True, PROGRESSING_LOG, shots, magick, mode="native"))
+            self.assertFalse(
+                validation.evidence_passed(
+                    True, PROGRESSING_LOG, shots, magick, mode="native"
+                )
+            )
             # screen-1.png does not contain -gs-
-            self.assertFalse(validation.evidence_passed(True, PROGRESSING_LOG, shots, magick, mode="gs"))
+            self.assertFalse(
+                validation.evidence_passed(
+                    True, PROGRESSING_LOG, shots, magick, mode="gs"
+                )
+            )
 
 
 if __name__ == "__main__":

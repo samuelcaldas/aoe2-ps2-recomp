@@ -74,6 +74,79 @@ def ensure_container_clean(name: str) -> None:
             raise PreflightError(f"container '{name}' is already running")
 
 
+def persistent_sdcard_setup(config_dir: str) -> list[str]:
+    """Seed game files once and keep save/card data in Ryujinx's persistent SD tree."""
+    sdcard_dir = f"{config_dir}/sdcard/switch/aoe2"
+    return [
+        f"mkdir -p {sdcard_dir}",
+        f"if [ -d {CONTAINER_ROOT}/game/SLES-50282 ]; then",
+        f"    for item in {CONTAINER_ROOT}/game/SLES-50282/*; do",
+        "        name=$(basename \"$item\")",
+        f'        if [ ! -e "{sdcard_dir}/$name" ]; then',
+        f'            cp -r "$item" "{sdcard_dir}/$name"',
+        "        fi",
+        "    done",
+        "fi",
+        f"mkdir -p {sdcard_dir}/mc0 {sdcard_dir}/mc1",
+        f"echo '[switch-storage] persistent memory cards: {sdcard_dir}/mc0 and mc1'",
+    ]
+
+
+def clean_ryujinx_transient_data(ryu_data: Path) -> None:
+    """Reset emulator config/cache while preserving the full SD card and game saves."""
+    if not ryu_data.exists():
+        return
+    for item in ryu_data.iterdir():
+        if item.name == "sdcard":
+            continue
+        if item.is_dir():
+            shutil.rmtree(item, ignore_errors=True)
+        else:
+            item.unlink(missing_ok=True)
+
+
+def ryujinx_config_setup(config_dir: str, width: int = 1280, height: int = 760) -> list[str]:
+    """Configure visible Ryujinx window, keyboard/mouse and the testable pad mapping."""
+    return [
+        "python3 -c \"",
+        "import json, os",
+        f"cfg_path = '{config_dir}/Config.json'",
+        "cfg = {}",
+        "if os.path.isfile(cfg_path):",
+        "    try:",
+        "        with open(cfg_path) as f: cfg = json.load(f)",
+        "    except Exception: pass",
+        "cfg['memory_manager_mode'] = 'SoftwarePageTable'",
+        "cfg['check_updates_on_start'] = False",
+        "cfg['update_checker_type'] = 'Off'",
+        "cfg['start_fullscreen'] = False",
+        "cfg['start_no_ui'] = False",
+        "cfg['show_title_bar'] = True",
+        "cfg['show_console'] = True",
+        "cfg['enable_file_log'] = True",
+        "cfg['enable_keyboard'] = True",
+        "cfg['enable_mouse'] = True",
+        f"cfg['window_startup'] = {{'window_size_width': {width}, 'window_size_height': {height}, 'window_position_x': 0, 'window_position_y': 0, 'window_maximized': False}}",
+        "for inp in cfg.get('input_config', []):",
+        "    if inp.get('player_index') == 'Player1':",
+        "        rj = inp.setdefault('right_joycon', {})",
+        "        rj['button_plus'] = 'Enter'",
+        "        rj['button_b'] = 'Z'",
+        "        rj['button_a'] = 'X'",
+        "        rj['button_x'] = 'C'",
+        "        rj['button_y'] = 'V'",
+        "        lj = inp.setdefault('left_joycon', {})",
+        "        lj['dpad_up'] = 'Up'",
+        "        lj['dpad_down'] = 'Down'",
+        "        lj['dpad_left'] = 'Left'",
+        "        lj['dpad_right'] = 'Right'",
+        "        lj['button_minus'] = 'Minus'",
+        "with open(cfg_path, 'w') as f:",
+        "    json.dump(cfg, f, indent=2)",
+        "\"",
+    ]
+
+
 class PreflightError(RuntimeError):
     """Raised when a prerequisite for the Switch validation is missing."""
 
@@ -98,16 +171,10 @@ def emulator_script(
         "\n".join(
             [
                 "set -euo pipefail",
-                f"mkdir -p {evidence} {shots_dir} {system_dir} {sdcard_dir}",
+                f"mkdir -p {evidence} {shots_dir} {system_dir}",
                 f"if [ -f {CONTAINER_ROOT}/{PROD_KEYS_DEFAULT} ]; then cp -f {CONTAINER_ROOT}/{PROD_KEYS_DEFAULT} {system_dir}/prod.keys; fi",
-                f"if [ -d {CONTAINER_ROOT}/game/SLES-50282 ]; then",
-                f"    for item in {CONTAINER_ROOT}/game/SLES-50282/*; do",
-                '        name=$(basename "$item")',
-                f'        if [ ! -e "{sdcard_dir}/$name" ]; then',
-                f'            cp -r "$item" "{sdcard_dir}/$name"',
-                "        fi",
-                "    done",
-                "fi",
+                *persistent_sdcard_setup(config_dir),
+                f"sdcard_dir={config_dir}/sdcard/switch/aoe2",
                 f"echo 'mode={ini_mode}' > {sdcard_dir}/map_view.ini",
                 f"export AOE2_MAP_VIEW={ini_mode}",
                 f"Xvfb {DISPLAY} -screen 0 1280x760x24 > /dev/null 2>&1 &",
@@ -117,42 +184,7 @@ def emulator_script(
                 "RYUJINX_BIN=$(which Ryujinx.Headless.SDL2 2>/dev/null || which Ryujinx 2>/dev/null || true)",
                 'if [ -z "$RYUJINX_BIN" ]; then echo "FATAL: Ryujinx executable not found in PATH" >&2; kill $XVFB_PID; exit 1; fi',
                 f'timeout 2 "$RYUJINX_BIN" --root-data-dir {config_dir} > /dev/null 2>&1 || true',
-                f'python3 -c "',
-                "import json, os",
-                f"cfg_path = '{config_dir}/Config.json'",
-                "cfg = {}",
-                "if os.path.isfile(cfg_path):",
-                "    try:",
-                "        with open(cfg_path) as f: cfg = json.load(f)",
-                "    except Exception: pass",
-                "cfg['memory_manager_mode'] = 'SoftwarePageTable'",
-                "cfg['check_updates_on_start'] = False",
-                "cfg['update_checker_type'] = 'Off'",
-                "cfg['start_fullscreen'] = False",
-                "cfg['start_no_ui'] = False",
-                "cfg['show_title_bar'] = True",
-                "cfg['show_console'] = True",
-                "cfg['enable_file_log'] = True",
-                "cfg['enable_keyboard'] = True",
-                "cfg['enable_mouse'] = True",
-                "cfg['window_startup'] = {'window_size_width': 1280, 'window_size_height': 760, 'window_position_x': 0, 'window_position_y': 0, 'window_maximized': False}",
-                "for inp in cfg.get('input_config', []):",
-                "    if inp.get('player_index') == 'Player1':",
-                "        rj = inp.setdefault('right_joycon', {})",
-                "        rj['button_plus'] = 'Enter'",
-                "        rj['button_b'] = 'Z'",
-                "        rj['button_a'] = 'X'",
-                "        rj['button_x'] = 'C'",
-                "        rj['button_y'] = 'V'",
-                "        lj = inp.setdefault('left_joycon', {})",
-                "        lj['dpad_up'] = 'Up'",
-                "        lj['dpad_down'] = 'Down'",
-                "        lj['dpad_left'] = 'Left'",
-                "        lj['dpad_right'] = 'Right'",
-                "        lj['button_minus'] = 'Minus'",
-                "with open(cfg_path, 'w') as f:",
-                "    json.dump(cfg, f, indent=2)",
-                '"',
+                *ryujinx_config_setup(config_dir),
                 f"x11vnc -display {DISPLAY} -nopw -forever -shared -rfbport 5900 > /dev/null 2>&1 &",
                 "VNC_PID=$!",
                 "websockify --web /usr/share/novnc 6080 localhost:5900 > /dev/null 2>&1 &",
@@ -335,17 +367,7 @@ def main(argv: list | None = None) -> int:
                 pass
 
     ryu_data = evidence_path / "ryujinx-data"
-    if ryu_data.exists():
-        for item in ryu_data.iterdir():
-            if item.name == "sdcard":
-                for mc in (item / "switch" / "aoe2" / "mc0", item / "switch" / "aoe2" / "mc1"):
-                    if mc.exists():
-                        shutil.rmtree(mc, ignore_errors=True)
-            else:
-                if item.is_dir():
-                    shutil.rmtree(item, ignore_errors=True)
-                else:
-                    item.unlink(missing_ok=True)
+    clean_ryujinx_transient_data(ryu_data)
 
     if not args.dry_run:
         ensure_container_clean(CONTAINER_NAME)
