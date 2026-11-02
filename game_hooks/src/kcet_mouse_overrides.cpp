@@ -1,7 +1,9 @@
 // KCET host input replacements; guest addresses are loaded from local configuration.
 #include <aoe2/game_hooks/kcet_handlers.hpp>
+#if defined(AOE2_EXPERIMENTAL_MAP_VIEW)
 #include <aoe2/game_hooks/map_view_config.hpp>
 #include <aoe2/input/map_input_router.hpp>
+#endif
 #include <aoe2/input/presentation_transform.hpp>
 #include <aoe2/input/usb_mouse_rpc.hpp>
 #include "input_synthetic.hpp"
@@ -122,6 +124,7 @@ aoe2::input::PresentationTransform CurrentPresentation() {
 // Absolute pointing: the host pointer's place in the window is where the game's cursor should be.
 void SteerGuestCursor(uint8_t* rdram, Vector2 position, uint32_t buttons) {
     try {
+#if defined(AOE2_EXPERIMENTAL_MAP_VIEW)
         const PS2Runtime* runtime = g_presentation_runtime.load(std::memory_order_acquire);
         auto active_layout = runtime ? aoe2::game_hooks::ActiveMapViewLayout(const_cast<PS2Runtime&>(*runtime))
                                      : aoe2::game_hooks::ActiveMapViewLayout();
@@ -157,6 +160,7 @@ void SteerGuestCursor(uint8_t* rdram, Vector2 position, uint32_t buttons) {
             return;
         }
         router.reset();
+#endif
 
         const auto target = CurrentPresentation().ToLogical(position.x, position.y);
         const int32_t cursor_x = LoadGuestInt(rdram, kGuestCursorX);
