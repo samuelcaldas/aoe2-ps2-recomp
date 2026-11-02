@@ -139,6 +139,9 @@ endif()
 
 if(AOE2_BUILD_GAME)
     set(AOE2_RUNNER_MAIN ${AOE2_GAME_RUNNER_SOURCES})
+    if(AOE2_EXPERIMENTAL_EXPANDED_VIEWPORT OR AOE2_EXPERIMENTAL_NATIVE_GRAPHICS)
+        list(APPEND AOE2_RUNNER_MAIN game_hooks/src/map_view_session.cpp)
+    endif()
     if(ANDROID)
         add_library(aoe2_game SHARED ${AOE2_RUNNER_MAIN})
         target_link_options(aoe2_game PRIVATE "-Wl,--undefined=ANativeActivity_onCreate")
@@ -167,10 +170,19 @@ if(AOE2_BUILD_GAME)
         game_hooks/src/kcet_hd_module.cpp
         game_hooks/src/kcet_gpu_module.cpp
         game_hooks/src/entry_point_hook.cpp
-        game_hooks/src/map_view_module.cpp
-        game_hooks/src/map_view_observation.cpp
-        game_hooks/src/map_view_session.cpp
     )
+    if(AOE2_EXPERIMENTAL_EXPANDED_VIEWPORT OR AOE2_EXPERIMENTAL_NATIVE_GRAPHICS)
+        target_sources(aoe2_game PRIVATE
+            game_hooks/src/map_view_module.cpp
+            game_hooks/src/map_view_observation.cpp)
+        target_compile_definitions(aoe2_game PRIVATE AOE2_EXPERIMENTAL_MAP_VIEW=1)
+    endif()
+    if(AOE2_EXPERIMENTAL_EXPANDED_VIEWPORT)
+        target_compile_definitions(aoe2_game PRIVATE AOE2_EXPERIMENTAL_EXPANDED_VIEWPORT=1)
+    endif()
+    if(AOE2_EXPERIMENTAL_NATIVE_GRAPHICS)
+        target_compile_definitions(aoe2_game PRIVATE AOE2_EXPERIMENTAL_NATIVE_GRAPHICS=1)
+    endif()
     if(AOE2_MODULAR_OVERLAYS)
         target_sources(aoe2_game PRIVATE game_hooks/src/overlay_modular_dispatcher.cpp)
         target_compile_definitions(aoe2_game PRIVATE AOE2_MODULAR_OVERLAYS=1)

@@ -26,6 +26,12 @@ set(PS2X_ENABLE_AGRESSIVE_LOGS ${AOE2_RUNTIME_DIAGNOSTICS} CACHE BOOL "Runtime d
 set(PS2X_ENABLE_IOP_RPC_TRACE ${AOE2_RUNTIME_DIAGNOSTICS} CACHE BOOL "IOP diagnostics" FORCE)
 set(PS2X_BUILD_RUNTIME ON CACHE BOOL "Enabled by aoe2_ps2_recomp" FORCE)
 add_subdirectory("${PS2X_DIR}" "${CMAKE_BINARY_DIR}/ps2recomp" EXCLUDE_FROM_ALL)
+if(AOE2_EXPERIMENTAL_NATIVE_GRAPHICS)
+    target_compile_definitions(ps2_runtime PRIVATE AOE2_EXPERIMENTAL_NATIVE_GRAPHICS=1)
+endif()
+if(AOE2_EXPERIMENTAL_EXPANDED_VIEWPORT)
+    target_compile_definitions(ps2_runtime PUBLIC AOE2_EXPERIMENTAL_EXPANDED_VIEWPORT=1)
+endif()
 
 if(NINTENDO_SWITCH)
     target_include_directories(ps2_runtime PUBLIC
@@ -59,7 +65,6 @@ set(AOE2_GAME_RUNNER_SOURCES
     platform/common/src/game_main.cpp
     platform/common/src/game_entry.cpp
     platform/common/src/game_logging.cpp)
-
 if(AOE2_BUILD_DECI2_RUNTIME_TESTS OR AOE2_BUILD_DESKTOP_PROBE)
     add_executable(aoe2_overlay_dispatch_tests tests/cpp/overlay_dispatch_tests.cpp
         "${PS2X_DIR}/ps2xTest/src/test_function_table.cpp")
