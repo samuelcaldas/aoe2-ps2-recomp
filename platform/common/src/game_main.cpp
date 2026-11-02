@@ -7,7 +7,9 @@ extern "C" void switch_early_terminate(void) noexcept;
 // Runner behavior adapted from the pinned PS2Recomp runner (GPL-3.0).
 #include "game_entry.hpp"
 #include <aoe2/runtime/deci2_runtime_session.hpp>
+#if defined(AOE2_EXPERIMENTAL_MAP_VIEW)
 #include <aoe2/game_hooks/map_view_session.hpp>
+#endif
 #include "ps2_runtime.h"
 #if defined(__SWITCH__)
 #include <switch.h>
@@ -50,13 +52,17 @@ void use_disc_image(const std::filesystem::path& image) {
 #if defined(__SWITCH__)
     svcOutputDebugString("[aoe2-switch] PS2Runtime ELF loaded\n", 36);
 #endif
+#if defined(AOE2_EXPERIMENTAL_MAP_VIEW)
     aoe2::game_hooks::MapViewSession map_view_session(runtime);
+#endif
     use_disc_image(disc_image);
 #if defined(__SWITCH__)
     svcOutputDebugString("[aoe2-switch] calling runtime.run()\n", 36);
 #endif
     runtime.run();
+#if defined(AOE2_EXPERIMENTAL_MAP_VIEW)
     map_view_session.Close();
+#endif
     tty.verify_output();
     tty.close();
 #ifdef _DEBUG
