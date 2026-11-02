@@ -58,6 +58,8 @@ The target is GS-independent presentation for all screens. The current Switch pr
   - The platform layer must register an `appletHook` listener. When `AppletHookType_OnOperationMode` fires:
     - Query `appletGetOperationMode()` (`AppletOperationMode_Handheld` vs `AppletOperationMode_Console`).
     - Adjust display buffer dimensions, update `glViewport`, and recalculate the presentation matrix in `aoe2::input::PresentationTransform`.
+* **Progressive field presentation**:
+  - The GS CPU backend's bob presentation duplicates one interlaced field and alternates its source scanline by VSync. That makes the full image jump vertically on a progressive Switch display. Compile the Switch path with field presentation disabled and present the complete framebuffer; keep the original SMODE2 field behavior on other targets. This avoids introducing a whole-frame vertical oscillation, though it does not reconstruct missing PS2 field detail.
 * **VSync & Triple Buffering**:
   - Call `eglSwapInterval(display, 1)` or `nwindowSetSwapInterval(win, 1)`. Uncapped or unthrottled swap leads to tearing and erratic delta-time calculations in AoE2's internal render loops.
 
@@ -67,7 +69,9 @@ The target is GS-independent presentation for all screens. The current Switch pr
   - In handheld mode, touch coordinates $(0..1280, 0..720)$ are pushed into `TouchGestureTranslator`, translated into guest 640x448 coordinates via `SurfaceMapping`, and fed to `GuestMouseAdapter` to drive the in-game cursor.
 * **Joy-Cons & Pro Controller**:
   - Map physical buttons to PS2 DualShock 2 buttons (`kt_libpad`):
-    - Left stick / D-Pad: Cursor motion / navigation.
+    - Right stick: relative mouse motion, integrated over the poll interval with an 18% radial deadzone and a 50 ms maximum step. The guest cursor therefore stays where it was when the stick returns to center. Its centered DS2 axis report must remain zero so the game cannot snap the cursor back.
+    - Touchscreen and docked mouse: absolute pointer positioning through the guest mouse hook. Idle samples release mouse buttons but must not repeatedly steer to a stale pointer coordinate, so stick motion can coexist with absolute input.
+    - Left stick / D-Pad: preserve the existing PS2 pad mapping for game navigation and actions; D-Pad remains button input and is not converted to pointer motion.
     - A / B: Select / Cancel (Circle / Cross according to regional swap).
     - Plus / Minus: Start / Select.
     - L / R / ZL / ZR: Camera pan, unit cycle, or hotkey actions.

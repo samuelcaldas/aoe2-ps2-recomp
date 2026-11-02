@@ -119,6 +119,13 @@ aoe2::mouse::MouseRpc& EnsureMouseRpc() {
     return g_shared_mouse_rpc;
 }
 
+void SubmitSwitchStickMotion(float delta_x, float delta_y) {
+    if (delta_x == 0.0f && delta_y == 0.0f) return;
+    std::lock_guard<std::mutex> lock(g_mouse_mutex);
+    g_mouse_model.SetConnected(true);
+    g_mouse_model.SubmitMotion(delta_x, delta_y);
+}
+
 aoe2::keyboard::KeyboardRpc& EnsureKeyboardRpc() {
     return g_shared_keyboard_rpc;
 }

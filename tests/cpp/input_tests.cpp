@@ -465,6 +465,19 @@ void TestMouseRpcReadDrainsOneEventThenReportsEmpty() {
   CHECK(model.ReadReply()[0] == 0);
 }
 
+void TestMouseRpcRelativeMotionPreservesButtonStateAndFractionalDeltas() {
+  UsbMouseRpcModel model;
+  model.SetConnected(true);
+  model.Submit(HostMouseReport{0.0f, 0.0f, kMouseButtonLeft});
+  model.ReadReply();
+  model.SubmitMotion(0.3f, -0.3f);
+  CHECK(model.ReadReply()[0] == 0);
+  model.SubmitMotion(0.3f, -0.3f);
+  const auto event = model.ReadReply();
+  CHECK(event[0] == 4 && event[1] == kMouseButtonLeft);
+  CHECK(static_cast<int8_t>(event[2]) == 1 && static_cast<int8_t>(event[3]) == -1);
+}
+
 void TestMouseRpcSplitsLargeMotionAcrossEvents() {
   UsbMouseRpcModel model;
   model.SetConnected(true);
@@ -596,6 +609,7 @@ int main() {
   TestRoutingHandheldUsesTouchDockedUsesUsb();
   TestMouseRpcInfoReportsOnePortWhenConnected();
   TestMouseRpcReadDrainsOneEventThenReportsEmpty();
+  TestMouseRpcRelativeMotionPreservesButtonStateAndFractionalDeltas();
   TestMouseRpcSplitsLargeMotionAcrossEvents();
   TestMouseRpcButtonChangeWithoutMotionIsAnEvent();
   TestMouseRpcDisconnectedMouseHasNoEvents();

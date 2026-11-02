@@ -6,7 +6,9 @@
 // Rumble when the value changes, so the backend re-applies a running vibration on each poll, because a
 // raylib vibration lasts a fixed duration.
 #include <aoe2/game_hooks/kcet_pad_backend.hpp>
+#include <aoe2/game_hooks/native_input.hpp>
 #include <aoe2/pad/host_button_map.hpp>
+#include <aoe2/pad/pad_report.hpp>
 
 #include <raylib.h>
 #include "pad_snapshot.hpp"
@@ -95,7 +97,16 @@ public:
         float ry = -static_cast<float>(rstick.y) / 32767.0f;
         float lx = static_cast<float>(lstick.x) / 32767.0f;
         float ly = -static_cast<float>(lstick.y) / 32767.0f;
-        return {true, aoe2::pad::ToPadButtons(down), rx, ry, lx, ly};
+        static auto previous_sample = Clock::now();
+        const auto now = Clock::now();
+        const float elapsed = std::chrono::duration<float>(now - previous_sample).count();
+        previous_sample = now;
+        const auto pointer = aoe2::pad::StickToPointerDelta(rx, ry, elapsed);
+        aoe2::game_hooks::SubmitSwitchStickMotion(pointer.x, pointer.y);
+        // On Switch the right stick is the relative mouse device. Sending its
+        // spring-centered absolute axes as well would pull the guest cursor
+        // back toward screen center whenever the player releases the stick.
+        return {true, aoe2::pad::ToPadButtons(down), 0.0f, 0.0f, lx, ly};
 #else
         if (!IsGamepadAvailable(0)) return SampleKeyboard();
         ReapplyVibration();

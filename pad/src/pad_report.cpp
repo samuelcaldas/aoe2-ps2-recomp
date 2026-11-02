@@ -50,6 +50,20 @@ uint8_t AxisToByte(float value) {
     return static_cast<uint8_t>(std::lround((bounded + 1.0f) * 127.5f));
 }
 
+RelativePointerDelta StickToPointerDelta(float x, float y, float elapsed_seconds) {
+    constexpr float deadzone = 0.18f;
+    constexpr float pointer_speed = 420.0f;
+    if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(elapsed_seconds) || elapsed_seconds <= 0.0f)
+        return {};
+
+    const float magnitude = std::min(1.0f, std::sqrt(x * x + y * y));
+    if (magnitude <= deadzone) return {};
+
+    const float active_magnitude = (magnitude - deadzone) / (1.0f - deadzone);
+    const float scale = active_magnitude * pointer_speed * std::min(elapsed_seconds, 0.05f) / magnitude;
+    return {x * scale, y * scale};
+}
+
 PadReport BuildReport(const HostPadState& state, PadMode mode) {
     PadReport report{};
     if (!state.connected)

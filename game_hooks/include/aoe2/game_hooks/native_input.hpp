@@ -11,6 +11,7 @@ namespace aoe2::game_hooks {
 // Thread-safe service singletons shared between the device hooks (kcet_hooks.ini)
 // and the native module handlers (native_modules.ini).
 aoe2::mouse::MouseRpc& EnsureMouseRpc();
+void SubmitSwitchStickMotion(float delta_x, float delta_y);
 aoe2::keyboard::KeyboardRpc& EnsureKeyboardRpc();
 
 // Binds the active RDRAM buffer for the current guest thread context.

@@ -23,6 +23,20 @@ void axis_values_are_clamped_and_centered() {
     Check(AxisToByte(std::numeric_limits<float>::quiet_NaN()) == 128, "NaN axis center");
 }
 
+void right_stick_generates_deadzone_filtered_relative_pointer_motion() {
+    using aoe2::pad::StickToPointerDelta;
+    const auto neutral = StickToPointerDelta(0.0f, 0.0f, 1.0f / 60.0f);
+    Check(neutral.x == 0.0f && neutral.y == 0.0f, "neutral stick does not move cursor");
+    const auto deadzone = StickToPointerDelta(0.1f, 0.0f, 1.0f / 60.0f);
+    Check(deadzone.x == 0.0f && deadzone.y == 0.0f, "stick drift inside deadzone is ignored");
+    const auto east = StickToPointerDelta(1.0f, 0.0f, 1.0f / 60.0f);
+    Check(east.x > 0.0f && east.y == 0.0f, "right stick moves cursor right");
+    const auto south = StickToPointerDelta(0.0f, 1.0f, 1.0f / 60.0f);
+    Check(south.y > 0.0f && south.x == 0.0f, "downward stick moves cursor down");
+    const auto capped = StickToPointerDelta(1.0f, 0.0f, 1.0f);
+    Check(capped.x == 21.0f, "long stalls are capped to avoid a cursor jump");
+}
+
 void digital_report_has_active_low_buttons_and_length() {
     using namespace aoe2::pad;
     HostPadState state{true, 0, 0.0f, 0.0f, 0.0f, 0.0f};
@@ -71,6 +85,7 @@ void disconnected_report_is_entirely_zero() {
 
 int main() {
     axis_values_are_clamped_and_centered();
+    right_stick_generates_deadzone_filtered_relative_pointer_motion();
     digital_report_has_active_low_buttons_and_length();
     analog_report_places_axes_in_libpad_order();
     pressure_report_maps_buttons_to_pressure_indices();

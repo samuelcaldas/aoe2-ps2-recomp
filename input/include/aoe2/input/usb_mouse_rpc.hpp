@@ -19,6 +19,8 @@ public:
 
     void SetConnected(bool connected);
     void Submit(const HostMouseReport& report);
+    // Adds relative motion without changing buttons supplied by the physical pointer.
+    void SubmitMotion(float delta_x, float delta_y);
     // Absolute pointing: replaces the queued motion with the distance still to travel to the
     // target (target minus where the game's cursor is now), so repeated calls converge
     // instead of accumulating.
@@ -40,6 +42,8 @@ private:
     int pending_x_{0};
     int pending_y_{0};
     int pending_wheel_{0};
+    float motion_remainder_x_{0.0f};
+    float motion_remainder_y_{0.0f};
 };
 
 } // namespace aoe2::input

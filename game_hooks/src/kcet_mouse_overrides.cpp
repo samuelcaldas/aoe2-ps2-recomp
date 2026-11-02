@@ -214,8 +214,15 @@ void SampleHostMouse(uint8_t* rdram) {
             }
         }
 
-        if (!has_input && !g_has_last_position) return;
-        if (!has_input) position = g_last_position;
+        // Do not continually steer back to the last absolute pointer sample:
+        // the Switch right stick feeds relative mouse deltas through the same
+        // RPC queue and must be able to leave the cursor at its new position.
+        if (!has_input) {
+            // Release buttons when touch/mouse input ends without steering the
+            // cursor back to the last absolute sample.
+            g_mouse_model.Submit(HostMouseReport{0.0f, 0.0f, 0, 0, 0.0f});
+            return;
+        }
 
         g_mouse_model.SetConnected(true);
         LogButtonChange(buttons);

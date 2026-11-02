@@ -33,6 +33,11 @@ struct HostPadState {
     float left_y;
 };
 
+struct RelativePointerDelta {
+    float x{0.0f};
+    float y{0.0f};
+};
+
 enum class PadMode : uint8_t {
     kDigital = 0x41,
     kAnalog = 0x73,
@@ -45,6 +50,9 @@ struct PadReport {
 };
 
 uint8_t AxisToByte(float value);
+// Convert a normalized right-stick position into relative pointer motion.
+// A zero stick produces no motion; the guest cursor integrates these deltas.
+RelativePointerDelta StickToPointerDelta(float x, float y, float elapsed_seconds);
 PadReport BuildReport(const HostPadState& state, PadMode mode);
 
 }
