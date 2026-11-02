@@ -4,7 +4,7 @@
 #include "ps2_runtime.h"
 #include <exception>
 #include <iostream>
-#if defined(__SWITCH__)
+#if defined(__SWITCH__) && defined(AOE2_EXPERIMENTAL_NATIVE_GRAPHICS)
 #include <switch.h>
 #endif
 
@@ -13,7 +13,7 @@ namespace aoe2::game_hooks {
 MapViewSession::MapViewSession(PS2Runtime& runtime) {
     map_view::Install(runtime);
     runtime_ = &runtime;
-#if defined(__SWITCH__)
+#if defined(__SWITCH__) && defined(AOE2_EXPERIMENTAL_NATIVE_GRAPHICS)
     std::clog << "[native-presentation] map-only: menus and HUD are not implemented\n";
     runtime.setNativeFrameProvider([&runtime]() -> std::optional<PS2OwnedPresentationFrame> {
         auto map_snap = map_view::CaptureNative(runtime);
@@ -71,6 +71,7 @@ MapViewSession::MapViewSession(PS2Runtime& runtime) {
         return std::nullopt;
     });
 #endif
+#if !defined(__SWITCH__) || defined(AOE2_EXPERIMENTAL_NATIVE_GRAPHICS)
     runtime.setFrameCompositor([&runtime](PS2PresentationFrameView legacy) -> std::optional<PS2OwnedPresentationFrame> {
         auto snap = map_view::CaptureNative(runtime);
         if (!snap || snap->indices.empty() || snap->layout.output.width == 0) {
@@ -119,13 +120,14 @@ MapViewSession::MapViewSession(PS2Runtime& runtime) {
             composed->strideBytes
         };
     });
+#endif
 }
 
 MapViewSession::~MapViewSession() { Close(); }
 
 void MapViewSession::Close() {
     if (!runtime_) return;
-#if defined(__SWITCH__)
+#if defined(__SWITCH__) && defined(AOE2_EXPERIMENTAL_NATIVE_GRAPHICS)
     runtime_->setNativeFrameProvider(nullptr);
 #endif
     runtime_->setFrameCompositor(nullptr);

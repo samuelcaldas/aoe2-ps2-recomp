@@ -33,15 +33,29 @@ const char *ModeName(MapViewMode mode) {
   return "invalid";
 }
 std::optional<MapViewMode> ConfiguredMode() {
+  const auto constrain_mode = [](std::optional<MapViewMode> mode) {
+#if defined(AOE2_EXPERIMENTAL_NATIVE_GRAPHICS) && !defined(AOE2_EXPERIMENTAL_EXPANDED_VIEWPORT)
+    if (mode && *mode != MapViewMode::Legacy) {
+      std::clog << "[map-view-install] viewport mode requires AOE2_EXPERIMENTAL_EXPANDED_VIEWPORT; using legacy\n";
+      return std::optional<MapViewMode>{MapViewMode::Legacy};
+    }
+#elif defined(AOE2_EXPERIMENTAL_EXPANDED_VIEWPORT) && !defined(AOE2_EXPERIMENTAL_NATIVE_GRAPHICS)
+    if (mode && *mode == MapViewMode::Native) {
+      std::clog << "[map-view-install] native renderer requires AOE2_EXPERIMENTAL_NATIVE_GRAPHICS; using relocation\n";
+      return std::optional<MapViewMode>{MapViewMode::Relocation};
+    }
+#endif
+    return mode;
+  };
   const char *configured = std::getenv("AOE2_MAP_VIEW");
   const char *diagnostic_override = std::getenv("AOE2_MAP_VIEW_OVERRIDE");
   if (configured || diagnostic_override)
-    return ReadMapViewConfig(configured, diagnostic_override);
+    return constrain_mode(ReadMapViewConfig(configured, diagnostic_override));
 #if defined(__SWITCH__)
   const auto path = PS2Runtime::getIoPaths().elfDirectory / "map_view.ini";
   std::ifstream file(path);
   if (!file.is_open()) return std::nullopt;
-  return ReadMapViewConfigFile(file);
+  return constrain_mode(ReadMapViewConfigFile(file));
 #else
   return std::nullopt;
 #endif

@@ -94,7 +94,9 @@ void LogPointer(Vector2 window, aoe2::input::GuestPoint target, int32_t cursor_x
 // Window dimensions: on Switch or fallback, return valid non-zero dimensions
 Vector2 WindowDimensions() {
 #if defined(__SWITCH__)
-    return {1280.0f, 720.0f};
+    const AppletOperationMode mode = appletGetOperationMode();
+    return mode == AppletOperationMode_Console ? Vector2{1920.0f, 1080.0f}
+                                                : Vector2{1280.0f, 720.0f};
 #else
     const float w = static_cast<float>(GetScreenWidth());
     const float h = static_cast<float>(GetScreenHeight());
