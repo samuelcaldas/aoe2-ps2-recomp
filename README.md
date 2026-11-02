@@ -161,6 +161,60 @@ python3 tools/docker_build.py --platform switch --jobs 8
 
 These commands describe the available tooling, not verified boot or gameplay on those targets. Switch builds use the devkitPro Docker image through `docker-dev`.
 
+### Build and install on a Nintendo Switch
+
+This workflow uses a legally owned **PAL PS2 disc** (`SLES-50282`) and a Switch running homebrew. The repository does not provide the game executable or assets. Keep the ISO, extracted files, generated C++, and NRO local; they are ignored by Git. The Switch runtime reads game data from `sdmc:/switch/aoe2/`, so copy the extracted disc contents there beside the NRO.
+
+1. Put the owned disc image somewhere outside the repository, then install pinned dependencies and import/extract the disc. `7z` must be installed on the host for ISO extraction. The import checks that the disc contains the expected executable before copying files into the ignored `game/SLES-50282/` directory.
+
+   ```bash
+   python3 tools/bootstrap_dependencies.py
+   python3 tools/import_owned_disc.py --iso "$HOME/games/Age of Empires II (PS2 PAL).iso"
+   python3 tools/verify_owned_game.py
+   ```
+
+   If you have only the matching `AOK.ELF`, import it with `python3 tools/import_owned_game.py --source /path/to/AOK.ELF`. The ELF-only route does not provide the other disc files required for runtime-loaded data and overlays; importing the full disc is recommended.
+
+2. Generate the recompilation output if `generated/SLES-50282/` and `analysis/generated/` are not already present locally. Configure `GHIDRA_HOME` to the installed Ghidra directory; the pipeline installs/checks the pinned R5900 extension and requires the authoritative Ghidra export.
+
+   ```bash
+   export GHIDRA_HOME=/path/to/ghidra
+   python3 tools/install_ghidra_ee_extension.py
+   python3 tools/run_ps2recomp_pipeline.py
+   python3 tools/verify_generation_manifest.py
+   ```
+
+   Generated code and analysis files remain local and untracked. Once they exist, this generation step is needed only after changing the owned input, generation configuration, or pipeline.
+
+3. Build the default Switch NRO in Debug configuration. The two experimental graphics/viewport flags are OFF unless explicitly requested; leave them off for the normal Switch build.
+
+   ```bash
+   python3 tools/docker_build.py --platform switch --jobs 8
+   ```
+
+   The artifact is `build/docker-switch/aoe2_game.nro`. Docker uses the `docker-dev` context and the repository's pinned devkitPro image. A successful build only confirms compilation; boot and gameplay still need to be checked on the target.
+
+4. Power off the Switch, insert its SD card in the computer, and copy the NRO and the contents of the imported game directory to the following layout. Do not rename the data directory: the application mounts `sdmc:/switch/aoe2/` as its game root. Preserve the original directory hierarchy from the disc extraction.
+
+   ```text
+   SD:/switch/aoe2/aoe2_game.nro
+   SD:/switch/aoe2/AOK.ELF
+   SD:/switch/aoe2/<other extracted disc files and directories>
+   SD:/switch/aoe2/mc0/              # created/used for PS2 memory-card data
+   SD:/switch/aoe2/mc1/              # created/used for PS2 memory-card data
+   ```
+
+   For example, from the repository root with the Switch SD mounted at `/media/$USER/SWITCH`, copy the generated NRO, then merge the imported directory contents:
+
+   ```bash
+   install -D build/docker-switch/aoe2_game.nro "/media/$USER/SWITCH/switch/aoe2/aoe2_game.nro"
+   cp -a game/SLES-50282/. "/media/$USER/SWITCH/switch/aoe2/"
+   mkdir -p "/media/$USER/SWITCH/switch/aoe2/mc0" "/media/$USER/SWITCH/switch/aoe2/mc1"
+   sync
+   ```
+
+   Replace the example mount path with the actual SD-card mount point. `cp -a` merges the imported game files without removing the NRO. Eject the card safely, return it to the Switch, launch `aoe2_game` from the Homebrew Menu, and retain the `mc0/` and `mc1/` directories between runs so memory-card saves persist. For emulator-side manual inspection, see `python3 tools/view_switch_novnc.py` and [the active Switch plan](docs/plans/switch-functional-baseline.md).
+
 ### EE game TTY diagnostics
 
 The project includes a minimal DECI2 host for the game's EE debug output. It captures packets supplied by the guest handler through `ExSend` and delivers write-completion callbacks through the EE scheduler. Captured text is identified by `[game-tty]` on stderr, separately from runtime instrumentation and IOP logs. This does not bypass asserts or make the game playable.
