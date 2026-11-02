@@ -290,7 +290,15 @@ class TestFunctionMapGuardrailInManifest(unittest.TestCase):
         different_commit = "0" * 40 if PS2RECOMP_COMMIT != "0" * 40 else "1" * 40
         result = self.verify(self.manifest(ps2recomp_commit=different_commit))
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("commit mismatch against lockfile", result.stderr)
+        self.assertIn("code-generation sources differ", result.stderr)
+
+    def test_runtime_only_ps2recomp_commit_can_advance_without_regeneration(self):
+        recorded = json.loads((REPO_ROOT / "generation_manifest.json").read_text(encoding="utf-8"))
+        result = self.verify(self.manifest(
+            ps2recomp_commit=recorded["ps2recomp_commit"],
+            ps2recomp_codegen_tree=recorded["ps2recomp_codegen_tree"],
+        ))
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_complete_guardrail_record_passes(self):
         result = self.verify(self.manifest())

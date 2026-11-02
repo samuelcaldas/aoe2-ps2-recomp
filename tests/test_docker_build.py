@@ -162,6 +162,22 @@ class TestDockerBuildCommands(unittest.TestCase):
         with self.assertRaises(docker_build.PreflightError):
             docker_build.select_spec("android", diagnostics=True)
 
+    def test_switch_graphics_options_are_build_time_opt_ins(self):
+        args = docker_build.parse_args([
+            "--platform", "switch", "--experimental-expanded-viewport", "--experimental-native-graphics"
+        ])
+        script = docker_build.build_script(
+            docker_build.PLATFORMS["switch"],
+            jobs=2,
+            experimental_expanded_viewport=args.experimental_expanded_viewport,
+            experimental_native_graphics=args.experimental_native_graphics,
+        )
+        self.assertIn("-DAOE2_EXPERIMENTAL_EXPANDED_VIEWPORT=ON", script)
+        self.assertIn("-DAOE2_EXPERIMENTAL_NATIVE_GRAPHICS=ON", script)
+        default_script = build_script_for(docker_build.PLATFORMS["switch"])
+        self.assertIn("-DAOE2_EXPERIMENTAL_EXPANDED_VIEWPORT=OFF", default_script)
+        self.assertIn("-DAOE2_EXPERIMENTAL_NATIVE_GRAPHICS=OFF", default_script)
+
     def test_parse_args_accepts_diagnostics_flag(self):
         args = docker_build.parse_args(["--platform", "desktop", "--diagnostics"])
         self.assertTrue(args.diagnostics)
