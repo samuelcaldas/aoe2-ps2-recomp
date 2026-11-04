@@ -22,7 +22,7 @@ All build outputs and artifacts are quarantined under dedicated, git-ignored sub
 | **Desktop Probe (Host)** | Local host systemd scope | `build/desktop-probe/` | `desktop_runtime_probe` (headless initialization check) |
 | **Nintendo Switch** | Docker (`aoe2-build-switch`) | `build/docker-switch/` | `aoe2_game_nro` (`aoe2_game.nro`), devkitA64 object cache |
 | **Nintendo Switch (Release / RelWithDebInfo)** | Docker (type-specific name) | `build/docker-switch-release/`, `build/docker-switch-relwithdebinfo/` | `aoe2_game.nro` |
-| **Android** | Docker (`aoe2-build-android`) | `build/docker-android/` & `platform/android/build/` | `build/docker-android/aoe2-recomp-debug.apk` |
+| **Android** | Docker (`aoe2-build-android`) | `build/docker-android/` & `platform/android/build/` | `build/docker-android/aoe2-recomp-release.apk` |
 | **Host Scaffolding / Tests** | Local host developer shell | `build/` (or user-defined `build/local/`) | `aoe2_smoke_test`, `aoe2_input_tests` |
 
 ```mermaid
@@ -33,9 +33,9 @@ flowchart TD
     RUNNER -->|"platform=switch"| S_DKR["docker/switch (aoe2-build-switch)"]
     RUNNER -->|"platform=android"| A_DKR["docker/android (aoe2-build-android)"]
     
-    D_DKR -->|"Writes incrementally to"| OUT_DESKTOP["build/docker-desktop/<br/>(GCC/Clang x86_64 objects & aoe2_game)"]
-    S_DKR -->|"Writes incrementally to"| OUT_SWITCH["build/docker-switch/<br/>(devkitA64/libnx objects & aoe2_game.nro)"]
-    A_DKR -->|"Writes incrementally to"| OUT_ANDROID["build/docker-android/<br/>(Android NDK .so & aoe2-recomp-debug.apk)"]
+    D_DKR -->|"Writes incrementally to"| OUT_DESKTOP["build/docker-desktop-release/<br/>(GCC/Clang x86_64 objects & aoe2_game)"]
+    S_DKR -->|"Writes incrementally to"| OUT_SWITCH["build/docker-switch-release/<br/>(devkitA64/libnx objects & aoe2_game.nro)"]
+    A_DKR -->|"Writes incrementally to"| OUT_ANDROID["build/docker-android/<br/>(Android NDK .so & aoe2-recomp-release.apk)"]
 
     HOST_PROBE["tools/run_desktop_probe_build.py"] -->|"Local memory-capped probe"| OUT_PROBE["build/desktop-probe/"]
 ```
@@ -69,7 +69,7 @@ All containerized build and test drivers enforce unique, non-colliding container
 | **Test** | Android Validation | `aoe2-validate-android` | `aoe2-validate-android` | `aoe2.platform=android`, `aoe2.role=validate` | `-j8` |
 
 ### Concurrency & Cache Guarantees:
-1. **Container Name Isolation**: Running `docker_build.py --platform desktop`, `docker_build.py --platform android`, and `docker_build.py --platform switch` simultaneously spins up containers with completely distinct IDs (`aoe2-build-desktop`, `aoe2-build-android`, `aoe2-build-switch`), avoiding Docker daemon name conflicts.
+1. **Container Name Isolation**: Running `docker_build.py --platform desktop`, `docker_build.py --platform android`, and `docker_build.py --platform switch` simultaneously spins up distinct Release containers (`aoe2-build-desktop-release`, `aoe2-build-android`, `aoe2-build-switch-release`), avoiding Docker daemon name conflicts.
 2. **Build Cache Preservation**:
    - Desktop and Switch preserve intermediate CMake/Ninja `.o` and `.ninja_deps` files under `build/docker-desktop/` and `build/docker-switch/`.
    - Android utilizes Gradle's `--build-cache` and isolates Gradle home cache in `build/docker-android/gradle-home` and native C++ in `build/android-cxx`.
@@ -101,19 +101,19 @@ When switching targets, Ninja and Gradle inspect timestamps in their respective 
    ```bash
    python3 tools/docker_build.py --platform switch --jobs 8
    ```
-   *Reads* the generated sources and writes objects to `build/docker-switch/`. `build/docker-desktop/` remains untouched.
+   *Reads* the generated sources and writes objects to `build/docker-switch-release/`. `build/docker-desktop-release/` remains untouched.
 
 2. **Switching back to Desktop**:
    ```bash
    python3 tools/docker_build.py --platform desktop --jobs 8
    ```
-   Ninja immediately inspects `build/docker-desktop/build.ninja`. If no source or header files were changed, it exits with `ninja: no work to do`. If only a few host-layer files (e.g., `game_hooks/` or `input/`) changed, **only those specific files are recompiled**. The thousands of unchanged generated game logic files are **not recompiled**.
+   Ninja immediately inspects `build/docker-desktop-release/build.ninja`. If no source or header files were changed, it exits with `ninja: no work to do`. If only a few host-layer files (e.g., `game_hooks/` or `input/`) changed, **only those specific files are recompiled**. The thousands of unchanged generated game logic files are **not recompiled**.
 
 3. **Building Android APK**:
    ```bash
    python3 tools/docker_build.py --platform android --jobs 8
    ```
-   Gradle compiles native C++ libraries for `arm64-v8a` and `x86_64` using `platform/android/build.gradle`, producing `build/docker-android/aoe2-recomp-debug.apk`.
+   Gradle compiles native C++ libraries for `arm64-v8a` and `x86_64` using `platform/android/build.gradle`, producing `build/docker-android/aoe2-recomp-release.apk`.
 
 ---
 
@@ -136,7 +136,7 @@ For autonomous agent and pair-programming workflows, dedicated skills are provid
 
 ## 9. Build Type Selection & Output Policy
 
-Debug remains the default for bring-up and diagnostics. Desktop and Switch also accept `--build-type Release` or `--build-type RelWithDebInfo`; each type has a dedicated directory and container name, so a change of configuration cannot reuse incompatible objects. Release disables runtime diagnostics unless explicitly requested where supported. Android currently uses its Gradle debug variant.
+Release is the default for regular builds. Desktop and Switch also accept `--build-type Debug` or `--build-type RelWithDebInfo`; each type has a dedicated directory and container name, so a change of configuration cannot reuse incompatible objects. Runtime diagnostics are opt-in. Android supports Debug and Release Gradle variants; the Release APK uses the local debug signing key and is not distribution-signed. Desktop `--diagnostics` defaults to Debug. Existing validation tools that require Debug artifacts still use their explicitly documented paths.
 
 ### 1. Rationale
 Recompiling ~17,000 to ~58,000 guest functions alongside native KCET shims requires maximum transparency:
@@ -148,9 +148,9 @@ Recompiling ~17,000 to ~58,000 guest functions alongside native KCET shims requi
 
 | Target | Build Configuration | Verbosity & Output Flags | Artifacts / Logs |
 | :--- | :--- | :--- | :--- |
-| **Desktop / PC** | `--build-type Debug` (default), `Release`, or `RelWithDebInfo`; `--diagnostics` is explicit | `cmake --build ... -v`<br/>`ctest --output-on-failure -V` | `build/docker-desktop[-<type>[-diagnostics]]/` |
-| **Nintendo Switch**| `--build-type Debug` (default), `Release`, or `RelWithDebInfo` | `cmake --build ... -v`; runtime diagnostics off in Release | `build/docker-switch[-<type>]/` |
-| **Android** | `assembleDebug` (Gradle) | RelWithDebInfo / Debug symbols, JNI logs | `build/docker-android/aoe2-recomp-debug.apk` |
+| **Desktop / PC** | `Release` (default), `Debug`, or `RelWithDebInfo`; `--diagnostics` is explicit | `cmake --build ... -v`<br/>`ctest --output-on-failure -V` | `build/docker-desktop[-<type>[-diagnostics]]/` |
+| **Nintendo Switch**| `Release` (default), `Debug`, or `RelWithDebInfo` | `cmake --build ... -v`; runtime diagnostics off by default | `build/docker-switch[-<type>]/` |
+| **Android** | `assembleRelease` (default) or `assembleDebug` | Gradle variant-specific native configuration | `build/docker-android/aoe2-recomp-{release,debug}.apk` |
 
 HD asset staging and loader initialization are compile-time opt-ins, disabled by default. Pass `--enable-hd-assets` to stage the local catalog and configure `AOE2_ENABLE_HD_ASSETS=ON`; a normal build does not inspect or load the optional HD asset tree.
 
@@ -162,8 +162,16 @@ python3 tools/docker_build.py --platform switch --build-type Release --jobs 8
 ```
 
 ### 3. High-Output Runtime Environment Variables
-When executing or validating binaries, enable rich trace logging:
+When investigating runtime behavior, opt in to the relevant trace logging; it can reduce performance:
 - `AOE2_CALL_TRACE_FIRST=N`: Sets how many initial calls per guest function are logged to stderr (default 3).
 - `AOE2_CALL_TRACE_MEM=1`: Prints a 16-byte hex memory dump of the block pointed to by register `$a0`.
 - `AOE2_SHAPE_TRACE=1`: Reports every SLP shape load and frame rasterization call.
 - `AOE2_GAME_TTY=ON`: Captures EE kernel `printf` via DECI2 `[game-tty]`.
+
+## Disc extraction and dist folders
+
+`tools/docker_build.py` runs `tools/extract_disc.py` first (skip with `--skip-extract`): it
+extracts the ISO into `game/SLES-50282/` with a `disc_layout.json` manifest of real LBNs. The
+runtime registers those files at their true sectors, so devices need no ISO. `tools/setup_game.py`
+stages `dist/<device>/` (git-ignored) without any `.iso`; the Switch and Android validators also
+skip `aoe2.iso` when seeding the device.
