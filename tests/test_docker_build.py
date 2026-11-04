@@ -36,6 +36,24 @@ class TestDockerBuildCommands(unittest.TestCase):
         self.assertIn("--label=aoe2.platform=desktop", command)
         self.assertIn("--label=aoe2.role=build", command)
 
+    def test_default_builds_are_optimized_for_all_platforms(self):
+        for platform in ("desktop", "switch", "android"):
+            with self.subTest(platform=platform):
+                args = docker_build.parse_args(["--platform", platform])
+                self.assertEqual(args.build_type, "Release")
+                spec = docker_build.select_spec(platform, diagnostics=False, build_type=args.build_type)
+                script = build_script_for(spec)
+                if platform == "android":
+                    self.assertIn("assembleRelease", script)
+                    self.assertIn("aoe2-recomp-release.apk", script)
+                else:
+                    self.assertIn("-DCMAKE_BUILD_TYPE=Release", script)
+                    self.assertNotIn("-DAOE2_RUNTIME_DIAGNOSTICS=ON", script)
+
+    def test_diagnostics_defaults_to_debug(self):
+        args = docker_build.parse_args(["--platform", "desktop", "--diagnostics"])
+        self.assertEqual(args.build_type, "Debug")
+
     def test_default_jobs_is_eight(self):
         self.assertEqual(docker_build.DEFAULT_JOBS, 8)
         args = docker_build.parse_args(["--platform", "desktop"])

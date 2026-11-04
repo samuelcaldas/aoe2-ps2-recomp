@@ -59,7 +59,7 @@ The target is GS-independent presentation for all screens. The current Switch pr
     - Query `appletGetOperationMode()` (`AppletOperationMode_Handheld` vs `AppletOperationMode_Console`).
     - Adjust display buffer dimensions, update `glViewport`, and recalculate the presentation matrix in `aoe2::input::PresentationTransform`.
 * **Progressive field presentation**:
-  - The GS CPU backend's bob presentation duplicates one interlaced field and alternates its source scanline by VSync. That makes the full image jump vertically on a progressive Switch display. Compile the Switch path with field presentation disabled and present the complete framebuffer; keep the original SMODE2 field behavior on other targets. This avoids introducing a whole-frame vertical oscillation, though it does not reconstruct missing PS2 field detail.
+  - The GS CPU backend's bob presentation duplicates one interlaced field and alternates its source scanline by VSync. That makes the full image jump vertically on progressive displays. The game-compatible backend presents the complete framebuffer on Switch, desktop, and Android rather than alternating fields. This avoids whole-frame vertical oscillation, though it does not reconstruct missing PS2 field detail.
 * **VSync & Triple Buffering**:
   - Call `eglSwapInterval(display, 1)` or `nwindowSetSwapInterval(win, 1)`. Uncapped or unthrottled swap leads to tearing and erratic delta-time calculations in AoE2's internal render loops.
 
