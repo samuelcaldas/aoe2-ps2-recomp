@@ -17,7 +17,7 @@ code are local, ignored artifacts; the provenance rules below govern them.
 
 ### Build and test
 
-Run commands from the repository root. Use Debug builds and verbose output:
+Run commands from the repository root. Regular game builds default to Release for performance; use Debug for assertion-based tests and diagnostics. Keep build and test output verbose:
 
 ```bash
 python3 -m unittest discover -s tests
@@ -25,13 +25,14 @@ python3 -m unittest tests.test_validate_switch
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
 cmake --build build -v
 ctest --test-dir build --output-on-failure -V
-python3 tools/docker_build.py --platform switch
+python3 tools/docker_build.py --platform switch --build-type Debug
 python3 tools/validate_switch.py --mode native --scenario campaign-auto
 ```
 
 The first two commands run Python tests; CMake and CTest build and test the host
-scaffolding. The final commands build and inspect Switch in Docker. Switch builds
-already enable runtime diagnostics; the `--diagnostics` flag is desktop-only.
+scaffolding. The final commands build and inspect Switch in Docker; the validator
+uses the Debug NRO, so select `--build-type Debug` for that workflow. Runtime
+diagnostics are opt-in; the `--diagnostics` flag is desktop-only.
 Use `python3 tools/run_desktop_probe_build.py --jobs N` for the full desktop
 recompilation probe. Record build and validation logs as described below.
 
@@ -99,19 +100,14 @@ python3 tools/classify_diagnostics.py --log build.log [--out report.json]
 
 No linter is configured. Style is set by `.editorconfig` (4-space indent, 2 for JSON/YAML, LF).
 
-## Mandatory Debug Builds & High Output Policy
+## Build and Diagnostics Policy
 
-All bring-up, compilation, and testing across all platforms MUST use **Debug builds with high-level output verbosity**:
+Regular game builds default to **Release** for performance, refinement, and polish. Desktop and Switch use separate build directories for each configuration; Android defaults to its Gradle release variant. Release disables assertions and runtime diagnostics and must not be treated as a substitute for assertion-based tests.
 
-- **Debug Build Mandate**: Always compile with `-DCMAKE_BUILD_TYPE=Debug` (or `--diagnostics` / `assembleDebug`). Never use uninstrumented release builds for bring-up or troubleshooting. Debug symbols (`-g`), assertions (`assert()` active; never `-DNDEBUG`), and stack traces must be preserved so crashes, illegal memory access, or missing functions fail fast and are immediately diagnosable.
-- **High Output & Verbosity**:
-    - Build verbosity: Always pass `-v` to `cmake --build` / `ninja` and use `ctest --output-on-failure -V` (verbose mode).
-    - Runtime diagnostics: Enable `-DAOE2_RUNTIME_DIAGNOSTICS=ON` for aggressive PS2Recomp runtime logging (`PS2X_ENABLE_AGRESSIVE_LOGS=ON`), IOP RPC traces (`PS2X_ENABLE_IOP_RPC_TRACE=ON`), EE DECI2 TTY output (`AOE2_GAME_TTY=ON`), and `StopOnMissingFunction`. The Docker build script accepts `--diagnostics` for desktop; Switch builds enable diagnostics without that flag.
-    - Rich trace variables: Utilize runtime environment variables for high output capture:
-        - `AOE2_CALL_TRACE_FIRST=N`: Log first N calls per guest function (default 3).
-        - `AOE2_CALL_TRACE_MEM=1`: Hex dump 16 bytes at `$a0` arguments.
-        - `AOE2_SHAPE_TRACE=1`: SLP shape loader and draw entry-point logging.
-    - Full output logging: Pipe complete build and test outputs to dedicated log files (`build.log`, `switch_validation.log`, `desktop_validation.log`) and classify compiler or runtime diagnostics via `tools/classify_diagnostics.py`.
+- Use explicit `--build-type Debug` for assertion-based tests or troubleshooting; desktop `--diagnostics` defaults to Debug and enables aggressive runtime traces. Android supports Debug and Release.
+- Keep builds and tests verbose with `cmake --build -v` and `ctest --output-on-failure -V`; capture and classify logs when investigating failures.
+- Enable trace variables such as `AOE2_CALL_TRACE_FIRST`, `AOE2_CALL_TRACE_MEM`, and `AOE2_SHAPE_TRACE` only when their diagnostic detail is needed; tracing may affect performance.
+- The full desktop probe remains a memory-capped diagnostic build using `tools/run_desktop_probe_build.py`.
 
 ## Architecture
 

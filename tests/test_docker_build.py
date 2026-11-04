@@ -2,6 +2,9 @@
 """Tests for the containerized platform build driver (tools/docker_build.py)."""
 import unittest
 import shlex
+import subprocess
+import tempfile
+from pathlib import Path
 from unittest import mock
 
 from tools import docker_build
@@ -31,8 +34,8 @@ class TestDockerBuildCommands(unittest.TestCase):
         self.assertIn("--cpus=6", command)
         self.assertIn("LC_ALL=C", command)
         self.assertIn("--rm", command)
-        self.assertIn("--name=aoe2-build-desktop", command)
-        self.assertIn("--hostname=aoe2-build-desktop", command)
+        self.assertIn("--name=aoe2-build-desktop-release", command)
+        self.assertIn("--hostname=aoe2-build-desktop-release", command)
         self.assertIn("--label=aoe2.platform=desktop", command)
         self.assertIn("--label=aoe2.role=build", command)
 
@@ -63,8 +66,8 @@ class TestDockerBuildCommands(unittest.TestCase):
         args = docker_build.parse_args(["--platform", "pc"])
         self.assertEqual(docker_build.canonical_platform_name(args.platform), "desktop")
         spec = docker_build.select_spec(args.platform, diagnostics=False)
-        self.assertEqual(spec.build_dir, docker_build.PLATFORMS["desktop"].build_dir)
-        self.assertEqual(docker_build.container_name_for(args), "aoe2-build-desktop")
+        self.assertEqual(spec.build_dir, "build/docker-desktop-release")
+        self.assertEqual(docker_build.container_name_for(args), "aoe2-build-desktop-release")
 
     def test_concurrent_platforms_have_distinct_container_identifications(self):
         platforms = ["desktop", "android", "switch"]
@@ -126,18 +129,15 @@ class TestDockerBuildCommands(unittest.TestCase):
                 configure = next(command for command in commands if command[:2] == ["cmake", "-S"])
                 self.assertIn("-DPS2X_ENABLE_FUNCTION_LOG_TRACKER=OFF", configure)
 
-    def test_cmake_builds_use_debug_and_verbose_output(self):
-        for name, spec in (("desktop", docker_build.PLATFORMS["desktop"]),
-                           ("desktop-diagnostics", docker_build.DIAGNOSTIC_VARIANTS["desktop"]),
-                           ("switch", docker_build.PLATFORMS["switch"])):
-            with self.subTest(platform=name):
+    def test_explicit_debug_builds_keep_verbose_output(self):
+        for platform in ("desktop", "switch"):
+            with self.subTest(platform=platform):
+                spec = docker_build.select_spec(platform, diagnostics=False, build_type="Debug")
                 commands = [shlex.split(line) for line in build_script_for(spec).splitlines()]
                 configure = next(command for command in commands if command[:2] == ["cmake", "-S"])
                 build = next(command for command in commands if command[:2] == ["cmake", "--build"])
                 self.assertIn("-DCMAKE_BUILD_TYPE=Debug", configure)
-                self.assertNotIn("-DCMAKE_BUILD_TYPE=Release", configure)
                 self.assertIn("-v", build)
-        self.assertIn("-DAOE2_RUNTIME_DIAGNOSTICS=ON", build_script_for(docker_build.PLATFORMS["switch"]))
         self.assertIn("--output-on-failure -V", docker_build.build_script(self.spec, jobs=1, test=True))
 
     def test_build_script_stages_hd_assets_before_configuring(self):
@@ -173,7 +173,7 @@ class TestDockerBuildCommands(unittest.TestCase):
 
     def test_normal_desktop_build_does_not_enable_diagnostics(self):
         spec = docker_build.select_spec("desktop", diagnostics=False)
-        self.assertEqual(spec.build_dir, "build/docker-desktop")
+        self.assertEqual(spec.build_dir, "build/docker-desktop-release")
         self.assertNotIn("-DAOE2_RUNTIME_DIAGNOSTICS=ON", build_script_for(spec))
 
     def test_diagnostics_is_rejected_for_platforms_without_a_variant(self):

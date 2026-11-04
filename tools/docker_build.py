@@ -186,20 +186,31 @@ def check_preflight(args: argparse.Namespace) -> None:
         ensure_container_clean(container_name_for(args))
 
 
-def select_spec(platform: str, diagnostics: bool, build_type: str = "Debug", enable_hd_assets: bool = False) -> PlatformSpec:
+def select_spec(platform: str, diagnostics: bool, build_type: str | None = None, enable_hd_assets: bool = False) -> PlatformSpec:
     """Return the build spec for a platform, or its diagnostic variant; raises PreflightError if none exists."""
     canonical = canonical_platform_name(platform)
     if diagnostics and canonical not in DIAGNOSTIC_VARIANTS:
         raise PreflightError(f"--diagnostics is only available for: {', '.join(sorted(DIAGNOSTIC_VARIANTS))}")
     base = DIAGNOSTIC_VARIANTS[canonical] if diagnostics else PLATFORMS[canonical]
+    build_type = build_type or ("Debug" if diagnostics else "Release")
     build_type_name = build_type.lower()
-    if canonical == "android" and build_type_name != "debug":
-        raise PreflightError("Android currently supports only its Gradle debug build")
+    if canonical == "android" and build_type_name not in ("debug", "release"):
+        raise PreflightError("Android supports only Debug and Release builds")
     suffix = "" if build_type_name == "debug" else f"-{build_type_name}"
     if diagnostics:
         suffix += "-diagnostics"
     build_dir = f"build/docker-{canonical}{suffix}"
     commands = list(base.commands)
+    test_commands = base.test_commands
+    if canonical == "android":
+        build_dir = "build/docker-android"
+        variant = "Release" if build_type_name == "release" else "Debug"
+        commands = [command.replace("assembleDebug", f"assemble{variant}")
+                    .replace("/apk/debug/app-debug.apk", f"/apk/{build_type_name}/app-{build_type_name}.apk")
+                    .replace("aoe2-recomp-debug.apk", f"aoe2-recomp-{build_type_name}.apk")
+                    for command in commands]
+        test_commands = tuple(command.replace("testDebugUnitTest", f"test{variant}UnitTest")
+                              for command in test_commands)
     if canonical in ("desktop", "switch"):
         for index, command in enumerate(commands):
             if command.startswith("cmake -S "):
@@ -214,7 +225,7 @@ def select_spec(platform: str, diagnostics: bool, build_type: str = "Debug", ena
                     command += " -DAOE2_RUNTIME_DIAGNOSTICS=ON"
                 command += " -DAOE2_ENABLE_HD_ASSETS=" + ("ON" if enable_hd_assets else "OFF")
                 commands[index] = command
-    return replace(base, build_dir=build_dir, commands=tuple(commands))
+    return replace(base, build_dir=build_dir, commands=tuple(commands), test_commands=test_commands)
 
 
 def image_build_command(spec: PlatformSpec, uid: int, gid: int) -> list:
@@ -303,8 +314,8 @@ def parse_args(argv: list) -> argparse.Namespace:
                         help=f"number of parallel build jobs (default: {DEFAULT_JOBS})")
     parser.add_argument("--diagnostics", action="store_true",
                         help="build with verbose runtime traces into build/docker-<platform>-diagnostics")
-    parser.add_argument("--build-type", choices=("Debug", "Release", "RelWithDebInfo"), default="Debug",
-                        help="CMake build configuration; each non-default type uses its own output directory")
+    parser.add_argument("--build-type", choices=("Debug", "Release", "RelWithDebInfo"),
+                        help="build configuration (default: Release; Debug with --diagnostics)")
     parser.add_argument("--enable-hd-assets", action="store_true",
                         help="opt in to HD asset staging and loader initialization (default: disabled)")
     parser.add_argument("--test", action="store_true",
@@ -314,7 +325,10 @@ def parse_args(argv: list) -> argparse.Namespace:
     parser.add_argument("--experimental-native-graphics", action="store_true",
                         help="enable AOE2_EXPERIMENTAL_NATIVE_GRAPHICS (Switch only)")
     parser.add_argument("--dry-run", action="store_true", help="print the docker commands without running them")
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if args.build_type is None:
+        args.build_type = "Debug" if args.diagnostics else "Release"
+    return args
 
 
 def main(argv: list | None = None) -> int:
