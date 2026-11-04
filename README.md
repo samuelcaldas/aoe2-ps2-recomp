@@ -88,9 +88,9 @@ Run commands from the repository root. The lightweight tests do not require the 
 
 ```bash
 python3 -m unittest discover -s tests
-cmake -B build -G Ninja
-cmake --build build
-ctest --test-dir build --output-on-failure
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+cmake --build build -v
+ctest --test-dir build --output-on-failure -V
 ```
 
 The default CMake build tests the host interfaces; it does not compile or boot the game.
@@ -102,7 +102,7 @@ python3 tools/bootstrap_dependencies.py
 python3 tools/bootstrap_dependencies.py --check
 python3 tools/import_owned_game.py --source /path/to/AOK.ELF
 python3 tools/verify_owned_game.py
-python3 tools/import_owned_disc.py --iso /path/to/aoe2.iso
+python3 tools/extract_disc.py --iso /path/to/aoe2.iso
 ```
 
 The expected executable is `game/SLES-50282/AOK.ELF`, SHA-1 `f478e19f2059d52899b691483ef5c7522e30e17c`. Disc extraction places local files beside it; those files are also needed to investigate runtime-loaded overlays.
@@ -134,10 +134,7 @@ This checks initialization, ELF loading, and registration, **not guest execution
 
 ### Desktop game runner and diagnostic validation
 
-All bring-up and verification builds enforce **Debug builds with high-level output**:
-
-- **Debug Symbols & Invariants**: Full `-g` debug symbols, active assertions (never `-DNDEBUG`), and stack traces.
-- **Diagnostics Tracing**: Built with `--diagnostics` (`-DAOE2_RUNTIME_DIAGNOSTICS=ON`), enabling aggressive PS2Recomp runtime logging (`PS2X_ENABLE_AGRESSIVE_LOGS=ON`), IOP RPC traces (`PS2X_ENABLE_IOP_RPC_TRACE=ON`), and `StopOnMissingFunction`.
+Regular builds default to **Release** for performance, with runtime diagnostics disabled. Use `--build-type Debug` for assertion-based tests and `--diagnostics` for desktop runtime investigation; diagnostics produce verbose traces and may reduce performance. Android Release APKs use the local debug signing key and are intended for local testing, not distribution.
 
 After generation, resolve local mouse hooks from the owned ELF and function map, then build the diagnostic runner in Docker:
 
@@ -186,7 +183,7 @@ This workflow uses a legally owned **PAL PS2 disc** (`SLES-50282`) and a Switch 
 
    Generated code and analysis files remain local and untracked. Once they exist, this generation step is needed only after changing the owned input, generation configuration, or pipeline.
 
-3. Build a Switch NRO. Debug remains the default for bring-up; use `--build-type Release` for an uninstrumented build. Each CMake build type has its own output directory, and HD asset staging/loading stays disabled unless `--enable-hd-assets` is passed. The two experimental graphics/viewport flags are also OFF unless explicitly requested.
+3. Build a Switch NRO. Release is the default; use `--build-type Debug` for assertion-based investigation. Each CMake build type has its own output directory, and HD asset staging/loading stays disabled unless `--enable-hd-assets` is passed. The two experimental graphics/viewport flags are also OFF unless explicitly requested.
 
    ```bash
    python3 tools/docker_build.py --platform switch --build-type Release --jobs 8
@@ -213,7 +210,7 @@ This workflow uses a legally owned **PAL PS2 disc** (`SLES-50282`) and a Switch 
    sync
    ```
 
-   Replace the example mount path with the actual SD-card mount point. `cp -a` merges the imported game files without removing the NRO. Eject the card safely, return it to the Switch, launch `aoe2_game` from the Homebrew Menu, and retain the `mc0/` and `mc1/` directories between runs so memory-card saves persist. For emulator-side manual inspection, see `python3 tools/view_switch_novnc.py` and [the active Switch plan](docs/plans/switch-functional-baseline.md).
+   Replace the example mount path with the actual SD-card mount point. `cp -a` merges the imported game files without removing the NRO. Eject the card safely, return it to the Switch, launch `aoe2_game` from the Homebrew Menu, and retain the `mc0/` and `mc1/` directories between runs so memory-card saves persist. For emulator-side manual inspection of the Release build, use `python3 tools/view_switch_novnc.py --nro build/docker-switch-release/aoe2_game.nro`; see also [the active Switch plan](docs/plans/switch-functional-baseline.md).
 
 ### EE game TTY diagnostics
 
@@ -232,3 +229,10 @@ The CMake option `AOE2_GAME_TTY` defaults to `ON`, independently of debug tracin
 - [Runtime linkage audit](docs/runtime-linkage-audit.md) — runtime integration analysis.
 - [HD asset tooling and strategy](docs/sot/hd-assets-strategy.md) — local asset import, inventory, and presentation pipeline.
 - [Multi-platform build artifact isolation](docs/multiplatform-build-isolation.md) — build directory partitioning across Desktop, Switch, and Android for zero-collision incremental target switching.
+
+## Ready-to-copy device folders
+
+Put the owned ISO in `game/iso/` and run `python3 tools/setup_game.py --platform all --docker`.
+It extracts the disc (writing `disc_layout.json`, which maps files to their real disc sectors so
+the game runs without the ISO), builds, and fills `dist/pc/`, `dist/switch/` (copy the inner
+`switch` folder to the SD card root) and `dist/android/`. The ISO is never copied to a device.
