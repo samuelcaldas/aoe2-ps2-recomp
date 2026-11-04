@@ -140,13 +140,14 @@ def main() -> int:
         sys.stderr.write("--nro must point to a file inside the repository\n")
         return 1
 
+    tty_flags = ["-it"] if sys.stdin.isatty() else ["-i"]
     cmd = [
         "docker",
         "--context",
         DOCKER_CONTEXT,
         "run",
         "--rm",
-        "-it",
+        *tty_flags,
         f"--name={args.container_name}",
         f"--hostname={args.container_name}",
         "--label=aoe2.platform=switch",

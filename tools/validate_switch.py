@@ -82,6 +82,7 @@ def persistent_sdcard_setup(config_dir: str) -> list[str]:
         f"if [ -d {CONTAINER_ROOT}/game/SLES-50282 ]; then",
         f"    for item in {CONTAINER_ROOT}/game/SLES-50282/*; do",
         "        name=$(basename \"$item\")",
+        '        [ "$name" = aoe2.iso ] && continue',  # devices never receive the disc image
         f'        if [ ! -e "{sdcard_dir}/$name" ]; then',
         f'            cp -r "$item" "{sdcard_dir}/$name"',
         "        fi",

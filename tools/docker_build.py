@@ -23,6 +23,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+
+from tools import extract_disc
+
 CONTAINER_ROOT = "/src"
 DOCKER_CONTEXT = "docker-dev"
 GENERATED_DIR = REPO_ROOT / "generated" / "SLES-50282"
@@ -141,6 +145,8 @@ def canonical_platform_name(platform: str) -> str:
 def container_name_for(args: argparse.Namespace) -> str:
     """Distinct container identifier per platform/variant so parallel runs do not collide."""
     platform = canonical_platform_name(args.platform)
+    if platform == "android":
+        return "aoe2-build-android"
     build_type = getattr(args, "build_type", "Debug").lower()
     suffix = "" if build_type == "debug" else f"-{build_type}"
     if getattr(args, "diagnostics", False):
@@ -169,6 +175,17 @@ def generated_source_count() -> int:
     return sum(1 for _ in GENERATED_DIR.glob("*.cpp")) if GENERATED_DIR.is_dir() else 0
 
 
+def ensure_disc_extracted(args: argparse.Namespace) -> None:
+    """Extract the owned ISO into the CD root when missing or stale (skipped for --dry-run)."""
+    if getattr(args, "dry_run", False) or getattr(args, "skip_extract", False):
+        return
+    try:
+        status = extract_disc.ensure_extracted(REPO_ROOT / "game" / "SLES-50282")
+    except extract_disc.DiscExtractError as error:
+        raise PreflightError(str(error)) from error
+    print(f"[disc] {status}", flush=True)
+
+
 def check_preflight(args: argparse.Namespace) -> None:
     """Fail fast before any heavy work; raises PreflightError."""
     if shutil.which("docker") is None:
@@ -180,6 +197,7 @@ def check_preflight(args: argparse.Namespace) -> None:
         raise PreflightError(f"docker context '{DOCKER_CONTEXT}' not found")
     if args.jobs < 1:
         raise PreflightError("--jobs must be at least 1")
+    ensure_disc_extracted(args)
     if (args.experimental_expanded_viewport or args.experimental_native_graphics) and canonical_platform_name(args.platform) != "switch":
         raise PreflightError("experimental graphics options are available only for Switch")
     if not getattr(args, "dry_run", False):
@@ -299,7 +317,7 @@ def container_run_command(spec: PlatformSpec, args: argparse.Namespace) -> list:
             getattr(args, "test", False),
             getattr(args, "experimental_expanded_viewport", False),
             getattr(args, "experimental_native_graphics", False),
-            getattr(args, "build_type", "Debug"),
+            getattr(args, "build_type", "Release"),
             getattr(args, "enable_hd_assets", False),
         ),
     ]
@@ -324,6 +342,7 @@ def parse_args(argv: list) -> argparse.Namespace:
                         help="enable AOE2_EXPERIMENTAL_EXPANDED_VIEWPORT (Switch only)")
     parser.add_argument("--experimental-native-graphics", action="store_true",
                         help="enable AOE2_EXPERIMENTAL_NATIVE_GRAPHICS (Switch only)")
+    parser.add_argument("--skip-extract", action="store_true", help="do not extract the owned ISO before building")
     parser.add_argument("--dry-run", action="store_true", help="print the docker commands without running them")
     args = parser.parse_args(argv)
     if args.build_type is None:

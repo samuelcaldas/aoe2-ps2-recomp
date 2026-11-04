@@ -33,7 +33,8 @@ IMAGE = "aoe2-build-android"
 DOCKER_CONTEXT = "docker-dev"
 PACKAGE = "com.aoe2.recomp"
 DEVICE_GAME_DIR = f"/storage/emulated/0/Android/data/{PACKAGE}/files"
-APK = "build/docker-android/aoe2-recomp-debug.apk"
+APK_RELEASE = "build/docker-android/aoe2-recomp-release.apk"
+APK_DEBUG = "build/docker-android/aoe2-recomp-debug.apk"
 GAME_DIR = "game/SLES-50282"
 EVIDENCE_DIR = "build/android-validation"
 SCREENSHOT_DIR = ".playwright-mcp/android"
@@ -61,7 +62,7 @@ def ensure_container_clean(name: str) -> None:
             raise RuntimeError(f"container '{name}' is already running")
 
 
-def emulator_script(run_seconds: int, interval: int = SCREENSHOT_INTERVAL) -> str:
+def emulator_script(run_seconds: int, interval: int = SCREENSHOT_INTERVAL, apk: str = APK_RELEASE) -> str:
     """Shell script run inside the container; writes raw evidence for the host to judge."""
     evidence = f"{CONTAINER_ROOT}/{EVIDENCE_DIR}"
     shots_dir = f"{CONTAINER_ROOT}/{SCREENSHOT_DIR}"
@@ -76,9 +77,10 @@ def emulator_script(run_seconds: int, interval: int = SCREENSHOT_INTERVAL) -> st
         "until [ \"$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\\r')\" = 1 ]; do sleep 2; done",
         "adb root || true",
         "adb wait-for-device",
-        f"adb install -r {CONTAINER_ROOT}/{APK}",
+        f"adb install -r {CONTAINER_ROOT}/{apk}",
         f"adb shell mkdir -p {DEVICE_GAME_DIR}",
-        f"adb push {CONTAINER_ROOT}/{GAME_DIR}/. {DEVICE_GAME_DIR}/",
+        f"for item in {CONTAINER_ROOT}/{GAME_DIR}/*; do "
+        f'[ "$(basename "$item")" = aoe2.iso ] || adb push "$item" {DEVICE_GAME_DIR}/; done',
         f"adb shell ls {DEVICE_GAME_DIR}/kcet_hooks.ini",
         "adb logcat -c",
         f"adb shell am start -n {PACKAGE}/android.app.NativeActivity",
@@ -98,7 +100,7 @@ def evidence_passed(alive: bool, logcat: str, screenshots: list, executor=run_co
     return alive and progressing and frames.real_frames >= 2 and frames.changed
 
 
-def container_command(run_seconds: int, jobs: int = DEFAULT_JOBS) -> list:
+def container_command(run_seconds: int, jobs: int = DEFAULT_JOBS, apk: str = APK_RELEASE) -> list:
     return [
         "docker", "--context", DOCKER_CONTEXT, "run", "--rm",
         f"--name={CONTAINER_NAME}",
@@ -109,12 +111,18 @@ def container_command(run_seconds: int, jobs: int = DEFAULT_JOBS) -> list:
         "--device", "/dev/kvm", "--group-add", str(os.stat("/dev/kvm").st_gid),
         "--memory=10g", f"--cpus={jobs}",
         "-v", f"{REPO_ROOT}:{CONTAINER_ROOT}", "-w", CONTAINER_ROOT,
-        IMAGE, "bash", "-c", emulator_script(run_seconds),
+        IMAGE, "bash", "-c", emulator_script(run_seconds, apk=apk),
     ]
 
 
-def check_preflight() -> None:
-    for required in (REPO_ROOT / APK, REPO_ROOT / GAME_DIR / "AOK.ELF", REPO_ROOT / GAME_DIR / "kcet_hooks.ini"):
+def default_apk_path() -> str:
+    if (REPO_ROOT / APK_RELEASE).is_file():
+        return APK_RELEASE
+    return APK_DEBUG
+
+
+def check_preflight(apk: str) -> None:
+    for required in (REPO_ROOT / apk, REPO_ROOT / GAME_DIR / "AOK.ELF", REPO_ROOT / GAME_DIR / "kcet_hooks.ini"):
         if not required.exists():
             raise FileNotFoundError(f"missing {required.relative_to(REPO_ROOT)}")
     if not Path("/dev/kvm").exists():
@@ -124,15 +132,17 @@ def check_preflight() -> None:
 def main(argv: list | None = None) -> int:
     parser = argparse.ArgumentParser(description="Validate the Android APK in a headless emulator.")
     parser.add_argument("--run-seconds", type=int, default=90)
+    parser.add_argument("--apk", help="relative path to APK (default: release if present, else debug)")
     parser.add_argument("--jobs", type=int, default=DEFAULT_JOBS, help="CPU quota allocated to emulator container (default: 8)")
     parser.add_argument("--dry-run", action="store_true", help="print container command without running")
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
+    apk = args.apk or default_apk_path()
     try:
-        check_preflight()
+        check_preflight(apk)
     except FileNotFoundError as error:
         sys.stderr.write(f"PREFLIGHT FAILED: {error}\n")
         return EXIT_PREFLIGHT
-    cmd = container_command(args.run_seconds, jobs=args.jobs)
+    cmd = container_command(args.run_seconds, jobs=args.jobs, apk=apk)
     if args.dry_run:
         print("+ " + shlex.join(cmd))
         return EXIT_PASS
