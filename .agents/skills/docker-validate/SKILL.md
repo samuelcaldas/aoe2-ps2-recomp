@@ -38,7 +38,8 @@ python3 tools/validate_desktop.py --docker --jobs 8
 Runs the compiled Switch NRO inside the `aoe2-validate-switch` container using headless Ryujinx on a virtual X11 display:
 
 ```bash
-# Run 60s runtime probe in Ryujinx headless (120s watchdog timeout)
+# Build the Debug NRO expected by the validator, then run the probe
+python3 tools/docker_build.py --platform switch --build-type Debug
 python3 tools/validate_switch.py --run-seconds 60 --timeout 120
 ```
 - **Container Name**: `aoe2-validate-switch`
@@ -56,13 +57,10 @@ python3 tools/view_switch_novnc.py --port 6080
 - **Stop**: Press `Ctrl+C` in the terminal to cleanly terminate the container.
 
 ### 4. Android APK & Emulator Validation
-Compiles the debug APK and executes headless Android emulator checks inside the `aoe2-validate-android` container:
+Build the Debug APK expected by the validator, then execute headless Android emulator checks inside the `aoe2-validate-android` container:
 
 ```bash
-# Fast APK build verification with Gradle build cache
-python3 tools/validate_android.py --apk-only
-
-# Full emulator validation check
+python3 tools/docker_build.py --platform android --build-type Debug
 python3 tools/validate_android.py
 ```
 - **Container Name**: `aoe2-validate-android`
@@ -75,3 +73,5 @@ All validation runners enforce:
 - Metadata labels (`aoe2.role=validate`, `aoe2.role=view`).
 - Default `-j8` parallelism.
 - Stale container cleanup on boot with fail-fast detection of active duplicates.
+
+Note: `docker_build.py` auto-extracts the owned ISO (`tools/extract_disc.py`, `--skip-extract` to disable); devices never receive the ISO. One-shot: `tools/setup_game.py`.

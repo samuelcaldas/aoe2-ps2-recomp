@@ -11,7 +11,7 @@ Read [docs/multiplatform-build-isolation.md](../../../docs/multiplatform-build-i
 
 ## Build Types & High Output Policy
 
-Use Debug by default for bring-up and runtime diagnostics. Desktop and Switch accept `--build-type Debug|Release|RelWithDebInfo`; the wrapper maps this selection to `-DCMAKE_BUILD_TYPE=Debug` (or the selected type) and keeps a separate output directory for each type. Android currently supports its Gradle debug variant. Use Release when explicitly requested for optimized performance builds; it disables runtime diagnostics by default.
+Use Release by default for performance; runtime diagnostics are disabled. Desktop and Switch accept `--build-type Debug|Release|RelWithDebInfo` and use separate output directories. Android supports Gradle Debug and Release variants; Release uses the local debug signing key. Use `--build-type Debug` for assertion-based tests (`-DCMAKE_BUILD_TYPE=Debug`); desktop `--diagnostics` defaults to Debug.
 - **High Output & Verbosity**:
   - Build verbosity: Pass `-v` to `ninja` / `cmake --build` and use `ctest --output-on-failure -V` (verbose mode).
   - Runtime diagnostics: Pass `--diagnostics` (`-DAOE2_RUNTIME_DIAGNOSTICS=ON`) to enable aggressive PS2Recomp runtime logging (`PS2X_ENABLE_AGRESSIVE_LOGS=ON`), IOP RPC traces (`PS2X_ENABLE_IOP_RPC_TRACE=ON`), EE DECI2 TTY output (`AOE2_GAME_TTY=ON`), and `StopOnMissingFunction`.
@@ -25,7 +25,7 @@ Use Debug by default for bring-up and runtime diagnostics. Desktop and Switch ac
 All builds are orchestrated via [tools/docker_build.py](../../../tools/docker_build.py) and default to 8 parallel workers (`-j8` / `--cpus=8`).
 
 ```bash
-# 1. Desktop Linux / PC with Runtime Diagnostics & high output (-DAOE2_RUNTIME_DIAGNOSTICS=ON) [ENFORCED]
+# 1. Desktop Linux / PC with opt-in runtime diagnostics (-DAOE2_RUNTIME_DIAGNOSTICS=ON)
 python3 tools/docker_build.py --platform desktop --diagnostics
 
 # 2. Desktop Linux with CTest unit test execution inside the container (verbose output)
@@ -41,12 +41,12 @@ python3 tools/docker_build.py --platform switch
 # Experimental graphics variants (both feature flags remain OFF in the default build)
 python3 tools/docker_build.py --platform switch --experimental-expanded-viewport
 python3 tools/docker_build.py --platform switch --experimental-native-graphics
-# Optimized Switch build (separate cache and output directory)
-python3 tools/docker_build.py --platform switch --build-type Release
+# Debug Switch build (separate cache and output directory)
+python3 tools/docker_build.py --platform switch --build-type Debug
 # Opt in to HD asset staging and loader initialization
 python3 tools/docker_build.py --platform switch --enable-hd-assets
 
-# 5. Android APK (arm64-v8a / x86_64 Gradle debug build)
+# 5. Android APK (arm64-v8a / x86_64 Gradle release build)
 python3 tools/docker_build.py --platform android
 ```
 
@@ -56,11 +56,10 @@ Every platform runs in a strictly named, labeled container. Builds on different 
 
 | Platform | Flag | Container Name | Hostname | Output Directory | Primary Artifact |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Desktop** | `--platform desktop` | `aoe2-build-desktop` | `aoe2-build-desktop` | `build/docker-desktop/` | `aoe2_game`, `desktop_runtime_probe` |
-| **PC Alias**| `--platform pc` | `aoe2-build-pc` | `aoe2-build-pc` | `build/docker-desktop/` | `aoe2_game`, `desktop_runtime_probe` |
-| **Switch**  | `--platform switch` | `aoe2-build-switch` | `aoe2-build-switch` | `build/docker-switch/` | `aoe2_game_nro` (`aoe2_game.nro`) |
-| **Switch Release** | `--platform switch --build-type Release` | `aoe2-build-switch-release` | `aoe2-build-switch-release` | `build/docker-switch-release/` | `aoe2_game_nro` (`aoe2_game.nro`) |
-| **Android** | `--platform android`| `aoe2-build-android` | `aoe2-build-android` | `build/docker-android/` | `aoe2-recomp-debug.apk` |
+| **Desktop / PC** | `--platform desktop` or `pc` | `aoe2-build-desktop-release` | `aoe2-build-desktop-release` | `build/docker-desktop-release/` | `aoe2_game`, `desktop_runtime_probe` |
+| **Switch** | `--platform switch` | `aoe2-build-switch-release` | `aoe2-build-switch-release` | `build/docker-switch-release/` | `aoe2_game.nro` |
+| **Switch Debug** | `--platform switch --build-type Debug` | `aoe2-build-switch` | `aoe2-build-switch` | `build/docker-switch/` | `aoe2_game.nro` |
+| **Android** | `--platform android` | `aoe2-build-android` | `aoe2-build-android` | `build/docker-android/` | `aoe2-recomp-release.apk` |
 | **Diag**    | `--diagnostics` | `aoe2-build-desktop-diagnostics` | `aoe2-build-desktop-diagnostics` | `build/docker-desktop-diagnostics/` | `aoe2_game` (diagnostics build) |
 
 ### Operational Invariants:
@@ -74,3 +73,5 @@ Every platform runs in a strictly named, labeled container. Builds on different 
    ```bash
    python3 tools/classify_diagnostics.py --log build.log [--out report.json]
    ```
+
+Note: `docker_build.py` auto-extracts the owned ISO (`tools/extract_disc.py`, `--skip-extract` to disable); devices never receive the ISO. One-shot: `tools/setup_game.py`.
