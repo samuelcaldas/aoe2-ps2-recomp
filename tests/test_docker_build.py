@@ -53,6 +53,21 @@ class TestDockerBuildCommands(unittest.TestCase):
                     self.assertIn("-DCMAKE_BUILD_TYPE=Release", script)
                     self.assertNotIn("-DAOE2_RUNTIME_DIAGNOSTICS=ON", script)
 
+    def test_direct_cmake_defaults_to_release_and_respects_debug(self):
+        for requested, expected in ((None, "Release"), ("Debug", "Debug")):
+            with self.subTest(requested=requested), tempfile.TemporaryDirectory() as directory:
+                command = ["cmake", "-S", str(docker_build.REPO_ROOT), "-B", directory, "-G", "Ninja"]
+                if requested:
+                    command.append(f"-DCMAKE_BUILD_TYPE={requested}")
+                subprocess.run(command, check=True, capture_output=True, text=True)
+                cache = (Path(directory) / "CMakeCache.txt").read_text()
+                self.assertIn(f"CMAKE_BUILD_TYPE:STRING={expected}", cache)
+
+    def test_android_variants_share_container_lock(self):
+        debug = docker_build.parse_args(["--platform", "android", "--build-type", "Debug"])
+        release = docker_build.parse_args(["--platform", "android"])
+        self.assertEqual(docker_build.container_name_for(debug), docker_build.container_name_for(release))
+
     def test_diagnostics_defaults_to_debug(self):
         args = docker_build.parse_args(["--platform", "desktop", "--diagnostics"])
         self.assertEqual(args.build_type, "Debug")
