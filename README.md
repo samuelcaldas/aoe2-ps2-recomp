@@ -160,7 +160,7 @@ These commands describe the available tooling, not verified boot or gameplay on 
 
 ### Build and install on a Nintendo Switch
 
-This workflow uses a legally owned **PAL PS2 disc** (`SLES-50282`) and a Switch running homebrew. The repository does not provide the game executable or assets. Keep the ISO, extracted files, generated C++, and NRO local; they are ignored by Git. The Switch runtime reads game data from `sdmc:/switch/aoe2/`, so copy the extracted disc contents there beside the NRO.
+This workflow uses a legally owned **PAL PS2 disc** (`SLES-50282`) and a Switch running homebrew. The repository does not provide the game executable or assets. Keep the ISO, extracted files, generated C++, and NRO local; they are ignored by Git. Place the owned ISO at `sdmc:/switch/aoe2/aoe2.iso` beside the NRO and extracted disc contents.
 
 1. Put the owned disc image somewhere outside the repository, then install pinned dependencies and import/extract the disc. `7z` must be installed on the host for ISO extraction. The import checks that the disc contains the expected executable before copying files into the ignored `game/SLES-50282/` directory.
 
@@ -196,6 +196,7 @@ This workflow uses a legally owned **PAL PS2 disc** (`SLES-50282`) and a Switch 
    ```text
    SD:/switch/aoe2/aoe2_game.nro
    SD:/switch/aoe2/AOK.ELF
+   SD:/switch/aoe2/aoe2.iso
    SD:/switch/aoe2/<other extracted disc files and directories>
    SD:/switch/aoe2/mc0/              # created/used for PS2 memory-card data
    SD:/switch/aoe2/mc1/              # created/used for PS2 memory-card data
@@ -206,6 +207,7 @@ This workflow uses a legally owned **PAL PS2 disc** (`SLES-50282`) and a Switch 
    ```bash
    install -D build/docker-switch-release/aoe2_game.nro "/media/$USER/SWITCH/switch/aoe2/aoe2_game.nro"
    cp -a game/SLES-50282/. "/media/$USER/SWITCH/switch/aoe2/"
+   cp "/path/to/owned-disc.iso" "/media/$USER/SWITCH/switch/aoe2/aoe2.iso"
    mkdir -p "/media/$USER/SWITCH/switch/aoe2/mc0" "/media/$USER/SWITCH/switch/aoe2/mc1"
    sync
    ```
@@ -233,6 +235,7 @@ The CMake option `AOE2_GAME_TTY` defaults to `ON`, independently of debug tracin
 ## Ready-to-copy device folders
 
 Put the owned ISO in `game/iso/` and run `python3 tools/setup_game.py --platform all --docker`.
-It extracts the disc (writing `disc_layout.json`, which maps files to their real disc sectors so
-the game runs without the ISO), builds, and fills `dist/pc/`, `dist/switch/` (copy the inner
-`switch` folder to the SD card root) and `dist/android/`. The ISO is never copied to a device.
+It extracts the disc, builds, and fills `dist/pc/`, `dist/switch/` (copy the inner
+`switch` folder to the SD card root) and `dist/android/`, including the ISO as `aoe2.iso`.
+The experimental `--experimental-extracted-disc` option stages extracted files without the ISO;
+sector reads are not supported by this approach, so it is disabled by default.

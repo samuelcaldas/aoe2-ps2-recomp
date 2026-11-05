@@ -65,7 +65,12 @@ void use_disc_image(const std::filesystem::path& image) {
 #if defined(AOE2_EXPERIMENTAL_MAP_VIEW)
     aoe2::game_hooks::MapViewSession map_view_session(runtime);
 #endif
-    use_disc_image(disc_image);
+    auto image = disc_image;
+    if (image.empty()) {
+        const auto adjacent = path.parent_path() / "aoe2.iso";
+        if (std::filesystem::is_regular_file(adjacent)) image = adjacent;
+    }
+    use_disc_image(image);
 #if defined(__SWITCH__)
     svcOutputDebugString("[aoe2-switch] calling runtime.run()\n", 36);
 #endif
