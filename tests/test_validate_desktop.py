@@ -146,12 +146,12 @@ class TestDesktopValidation(unittest.TestCase):
         command = validation.game_command(Path("/nonexistent/aoe2.iso"))
         self.assertEqual(len(command), 2)
 
-    def test_game_comes_from_the_diagnostic_build(self):
-        self.assertIn("docker-desktop-diagnostics", str(validation.GAME_BINARY))
+    def test_game_comes_from_the_release_build(self):
+        self.assertIn("docker-desktop-release", str(validation.GAME_BINARY))
 
-    def test_release_build_type_selects_release_diagnostics_binary(self):
-        self.assertIn("docker-desktop-release-diagnostics", str(validation.game_binary("release")))
-        self.assertIn("docker-desktop-diagnostics", str(validation.game_binary("debug")))
+    def test_build_type_selects_standard_binary(self):
+        self.assertIn("docker-desktop-release", str(validation.game_binary("release")))
+        self.assertIn("docker-desktop/aoe2_game", str(validation.game_binary("debug")))
 
     def test_unknown_build_type_is_rejected(self):
         with self.assertRaises(ValueError):
