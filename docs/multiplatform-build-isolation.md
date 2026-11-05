@@ -175,3 +175,14 @@ extracts the ISO into `game/SLES-50282/` with a `disc_layout.json` manifest of r
 runtime registers those files at their true sectors, so devices need no ISO. `tools/setup_game.py`
 stages `dist/<device>/` (git-ignored) without any `.iso`; the Switch and Android validators also
 skip `aoe2.iso` when seeding the device.
+
+### Validation build selection
+
+Desktop and Switch validators select the standard Release artifacts by default. Use
+`--build-type debug` for the standard Debug artifacts; game startup, scenario waits
+and explicit `--run-seconds` use a 10× Debug budget. Screenshot intervals and
+input durations do not scale. The Switch defaults to GS and the smoke scenario.
+Campaign results require visual inspection; a log marker alone does not establish
+that the map is visible. The current Release artifacts do not emit the guest tick
+evidence required by the classifier, so a Release validation cannot yet pass until
+validation telemetry is implemented in the shared runtime.
