@@ -363,10 +363,10 @@ def follow_guest_event(
                     time.sleep(min(1.0, max(0.0, deadline - now)))
 
 
-def do_step(display: str, action: str, argument, settle: float, step_name: str = "", log_path: Path | None = None) -> bool | None:
+def do_step(display: str, action: str, argument, settle: float, step_name: str = "", log_path: Path | None = None, factor: float = 1.0) -> bool | None:
     """Execute a scenario action via native controller buttons / arrows and calibrated clicks."""
     env = {**os.environ, "DISPLAY": display}
-    win = find_window(display, timeout=5.0)
+    win = find_window(display, timeout=5.0 * factor)
     if win:
         subprocess.run(["xdotool", "windowfocus", "--sync", win], env=env)
 
@@ -382,7 +382,7 @@ def do_step(display: str, action: str, argument, settle: float, step_name: str =
         st = wait_for_any_screen_state(
             display,
             {"select_player_ready", "new_player_dialog", "main_menu"},
-            timeout=90.0,
+            timeout=90.0 * factor,
         )
         time.sleep(3.0)
         if st == "select_player_ready":
@@ -459,35 +459,35 @@ def do_step(display: str, action: str, argument, settle: float, step_name: str =
             return False
     elif step_name == "profile-settle":
         # Wait until Main Menu is reached and has fully faded in
-        wait_for_any_screen_state(display, {"main_menu"}, timeout=45.0)
+        wait_for_any_screen_state(display, {"main_menu"}, timeout=45.0 * factor)
         time.sleep(3.0)
     elif step_name == "single-player":
-        wait_for_any_screen_state(display, {"main_menu"}, timeout=30.0)
+        wait_for_any_screen_state(display, {"main_menu"}, timeout=30.0 * factor)
         time.sleep(1.5)
         wx, wy = to_window_coords((458, 85))
         do_click(display, wx, wy, 0.4)
         time.sleep(0.3)
         send_pad_button(display, "cross", 0.5)
-        st = wait_for_any_screen_state(display, {"single_player_menu"}, timeout=30.0)
+        st = wait_for_any_screen_state(display, {"single_player_menu"}, timeout=30.0 * factor)
         if st != "single_player_menu":
             print("[single-player] Menu transition not observed; withholding retry", flush=True)
             return False
         time.sleep(2.0)
     elif step_name == "campaigns":
-        wait_for_any_screen_state(display, {"single_player_menu"}, timeout=30.0)
+        wait_for_any_screen_state(display, {"single_player_menu"}, timeout=30.0 * factor)
         time.sleep(1.5)
         wx, wy = to_window_coords((418, 86))
         do_click(display, wx, wy, 0.4)
         time.sleep(0.3)
         send_pad_button(display, "cross", 0.5)
-        st = wait_for_any_screen_state(display, {"campaigns_book"}, timeout=90.0)
+        st = wait_for_any_screen_state(display, {"campaigns_book"}, timeout=90.0 * factor)
         if st != "campaigns_book":
             do_click(display, wx, wy, 0.4)
             send_pad_button(display, "cross", 0.5)
-            wait_for_any_screen_state(display, {"campaigns_book"}, timeout=45.0)
+            wait_for_any_screen_state(display, {"campaigns_book"}, timeout=45.0 * factor)
         time.sleep(3.0)
     elif step_name == "wallace-marker":
-        wait_for_any_screen_state(display, {"campaigns_book"}, timeout=60.0)
+        wait_for_any_screen_state(display, {"campaigns_book"}, timeout=60.0 * factor)
         time.sleep(2.0)
         # Click Scottish flag at William Wallace (window: 498, 158; logical: 219, 77)
         wx, wy = to_window_coords((219, 77))
@@ -552,8 +552,10 @@ def drive_scenario(
     display: str = DISPLAY_DEFAULT,
     run_seconds: float = 600.0,
     speed_factor: float = 2.5,
+    build_type: str = "release",
 ) -> dict:
     """Drive the given scenario using controller buttons, saving mode-tagged screenshots."""
+    factor = 10 if build_type == "debug" else 1
     log_path = evidence_dir / "run.log"
     steps = SCENARIOS.get(scenario_name, SCENARIOS["campaign-auto"])
     results = {
@@ -564,7 +566,7 @@ def drive_scenario(
         "success": False,
     }
 
-    win = find_window(display, timeout=45.0)
+    win = find_window(display, timeout=45.0 * factor)
     if not win:
         sys.stderr.write(f"ERROR: Ryujinx window not found on {display}\n")
         return results
@@ -574,14 +576,15 @@ def drive_scenario(
 
     # Boot delay for guest emulator to initialize and reach title screen
     print(f"[{mode}] Waiting for guest boot (30s)...", flush=True)
-    time.sleep(30.0)
-    wait_for_screen_ready(display, timeout=45.0, settle_after=3.0)
+    time.sleep(30.0 * factor)
+    wait_for_screen_ready(display, timeout=45.0 * factor, settle_after=3.0)
     boot_shot = screenshots_dir / f"switch-{mode}-boot.png"
     capture_screenshot(boot_shot, display)
     print(f"[{mode}] Captured {boot_shot.name} (brightness={get_screen_brightness(display):.1f})", flush=True)
 
     for name, action, argument, settle in steps:
-        effective_settle = (settle * speed_factor) if settle else 0.0
+        step_ok = True
+        effective_settle = (settle * speed_factor * factor) if settle else 0.0
         print(f"[{mode}] Step {name}: {action} (settle={effective_settle:.1f}s)", flush=True)
         before_shot = screenshots_dir / f"switch-{mode}-{name}-before.png"
         capture_screenshot(before_shot, display)
@@ -590,7 +593,7 @@ def drive_scenario(
 
         if is_screen_loading(display):
             print(f"[{mode}] Screen is in loading transition; waiting for render before {name}...", flush=True)
-            wait_for_screen_ready(display, timeout=90.0, settle_after=3.0)
+            wait_for_screen_ready(display, timeout=90.0 * factor, settle_after=3.0)
 
         if action == "story-until":
             story_clicks = 0
@@ -626,13 +629,14 @@ def drive_scenario(
                 return True
 
             matched = follow_guest_event(
-                log_path, b"[map-submit]", timeout=600.0, on_wait=advance_story, max_interval_seconds=3.0
+                log_path, b"[map-submit]", timeout=600.0 * factor, on_wait=advance_story, max_interval_seconds=3.0
             )
             if matched:
                 results["map_submitted"] = True
                 print(f"[{mode}] [map-submit] event detected during story-until!", flush=True)
             else:
                 sys.stderr.write(f"WARNING: [map-submit] not reached in story-until\n")
+                step_ok = False
         elif action == "map-until":
             if results.get("map_submitted"):
                 print(f"[{mode}] Map already submitted; settling 5s before capture...", flush=True)
@@ -653,7 +657,7 @@ def drive_scenario(
                     return True
 
                 matched = follow_guest_event(
-                    log_path, b"[map-submit]", timeout=run_seconds, on_wait=advance_map,
+                    log_path, b"[map-submit]", timeout=run_seconds * factor, on_wait=advance_map,
                     max_interval_seconds=10.0
                 )
                 if matched:
@@ -663,10 +667,11 @@ def drive_scenario(
                     print(f"[{mode}] Captured {submit_shot.name} [SUCCESS]!", flush=True)
                 else:
                     sys.stderr.write(f"WARNING: [map-submit] not reached before timeout\n")
+                    step_ok = False
         else:
-            step_ok = do_step(display, action, argument, effective_settle, step_name=name, log_path=log_path)
+            step_ok = do_step(display, action, argument, effective_settle, step_name=name, log_path=log_path, factor=factor)
             if name == "profile-settle":
-                wait_for_screen_ready(display, timeout=45.0, settle_after=4.0)
+                wait_for_screen_ready(display, timeout=45.0 * factor, settle_after=4.0)
             elif name == "map-stability":
                 # Exercise map navigation using D-Pad directional arrows (setas)
                 print(f"[{mode}] Testing map navigation using controller D-Pad arrows...", flush=True)
@@ -682,12 +687,12 @@ def drive_scenario(
         fps = get_emulator_fps(display)
         fps_info = f" | Emulator FPS: {fps}" if fps else ""
         print(f"[{mode}] Captured {step_shot.name} (brightness={get_screen_brightness(display):.1f}{fps_info})", flush=True)
-        results["completed_steps"].append(name)
         if step_ok is False:
             print(f"[{mode}] Stopping after {name}: expected visual transition was not observed", flush=True)
             break
+        results["completed_steps"].append(name)
 
-    results["success"] = results.get("map_submitted", False) if scenario_name in ("campaign", "campaign-auto") else True
+    results["success"] = len(results["completed_steps"]) == len(steps) and (results["map_submitted"] if scenario_name in ("campaign", "campaign-auto") else True)
     return results
 
 
@@ -699,6 +704,7 @@ def main() -> int:
     parser.add_argument("--evidence", type=Path, default=REPO_ROOT / "build/switch-validation", help="evidence dir")
     parser.add_argument("--screenshots", type=Path, default=REPO_ROOT / ".playwright-mcp/switch", help="shots dir")
     parser.add_argument("--run-seconds", type=float, default=600.0, help="timeout budget")
+    parser.add_argument("--build-type", choices=("release", "debug"), default="release")
     parser.add_argument("--speed-factor", type=float, default=2.5, help="settle sleep multiplier for emulator clock (default: 2.5)")
     args = parser.parse_args()
 
@@ -710,6 +716,7 @@ def main() -> int:
         display=args.display,
         run_seconds=args.run_seconds,
         speed_factor=args.speed_factor,
+        build_type=args.build_type,
     )
 
     summary_file = args.evidence / f"scenario-{args.mode}.json"

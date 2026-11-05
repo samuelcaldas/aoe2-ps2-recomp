@@ -307,8 +307,11 @@ def main(argv: list | None = None) -> int:
         type=Path,
         help="game executable to run instead of the diagnostic build",
     )
+    parser.add_argument("--build-type", choices=("release", "debug"), default="release")
     parser.add_argument("--label", help="distinct evidence label for comparing runs")
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
+    factor = 10 if args.build_type == "debug" else 1
+    os.environ["AOE2_VALIDATE_BUILD_TYPE"] = args.build_type
     if args.label and (
         not args.label.isascii()
         or not all(c.isalnum() or c in "-_" for c in args.label)
@@ -373,10 +376,11 @@ def main(argv: list | None = None) -> int:
             cwd=game_root,
             preexec_fn=allow_ptrace,
         )
-        time.sleep(BOOT_SECONDS)
+        time.sleep(BOOT_SECONDS * factor)
         window = find_game_window(args.resolution)
         run(["xdotool", "windowfocus", window])
         for name, action, argument, settle in SCENARIOS[args.scenario]:
+            settle *= factor
             scaled_arg = argument
             if action in ("click", "move", "story-until", "map-until") and isinstance(
                 argument, tuple
@@ -398,7 +402,7 @@ def main(argv: list | None = None) -> int:
                     )
 
                 matched = follow_guest_event(
-                    log_path, b"[game-tty] 4 e-txt", game, 300, advance_story
+                    log_path, b"[game-tty] 4 e-txt", game, 300 * factor, advance_story
                 )
             elif action == "map-until":
                 clicks = 0

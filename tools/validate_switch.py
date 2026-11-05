@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Validate the Nintendo Switch build in a headless emulator inside Docker.
 
-Runs the Switch executable (build/docker-switch/aoe2_game.nro) inside the
+Runs the Switch executable (build/docker-switch-release/aoe2_game.nro by default) inside the
 aoe2-switch-emulator container under Xvfb using Ryujinx.Headless.SDL2.
 The emulator captures real-time debug console output (svcOutputDebugString and
 libnx logging) into build/switch-validation/run.log, takes timed screenshots
@@ -156,14 +156,16 @@ class PreflightError(RuntimeError):
 def emulator_script(
     run_seconds: int,
     interval: int = SCREENSHOT_INTERVAL,
-    nro: str = NRO_PATH,
-    mode: str = "native",
-    scenario: str = "campaign-auto",
+    nro: str = RELEASE_NRO_PATH,
+    mode: str = "gs",
+    scenario: str = "smoke",
+    build_type: str = "release",
 ) -> str:
     """Shell script run inside the container; writes raw evidence for the host to judge."""
     evidence = f"{CONTAINER_ROOT}/{EVIDENCE_DIR}"
     shots_dir = f"{CONTAINER_ROOT}/{SCREENSHOT_DIR}"
-    shots = max(1, run_seconds // interval)
+    factor = 10 if build_type == "debug" else 1
+    shots = max(1, run_seconds * factor // interval)
     config_dir = f"{evidence}/ryujinx-data"
     system_dir = f"{config_dir}/system"
     sdcard_dir = f"{config_dir}/sdcard/switch/aoe2"
@@ -196,7 +198,7 @@ def emulator_script(
                 "echo '================================================================='",
                 f'"$RYUJINX_BIN" --root-data-dir {config_dir} {CONTAINER_ROOT}/{nro} > {evidence}/run.log 2>&1 &',
                 "EMU_PID=$!",
-                f"python3 -u {CONTAINER_ROOT}/tools/drive_switch_scenario.py --mode {mode} --scenario {scenario} --evidence {evidence} --screenshots {shots_dir} --display {DISPLAY} --run-seconds {run_seconds} --speed-factor 1.3 > {evidence}/scenario.log 2>&1 &",
+                f"python3 -u {CONTAINER_ROOT}/tools/drive_switch_scenario.py --mode {mode} --scenario {scenario} --evidence {evidence} --screenshots {shots_dir} --display {DISPLAY} --run-seconds {run_seconds} --build-type {build_type} --speed-factor 1.3 > {evidence}/scenario.log 2>&1 &",
                 "DRIVER_PID=$!",
                 f"for shot in $(seq 1 {shots}); do sleep {interval}; ",
                 f"ts=$(date +%Y%m%d-%H%M%S); shot_num=$(printf '%03d' \"$shot\"); ",
@@ -205,11 +207,12 @@ def emulator_script(
                 "done",
                 f"if kill -0 $EMU_PID 2>/dev/null; then echo yes > {evidence}/alive.txt; ",
                 f"else echo no > {evidence}/alive.txt; fi",
-                "kill $DRIVER_PID 2>/dev/null || true",
+                "if kill -0 $DRIVER_PID 2>/dev/null; then kill $DRIVER_PID 2>/dev/null || true; wait $DRIVER_PID || true; DRIVER_STATUS=1; else DRIVER_STATUS=0; wait $DRIVER_PID || DRIVER_STATUS=$?; fi",
                 "kill $EMU_PID 2>/dev/null || true",
                 "kill $WEBSOCK_PID 2>/dev/null || true",
                 "kill $VNC_PID 2>/dev/null || true",
                 "kill $XVFB_PID 2>/dev/null || true",
+                "exit $DRIVER_STATUS",
             ]
         )
         + "\n"
@@ -251,10 +254,11 @@ def evidence_passed(
 def container_command(
     run_seconds: int,
     jobs: int = DEFAULT_JOBS,
-    nro: str = NRO_PATH,
+    nro: str = RELEASE_NRO_PATH,
     port: int = 6080,
-    mode: str = "native",
-    scenario: str = "campaign-auto",
+    mode: str = "gs",
+    scenario: str = "smoke",
+    build_type: str = "release",
 ) -> list:
     return [
         "docker",
@@ -283,7 +287,7 @@ def container_command(
         IMAGE,
         "bash",
         "-c",
-        emulator_script(run_seconds, nro=nro, mode=mode, scenario=scenario),
+        emulator_script(run_seconds, nro=nro, mode=mode, scenario=scenario, build_type=build_type),
     ]
 
 
@@ -326,14 +330,14 @@ def main(argv: list | None = None) -> int:
     parser.add_argument(
         "--mode",
         choices=["native", "gs"],
-        default="native",
-        help="rendering mode: native or gs (default: native)",
+        default="gs",
+        help="rendering mode: native or gs (default: gs)",
     )
     parser.add_argument(
         "--scenario",
         choices=["campaign", "campaign-auto", "smoke"],
-        default="campaign-auto",
-        help="scenario to drive (default: campaign-auto)",
+        default="smoke",
+        help="scenario to drive (default: smoke)",
     )
     parser.add_argument(
         "--jobs",
@@ -357,11 +361,11 @@ def main(argv: list | None = None) -> int:
         "--nro",
         type=Path,
         default=None,
-        help="NRO path relative to the repository root (overrides --build-type)",
+        help="NRO path relative to the repository root (build type still sets the timeout multiplier)",
     )
     parser.add_argument(
-        "--build-type", choices=("debug", "release"), default="debug",
-        help="NRO build to validate; release loads far faster than debug",
+        "--build-type", choices=("debug", "release"), default="release",
+        help="NRO build to validate; debug uses 10x the reference duration",
     )
     parser.add_argument(
         "--dry-run", action="store_true", help="print commands without executing them"
@@ -399,6 +403,7 @@ def main(argv: list | None = None) -> int:
         port=args.port,
         mode=args.mode,
         scenario=args.scenario,
+        build_type=args.build_type,
     )
     print("+ " + shlex.join(cmd[:10]) + " ...", flush=True)
     print(

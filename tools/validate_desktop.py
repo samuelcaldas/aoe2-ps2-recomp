@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Validate the desktop build by running the game on a virtual display.
 
-Runs the diagnostic build (build/docker-desktop-diagnostics/aoe2_game, see
-`docker_build.py --diagnostics`) on the owned ELF under Xvfb and captures a
+Runs the selected standard build (Release by default) on the owned ELF under Xvfb and captures a
 screenshot every interval into .playwright-mcp/pc/ (git-ignored). The full log goes
 to build/desktop-validation/run.log.
 
@@ -41,15 +40,15 @@ MEMORY_LIMIT = "18g"
 
 BUILD_TYPE_ENV = "AOE2_VALIDATE_BUILD_TYPE"
 BUILD_TYPE_DIRECTORIES = {
-    "debug": "docker-desktop-diagnostics",
-    "release": "docker-desktop-release-diagnostics",
+    "debug": "docker-desktop",
+    "release": "docker-desktop-release",
 }
-GAME_BINARY = REPO_ROOT / "build" / BUILD_TYPE_DIRECTORIES["debug"] / "aoe2_game"
+GAME_BINARY = REPO_ROOT / "build" / BUILD_TYPE_DIRECTORIES["release"] / "aoe2_game"
 
 
 def game_binary(build_type: str | None = None) -> Path:
-    """Diagnostic binary for the build type (argument, else env, else debug)."""
-    selected = build_type or os.environ.get(BUILD_TYPE_ENV, "debug")
+    """Standard binary for the build type (argument, else env, else Release)."""
+    selected = build_type or os.environ.get(BUILD_TYPE_ENV, "release")
     if selected not in BUILD_TYPE_DIRECTORIES:
         raise ValueError(f"unknown build type {selected!r}; use debug or release")
     return REPO_ROOT / "build" / BUILD_TYPE_DIRECTORIES[selected] / "aoe2_game"
@@ -81,7 +80,7 @@ def ensure_container_clean(name: str) -> None:
             raise RuntimeError(f"container '{name}' is already running")
 
 
-def container_command(run_seconds: int, interval: int = 15, jobs: int = DEFAULT_JOBS, build_type: str = "debug") -> list:
+def container_command(run_seconds: int, interval: int = 15, jobs: int = DEFAULT_JOBS, build_type: str = "release") -> list:
     return [
         "docker", "--context", DOCKER_CONTEXT, "run", "--rm",
         f"--name={CONTAINER_NAME}",
@@ -187,15 +186,15 @@ def check_preflight() -> None:
             raise FileNotFoundError(f"{tool} is required")
     for required in (game_binary(), OWNED_ELF):
         if not required.exists():
-            raise FileNotFoundError(f"missing {required} (diagnostic build: tools/docker_build.py --platform desktop --diagnostics)")
+            raise FileNotFoundError(f"missing {required} (build: tools/docker_build.py --platform desktop)")
 
 
 def main(argv: list | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Run the desktop diagnostic build on a virtual display and validate it.")
+    parser = argparse.ArgumentParser(description="Run the desktop build on a virtual display and validate it.")
     parser.add_argument("--run-seconds", type=int, default=90)
     parser.add_argument("--interval", type=int, default=15)
-    parser.add_argument("--build-type", choices=sorted(BUILD_TYPE_DIRECTORIES), default=os.environ.get(BUILD_TYPE_ENV, "debug"),
-                        help="diagnostic build to run; release boots far faster than debug")
+    parser.add_argument("--build-type", choices=sorted(BUILD_TYPE_DIRECTORIES), default=os.environ.get(BUILD_TYPE_ENV, "release"),
+                        help="build to run; debug uses 10x the reference duration")
     parser.add_argument("--docker", action="store_true", help="run validation inside aoe2-build-desktop container")
     parser.add_argument("--jobs", type=int, default=DEFAULT_JOBS, help=f"CPU quota for container (default: {DEFAULT_JOBS})")
     parser.add_argument("--dry-run", action="store_true", help="print docker command without running")
@@ -219,7 +218,7 @@ def main(argv: list | None = None) -> int:
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         time.sleep(2)
-        still_running, shots = run_game(args.run_seconds, args.interval)
+        still_running, shots = run_game(args.run_seconds * (10 if args.build_type == "debug" else 1), args.interval)
     finally:
         stop_process(display)
     summary = summarize_log((EVIDENCE_DIR / "run.log").read_text(errors="replace"))
