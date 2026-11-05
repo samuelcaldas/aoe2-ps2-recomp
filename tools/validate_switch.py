@@ -37,6 +37,7 @@ CONTAINER_ROOT = "/src"
 IMAGE = "aoe2-switch-emulator"
 DOCKER_CONTEXT = "docker-dev"
 NRO_PATH = "build/docker-switch/aoe2_game.nro"
+RELEASE_NRO_PATH = "build/docker-switch-release/aoe2_game.nro"
 PROD_KEYS_DEFAULT = "game/switch/prod.keys"
 EVIDENCE_DIR = "build/switch-validation"
 SCREENSHOT_DIR = ".playwright-mcp/switch"
@@ -355,13 +356,19 @@ def main(argv: list | None = None) -> int:
     parser.add_argument(
         "--nro",
         type=Path,
-        default=Path(NRO_PATH),
-        help="NRO path relative to the repository root (default: Debug build)",
+        default=None,
+        help="NRO path relative to the repository root (overrides --build-type)",
+    )
+    parser.add_argument(
+        "--build-type", choices=("debug", "release"), default="debug",
+        help="NRO build to validate; release loads far faster than debug",
     )
     parser.add_argument(
         "--dry-run", action="store_true", help="print commands without executing them"
     )
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
+    if args.nro is None:
+        args.nro = Path(RELEASE_NRO_PATH if args.build_type == "release" else NRO_PATH)
 
     try:
         check_preflight(args.keys, args.nro)

@@ -39,7 +39,20 @@ CONTAINER_NAME = "aoe2-validate-desktop"
 DEFAULT_JOBS = 8
 MEMORY_LIMIT = "18g"
 
-GAME_BINARY = REPO_ROOT / "build" / "docker-desktop-diagnostics" / "aoe2_game"
+BUILD_TYPE_ENV = "AOE2_VALIDATE_BUILD_TYPE"
+BUILD_TYPE_DIRECTORIES = {
+    "debug": "docker-desktop-diagnostics",
+    "release": "docker-desktop-release-diagnostics",
+}
+GAME_BINARY = REPO_ROOT / "build" / BUILD_TYPE_DIRECTORIES["debug"] / "aoe2_game"
+
+
+def game_binary(build_type: str | None = None) -> Path:
+    """Diagnostic binary for the build type (argument, else env, else debug)."""
+    selected = build_type or os.environ.get(BUILD_TYPE_ENV, "debug")
+    if selected not in BUILD_TYPE_DIRECTORIES:
+        raise ValueError(f"unknown build type {selected!r}; use debug or release")
+    return REPO_ROOT / "build" / BUILD_TYPE_DIRECTORIES[selected] / "aoe2_game"
 OWNED_ELF = REPO_ROOT / "game" / "SLES-50282" / "AOK.ELF"
 # Ignored; the game reads by real disc LBN, which only the image resolves.
 OWNED_DISC_IMAGE = REPO_ROOT / "game" / "SLES-50282" / "aoe2.iso"
@@ -68,7 +81,7 @@ def ensure_container_clean(name: str) -> None:
             raise RuntimeError(f"container '{name}' is already running")
 
 
-def container_command(run_seconds: int, interval: int = 15, jobs: int = DEFAULT_JOBS) -> list:
+def container_command(run_seconds: int, interval: int = 15, jobs: int = DEFAULT_JOBS, build_type: str = "debug") -> list:
     return [
         "docker", "--context", DOCKER_CONTEXT, "run", "--rm",
         f"--name={CONTAINER_NAME}",
@@ -80,7 +93,7 @@ def container_command(run_seconds: int, interval: int = 15, jobs: int = DEFAULT_
         "-e", "LC_ALL=C.UTF-8", "-e", "TZ=America/Sao_Paulo",
         "-v", f"{REPO_ROOT}:{CONTAINER_ROOT}", "-w", CONTAINER_ROOT,
         IMAGE, "bash", "-c",
-        f"python3 tools/validate_desktop.py --run-seconds {run_seconds} --interval {interval}",
+        f"python3 tools/validate_desktop.py --run-seconds {run_seconds} --interval {interval} --build-type {build_type}",
     ]
 
 
@@ -93,7 +106,7 @@ class RunSummary:
 
 def game_command(disc_image: Path = OWNED_DISC_IMAGE) -> list:
     """Return the game command line; the owned disc image is passed when it exists."""
-    command = [str(GAME_BINARY), str(OWNED_ELF)]
+    command = [str(game_binary()), str(OWNED_ELF)]
     if disc_image.is_file():
         command.append(str(disc_image))
     return command
@@ -172,7 +185,7 @@ def check_preflight() -> None:
     for tool in ("Xvfb", "xwd", "convert", "magick"):
         if shutil.which(tool) is None:
             raise FileNotFoundError(f"{tool} is required")
-    for required in (GAME_BINARY, OWNED_ELF):
+    for required in (game_binary(), OWNED_ELF):
         if not required.exists():
             raise FileNotFoundError(f"missing {required} (diagnostic build: tools/docker_build.py --platform desktop --diagnostics)")
 
@@ -181,12 +194,15 @@ def main(argv: list | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run the desktop diagnostic build on a virtual display and validate it.")
     parser.add_argument("--run-seconds", type=int, default=90)
     parser.add_argument("--interval", type=int, default=15)
+    parser.add_argument("--build-type", choices=sorted(BUILD_TYPE_DIRECTORIES), default=os.environ.get(BUILD_TYPE_ENV, "debug"),
+                        help="diagnostic build to run; release boots far faster than debug")
     parser.add_argument("--docker", action="store_true", help="run validation inside aoe2-build-desktop container")
     parser.add_argument("--jobs", type=int, default=DEFAULT_JOBS, help=f"CPU quota for container (default: {DEFAULT_JOBS})")
     parser.add_argument("--dry-run", action="store_true", help="print docker command without running")
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
+    os.environ[BUILD_TYPE_ENV] = args.build_type
     if args.docker:
-        cmd = container_command(args.run_seconds, args.interval, jobs=args.jobs)
+        cmd = container_command(args.run_seconds, args.interval, jobs=args.jobs, build_type=args.build_type)
         if args.dry_run:
             print("+ " + shlex.join(cmd))
             return EXIT_PASS

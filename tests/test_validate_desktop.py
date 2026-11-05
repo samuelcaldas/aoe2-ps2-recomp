@@ -149,6 +149,18 @@ class TestDesktopValidation(unittest.TestCase):
     def test_game_comes_from_the_diagnostic_build(self):
         self.assertIn("docker-desktop-diagnostics", str(validation.GAME_BINARY))
 
+    def test_release_build_type_selects_release_diagnostics_binary(self):
+        self.assertIn("docker-desktop-release-diagnostics", str(validation.game_binary("release")))
+        self.assertIn("docker-desktop-diagnostics", str(validation.game_binary("debug")))
+
+    def test_unknown_build_type_is_rejected(self):
+        with self.assertRaises(ValueError):
+            validation.game_binary("profile")
+
+    def test_container_command_forwards_build_type(self):
+        cmd = validation.container_command(run_seconds=30, build_type="release")
+        self.assertIn("--build-type release", cmd[-1])
+
     def test_summary_counts_missing_branch_targets(self):
         log = "Starting execution\n[guest-branch:missing-target] a\n[guest-branch:missing-target] b\n"
         summary = validation.summarize_log(log)
