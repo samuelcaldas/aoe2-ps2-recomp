@@ -59,14 +59,15 @@ Every platform runs in a strictly named, labeled container. Builds on different 
 | **Desktop / PC** | `--platform desktop` or `pc` | `aoe2-build-desktop-release` | `aoe2-build-desktop-release` | `build/docker-desktop-release/` | `aoe2_game`, `desktop_runtime_probe` |
 | **Switch** | `--platform switch` | `aoe2-build-switch-release` | `aoe2-build-switch-release` | `build/docker-switch-release/` | `aoe2_game.nro` |
 | **Switch Debug** | `--platform switch --build-type Debug` | `aoe2-build-switch` | `aoe2-build-switch` | `build/docker-switch/` | `aoe2_game.nro` |
-| **Android** | `--platform android` | `aoe2-build-android` | `aoe2-build-android` | `build/docker-android/` | `aoe2-recomp-release.apk` |
+| **Android (Release)** | `--platform android` | `aoe2-build-android-release` | `aoe2-build-android-release` | `build/docker-android-release/` | `aoe2-recomp-release.apk` |
+| **Android (Debug)** | `--platform android --build-type Debug` | `aoe2-build-android` | `aoe2-build-android` | `build/docker-android/` | `aoe2-recomp-debug.apk` |
 | **Diag**    | `--diagnostics` | `aoe2-build-desktop-diagnostics` | `aoe2-build-desktop-diagnostics` | `build/docker-desktop-diagnostics/` | `aoe2_game` (diagnostics build) |
 
 ### Operational Invariants:
 1. **Container Cleanup & Collision Prevention**: `tools/docker_build.py` automatically checks for and removes stale/stopped containers (`ensure_container_clean()`). If an active container with the same name is currently running, it fails fast to prevent concurrent writes to the same build directory.
 2. **Build Cache Preservation**:
    - Desktop and Switch preserve incremental object files (`.o`), `.ninja_deps`, and CMake caches in separate directories for each build type.
-   - Android preserves Gradle daemon cache via `--build-cache` in `build/docker-android/gradle-home` and native C++ in `build/android-cxx`.
+   - Android preserves Gradle daemon cache via `--build-cache` in `build/docker-android[-<type>]/gradle-home` and native C++ in `build/android-cxx[-<type>]`.
    - HD asset staging is skipped by default. With `--enable-hd-assets`, staging uses an advisory file lock (`.staging.lock` via `fcntl.flock`) to prevent corruption when multiple platforms stage assets simultaneously.
 3. **Diagnostics Classification**:
    If a build fails or outputs compiler warnings/errors, run diagnostic classification:
