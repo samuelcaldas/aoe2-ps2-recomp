@@ -63,10 +63,16 @@ class TestDockerBuildCommands(unittest.TestCase):
                 cache = (Path(directory) / "CMakeCache.txt").read_text()
                 self.assertIn(f"CMAKE_BUILD_TYPE:STRING={expected}", cache)
 
-    def test_android_variants_share_container_lock(self):
-        debug = docker_build.parse_args(["--platform", "android", "--build-type", "Debug"])
-        release = docker_build.parse_args(["--platform", "android"])
-        self.assertEqual(docker_build.container_name_for(debug), docker_build.container_name_for(release))
+    def test_android_variants_have_isolated_containers_and_build_dirs(self):
+        debug_args = docker_build.parse_args(["--platform", "android", "--build-type", "Debug"])
+        release_args = docker_build.parse_args(["--platform", "android"])
+        self.assertEqual(docker_build.container_name_for(debug_args), "aoe2-build-android")
+        self.assertEqual(docker_build.container_name_for(release_args), "aoe2-build-android-release")
+        debug_spec = docker_build.select_spec("android", diagnostics=False, build_type="Debug")
+        release_spec = docker_build.select_spec("android", diagnostics=False, build_type="Release")
+        self.assertEqual(debug_spec.build_dir, "build/docker-android")
+        self.assertEqual(release_spec.build_dir, "build/docker-android-release")
+        self.assertNotEqual(debug_spec.build_dir, release_spec.build_dir)
 
     def test_diagnostics_defaults_to_debug(self):
         args = docker_build.parse_args(["--platform", "desktop", "--diagnostics"])
