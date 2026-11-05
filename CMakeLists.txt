@@ -41,6 +41,7 @@ add_library(aoe2_interfaces STATIC
     cdvd/src/cdvd_model.cpp
     mc/src/kt_mc_model.cpp
     mc/src/mc_storage_model.cpp
+    mc/src/native_host_mc.cpp
     gpu/src/kt_gpu_model.cpp
     hd/src/kt_hd_model.cpp
     hd/src/hd_storage_model.cpp
@@ -319,6 +320,10 @@ add_test(NAME kt_mc_model COMMAND aoe2_kt_mc_model_tests)
 add_executable(aoe2_mc_storage_model_tests tests/cpp/mc_storage_model_tests.cpp)
 target_link_libraries(aoe2_mc_storage_model_tests PRIVATE aoe2_interfaces)
 add_test(NAME mc_storage_model COMMAND aoe2_mc_storage_model_tests)
+
+add_executable(aoe2_native_host_mc_tests tests/cpp/native_host_mc_tests.cpp)
+target_link_libraries(aoe2_native_host_mc_tests PRIVATE aoe2_interfaces)
+add_test(NAME native_host_mc COMMAND aoe2_native_host_mc_tests)
 
 add_executable(aoe2_native_mc_adapter_tests tests/cpp/native_mc_adapter_tests.cpp)
 target_include_directories(aoe2_native_mc_adapter_tests PRIVATE game_hooks/src)

@@ -19,6 +19,8 @@ SUPPORT = r'''
 #include <set>
 inline bool mc_enabled = false;
 struct R5900Context { uint32_t pc = 0; };
+inline uint32_t getRegU32(R5900Context*, int) { return 0; }
+inline void setReturnS32(R5900Context*, int32_t) {}
 class PS2Runtime {
 public:
     using RecompiledFunction = void (*)(uint8_t*, R5900Context*, PS2Runtime*);
@@ -28,11 +30,6 @@ public:
     bool replaceFunction(uint32_t address, RecompiledFunction) { replaced.insert(address); return true; }
 };
 #define PS2_REGISTER_GAME_OVERRIDE(...)
-namespace ps2_stubs {
-inline void sceMcGetDir(uint8_t*, R5900Context*, PS2Runtime*) {}
-inline void sceMcGetInfo(uint8_t*, R5900Context*, PS2Runtime*) {}
-inline void sceMcSync(uint8_t*, R5900Context*, PS2Runtime*) {}
-}
 namespace aoe2::game_hooks::native_input {
 struct Switches { bool Enabled(const char*) const { return mc_enabled; } };
 inline Switches ReadSwitches() { return {}; }
@@ -56,9 +53,15 @@ int main(int argc, char**) {
         InstallNativeMc(runtime);
         std::cout.rdbuf(previous);
         if (mc_enabled) {
-            const std::set<uint32_t> expected{0x110A78, 0x110940, 0x110C00};
-            Check(runtime.replaced == expected, "enabled MC must replace exactly the routed libmc entries");
-            Check(output.str().find("installed 3/3") != std::string::npos, "enabled MC must report 3/3");
+            const std::set<uint32_t> expected{
+                0x00110A78, 0x00110940, 0x00110C00, 0x001102A0,
+                0x00110410, 0x001104C8, 0x00110630, 0x00110750,
+                0x00111120, 0x001103D8, 0x00110DE0, 0x001111D8,
+                0x00110FF8, 0x00110F30, 0x00111518, 0x001115E0,
+                0x001113B0
+            };
+            Check(runtime.replaced == expected, "enabled MC must replace exactly the 17 routed libmc entries");
+            Check(output.str().find("installed 17/17") != std::string::npos, "enabled MC must report 17/17");
         } else {
             Check(output.str().find(": off") != std::string::npos, "disabled MC must report off");
             Check(runtime.queries == 0 && runtime.replaced.empty(), "disabled MC must not touch runtime hooks");
@@ -79,13 +82,15 @@ class TestNativeMcInstaller(unittest.TestCase):
                 shutil.copyfile(ROOT / "game_hooks/src" / name, staging / name)
             (staging / "support.hpp").write_text(SUPPORT)
             for name in ("game_overrides.h", "native_input_module_support.hpp",
-                         "ps2_runtime.h", "Stubs/MemoryCard.h"):
+                         "ps2_runtime.h"):
                 header = staging / name
                 header.parent.mkdir(parents=True, exist_ok=True)
                 header.write_text('#include "support.hpp"\n')
             (staging / "harness.cpp").write_text(HARNESS)
             executable = staging / "mc-installer-test"
-            command = ["g++", "-std=c++20", f"-I{staging}",
+            command = ["g++", "-std=c++20", f"-I{staging}", f"-I{ROOT / 'mc/include'}",
+                       f"-I{ROOT / 'runtime/include'}",
+                       str(ROOT / "mc/src/native_host_mc.cpp"),
                        str(staging / "harness.cpp"), "-o", str(executable)]
             result = subprocess.run(command, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
