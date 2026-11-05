@@ -145,8 +145,6 @@ def canonical_platform_name(platform: str) -> str:
 def container_name_for(args: argparse.Namespace) -> str:
     """Distinct container identifier per platform/variant so parallel runs do not collide."""
     platform = canonical_platform_name(args.platform)
-    if platform == "android":
-        return "aoe2-build-android"
     build_type = getattr(args, "build_type", "Debug").lower()
     suffix = "" if build_type == "debug" else f"-{build_type}"
     if getattr(args, "diagnostics", False):
@@ -221,12 +219,19 @@ def select_spec(platform: str, diagnostics: bool, build_type: str | None = None,
     commands = list(base.commands)
     test_commands = base.test_commands
     if canonical == "android":
-        build_dir = "build/docker-android"
         variant = "Release" if build_type_name == "release" else "Debug"
-        commands = [command.replace("assembleDebug", f"assemble{variant}")
-                    .replace("/apk/debug/app-debug.apk", f"/apk/{build_type_name}/app-{build_type_name}.apk")
-                    .replace("aoe2-recomp-debug.apk", f"aoe2-recomp-{build_type_name}.apk")
-                    for command in commands]
+        commands = [
+            command.replace("assembleDebug", f"assemble{variant}")
+            .replace("/apk/debug/app-debug.apk", f"/apk/{build_type_name}/app-{build_type_name}.apk")
+            .replace("aoe2-recomp-debug.apk", f"aoe2-recomp-{build_type_name}.apk")
+            for command in commands
+        ]
+        # Also maintain a backward-compatible copy in build/docker-android/ for existing tooling
+        commands.append(
+            f"if [ '{{build_dir}}' != '{CONTAINER_ROOT}/build/docker-android' ]; then "
+            f"mkdir -p {CONTAINER_ROOT}/build/docker-android && "
+            f"cp {{build_dir}}/aoe2-recomp-{build_type_name}.apk {CONTAINER_ROOT}/build/docker-android/aoe2-recomp-{build_type_name}.apk; fi"
+        )
         test_commands = tuple(command.replace("testDebugUnitTest", f"test{variant}UnitTest")
                               for command in test_commands)
     if canonical in ("desktop", "switch"):
@@ -285,7 +290,10 @@ def build_script(
     platform = "android" if spec.dockerfile.endswith("android/Dockerfile") else ("switch" if is_switch else "desktop")
     if spec.dockerfile.endswith("android/Dockerfile"):
         android_command_index = next(i for i, command in enumerate(commands) if "gradle --build-cache" in command)
-        commands[android_command_index] += " -Paoe2EnableHdAssets=" + str(enable_hd_assets).lower()
+        commands[android_command_index] += (
+            f" -Paoe2EnableHdAssets={str(enable_hd_assets).lower()}"
+            f" -Paoe2BuildType={build_type.lower()}"
+        )
     else:
         configure_index = next(i for i, command in enumerate(commands) if command.startswith("cmake -S "))
         if "-DAOE2_ENABLE_HD_ASSETS=" not in commands[configure_index]:

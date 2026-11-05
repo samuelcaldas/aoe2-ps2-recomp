@@ -48,6 +48,9 @@ def build_output(platform: str, build_type: str) -> Path:
         return REPO_ROOT / "build" / f"docker-desktop-{suffix}"
     if platform == "switch":
         return REPO_ROOT / "build" / f"docker-switch-{suffix}"
+    android_target = REPO_ROOT / "build" / f"docker-android-{suffix}"
+    if android_target.is_dir():
+        return android_target
     return REPO_ROOT / "build" / "docker-android"
 
 

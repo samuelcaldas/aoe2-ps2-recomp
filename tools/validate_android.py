@@ -33,8 +33,10 @@ IMAGE = "aoe2-build-android"
 DOCKER_CONTEXT = "docker-dev"
 PACKAGE = "com.aoe2.recomp"
 DEVICE_GAME_DIR = f"/storage/emulated/0/Android/data/{PACKAGE}/files"
-APK_RELEASE = "build/docker-android/aoe2-recomp-release.apk"
+APK_RELEASE = "build/docker-android-release/aoe2-recomp-release.apk"
 APK_DEBUG = "build/docker-android/aoe2-recomp-debug.apk"
+APK_RELEASE_LEGACY = "build/docker-android/aoe2-recomp-release.apk"
+APK_DEBUG_ISOLATED = "build/docker-android-debug/aoe2-recomp-debug.apk"
 GAME_DIR = "game/SLES-50282"
 EVIDENCE_DIR = "build/android-validation"
 SCREENSHOT_DIR = ".playwright-mcp/android"
@@ -116,9 +118,10 @@ def container_command(run_seconds: int, jobs: int = DEFAULT_JOBS, apk: str = APK
 
 
 def default_apk_path() -> str:
-    if (REPO_ROOT / APK_RELEASE).is_file():
-        return APK_RELEASE
-    return APK_DEBUG
+    for candidate in (APK_RELEASE, APK_RELEASE_LEGACY, APK_DEBUG_ISOLATED, APK_DEBUG):
+        if (REPO_ROOT / candidate).is_file():
+            return candidate
+    return APK_RELEASE
 
 
 def check_preflight(apk: str) -> None:
