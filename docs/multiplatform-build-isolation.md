@@ -22,7 +22,8 @@ All build outputs and artifacts are quarantined under dedicated, git-ignored sub
 | **Desktop Probe (Host)** | Local host systemd scope | `build/desktop-probe/` | `desktop_runtime_probe` (headless initialization check) |
 | **Nintendo Switch** | Docker (`aoe2-build-switch`) | `build/docker-switch/` | `aoe2_game_nro` (`aoe2_game.nro`), devkitA64 object cache |
 | **Nintendo Switch (Release / RelWithDebInfo)** | Docker (type-specific name) | `build/docker-switch-release/`, `build/docker-switch-relwithdebinfo/` | `aoe2_game.nro` |
-| **Android** | Docker (`aoe2-build-android`) | `build/docker-android/` & `platform/android/build/` | `build/docker-android/aoe2-recomp-release.apk` |
+| **Android (Debug)** | Docker (`aoe2-build-android`) | `build/docker-android/` & `build/android-cxx/debug` | `build/docker-android/aoe2-recomp-debug.apk` |
+| **Android (Release)** | Docker (`aoe2-build-android-release`) | `build/docker-android-release/` & `build/android-cxx/release` | `build/docker-android-release/aoe2-recomp-release.apk` |
 | **Host Scaffolding / Tests** | Local host developer shell | `build/` (or user-defined `build/local/`) | `aoe2_smoke_test`, `aoe2_input_tests` |
 
 ```mermaid
@@ -46,7 +47,7 @@ flowchart TD
 
 Different platforms require mutually incompatible toolchains and sysroots:
 - **Nintendo Switch** requires `Switch.cmake` and the `devkitA64` cross-toolchain provided by devkitPro. By repository policy, devkitPro is never installed directly on the host OS; it lives exclusively within `docker/switch/Dockerfile`.
-- **Android** requires the Android NDK, CMake toolchain (`android.toolchain.cmake`), and the Gradle build daemon. Gradle caches and builds are isolated under `build/docker-android/gradle-home` and `platform/android/build`.
+- **Android** requires the Android NDK, CMake toolchain (`android.toolchain.cmake`), and the Gradle build daemon. Gradle caches and builds are isolated per build type under `build/docker-android[-<type>]/gradle-home` and `build/android-cxx[-<type>]`.
 - **Desktop** uses host/container GNU/Clang compilers and Mesa OpenGL / X11 development headers.
 
 Because each Docker container runs with `-B {build_dir}` pointing to its dedicated path, CMake configuration caches (`CMakeCache.txt`), compiler response files, and Ninja build manifests (`build.ninja`) are never mixed.
@@ -69,10 +70,10 @@ All containerized build and test drivers enforce unique, non-colliding container
 | **Test** | Android Validation | `aoe2-validate-android` | `aoe2-validate-android` | `aoe2.platform=android`, `aoe2.role=validate` | `-j8` |
 
 ### Concurrency & Cache Guarantees:
-1. **Container Name Isolation**: Running `docker_build.py --platform desktop`, `docker_build.py --platform android`, and `docker_build.py --platform switch` simultaneously spins up distinct Release containers (`aoe2-build-desktop-release`, `aoe2-build-android`, `aoe2-build-switch-release`), avoiding Docker daemon name conflicts.
+1. **Container Name Isolation**: Running `docker_build.py --platform desktop`, `docker_build.py --platform android`, and `docker_build.py --platform switch` simultaneously spins up distinct Release containers (`aoe2-build-desktop-release`, `aoe2-build-android-release`, `aoe2-build-switch-release`), avoiding Docker daemon name conflicts.
 2. **Build Cache Preservation**:
-   - Desktop and Switch preserve intermediate CMake/Ninja `.o` and `.ninja_deps` files under `build/docker-desktop/` and `build/docker-switch/`.
-   - Android utilizes Gradle's `--build-cache` and isolates Gradle home cache in `build/docker-android/gradle-home` and native C++ in `build/android-cxx`.
+   - Desktop and Switch preserve intermediate CMake/Ninja `.o` and `.ninja_deps` files under `build/docker-desktop[-<type>]/` and `build/docker-switch[-<type>]/`.
+   - Android utilizes Gradle's `--build-cache` and isolates Gradle home cache in `build/docker-android[-<type>]/gradle-home` and native C++ in `build/android-cxx[-<type>]`.
    - HD asset staging acquires an exclusive file lock (`.staging.lock`) during preparation so concurrent builds never corrupt staged assets or manifests.
 3. **Default Parallelism**: All containerized commands default to `-j8` / `--cpus=8`.
 4. **Platform Aliases**: `--platform pc` is supported as an alias for `--platform desktop`.
