@@ -123,3 +123,17 @@ def drop_delay_slot_seeds(seeds: list, raw: bytes, load_address: int) -> list:
         if not _has_delay_slot(word):
             kept.append(address)
     return kept
+
+
+def direct_call_targets(raw: bytes, load_address: int, start: int, size: int, ranges: list) -> list:
+    """Direct JAL targets in file-backed executable ranges of the main image."""
+    found = set()
+    end = min(len(raw), start + size)
+    for offset in range(start, end - 3, 4):
+        word = int.from_bytes(raw[offset:offset + 4], "little")
+        if word >> 26 != OPCODE_JAL:
+            continue
+        target = ((load_address + offset + 4) & REGION_MASK) | ((word & 0x3FFFFFF) << 2)
+        if any(lo <= target and target + 4 <= hi for lo, hi in ranges):
+            found.add(target)
+    return sorted(found)

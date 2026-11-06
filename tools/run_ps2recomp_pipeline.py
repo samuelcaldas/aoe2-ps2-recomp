@@ -31,6 +31,10 @@ sys.path.insert(0, str(REPO_ROOT))
 from core.target import SINGLE_TARGET
 from tools import install_ghidra_ee_extension as ee_extension
 from tools import verify_function_map as function_map_guardrail
+from tools.kcet_resolver.elf_image import load_elf
+from tools.map_overlays import HEADER_BYTES, parse_overlay_header
+from tools.overlay_entries import direct_call_targets
+from tools.run_overlay_pipeline import code_bytes_for
 
 DATA_REGION_SCRIPT = REPO_ROOT / "tools" / "ghidra" / "MarkDataRegions.java"
 BODY_TRIM_SCRIPT = REPO_ROOT / "tools" / "ghidra" / "TrimDisjointFunctionBodies.java"
@@ -72,11 +76,11 @@ def get_java_version() -> str:
         return f"unknown ({e})"
 
 def build_ghidra_command(analyze_headless: Path, project_dir: Path, elf_path: Path,
-                         exporter_script: Path, toml_config: Path, csv_map: Path) -> list:
+                         exporter_script: Path, toml_config: Path, csv_map: Path, overlay_seeds: Path | None = None) -> list:
     """Compose the headless Ghidra run: import + analysis, data-region marking, then export."""
     script_path = f"{DATA_REGION_SCRIPT.parent};{exporter_script.parent}"
     max_return_gap = str(function_map_guardrail.DEFAULT_MAX_RETURN_GAP_BYTES)
-    return [
+    command = [
         str(analyze_headless), str(project_dir), "SLES_50282_Project",
         "-import", str(elf_path), "-overwrite",
         "-processor", ee_extension.LANGUAGE_ID,
@@ -84,8 +88,11 @@ def build_ghidra_command(analyze_headless: Path, project_dir: Path, elf_path: Pa
         "-postScript", BODY_TRIM_SCRIPT.name,
         "-postScript", DATA_REGION_SCRIPT.name, max_return_gap,
         "-postScript", DISCOVERY_SCRIPT.name,
-        "-postScript", exporter_script.name, str(toml_config), str(csv_map),
     ]
+    if overlay_seeds is not None:
+        command += ["-postScript", "SeedOverlayCalls.java", str(overlay_seeds)]
+    command += ["-postScript", exporter_script.name, str(toml_config), str(csv_map)]
+    return command
 
 def enforce_function_map_guardrail(csv_map: Path, elf_path: Path) -> dict:
     """Fail the pipeline before code generation if any entry spans data; return the guardrail record."""
@@ -216,9 +223,29 @@ def main():
     csv_map = generated_analysis_dir / "function_map.csv"
     toml_config = generated_analysis_dir / "SLES-50282.toml"
 
+    # Only calls in verified overlay code are candidates; Ghidra applies the final
+    # executable-region, instruction, ownership and delay-slot checks.
+    overlay_report = generated_analysis_dir / "overlay_map.json"
+    seeds_path = generated_analysis_dir / "overlay_main_calls.txt"
+    candidates = set()
+    if overlay_report.exists():
+        root = REPO_ROOT / "game" / SINGLE_TARGET.serial / Path(SINGLE_TARGET.disc_elf_path).parent
+        image = load_elf(elf_path)
+        ranges = [(base, base + len(data)) for base, data in image.code_segments()]
+        for overlay in json.loads(overlay_report.read_text())["overlays"]:
+            raw = (root / overlay["file"]).read_bytes()
+            if hashlib.sha256(raw).hexdigest() != overlay["sha256"]:
+                raise ValueError(f"overlay does not match verified inventory: {overlay['file']}")
+            header = parse_overlay_header(raw)
+            if header.overlay_id != overlay["segment_index"] or header.load_address != overlay["load_address"]:
+                raise ValueError(f"overlay header does not match inventory: {overlay['file']}")
+            candidates.update(direct_call_targets(raw, header.load_address, HEADER_BYTES,
+                                                  code_bytes_for(overlay["file"], header), ranges))
+    seeds_path.write_text("".join(f"0x{address:x}\n" for address in sorted(candidates)))
+
     # 4. Execute Ghidra headless analysis & export
     print(f"Executing authoritative headless Ghidra export using {exporter_script}...")
-    cmd = build_ghidra_command(analyze_headless, ghidra_proj_dir, elf_path, exporter_script, toml_config, csv_map)
+    cmd = build_ghidra_command(analyze_headless, ghidra_proj_dir, elf_path, exporter_script, toml_config, csv_map, seeds_path)
     subprocess.run(cmd, check=True)
 
     if not csv_map.exists() or not toml_config.exists():
@@ -276,11 +303,14 @@ def main():
         "data_region_script_sha256": compute_sha256(DATA_REGION_SCRIPT),
         "body_trim_script_sha256": compute_sha256(BODY_TRIM_SCRIPT),
         "function_discovery_script_sha256": compute_sha256(DISCOVERY_SCRIPT),
+        "overlay_call_seed_script_sha256": compute_sha256(DATA_REGION_SCRIPT.parent / "SeedOverlayCalls.java"),
+        "overlay_call_seeds_sha256": compute_sha256(seeds_path),
         "function_map_guardrail": guardrail_record,
         "ghidra_language": ee_extension.LANGUAGE_ID,
         "ghidra_extension_sha256": ee_extension.installed_digest(extensions_dir),
         "artifact_paths": [
             str(csv_map.relative_to(REPO_ROOT)),
+            str(seeds_path.relative_to(REPO_ROOT)),
             str(toml_config.relative_to(REPO_ROOT)),
             str(ghidra_proj_dir.relative_to(REPO_ROOT)),
             str(output_cpp_dir.relative_to(REPO_ROOT)),
