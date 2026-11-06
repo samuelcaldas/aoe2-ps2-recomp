@@ -3,7 +3,7 @@ import unittest
 from tests.test_kcet_resolver_elf import PF_RW, PF_RX, build_elf, code
 from tools.kcet_resolver.elf_image import ElfImage
 from tools.kcet_resolver.mips import jal
-from tools.overlay_entries import entry_targets, drop_delay_slot_seeds, seeds_for, switch_targets
+from tools.overlay_entries import direct_call_targets, entry_targets, drop_delay_slot_seeds, seeds_for, switch_targets
 
 BASE = 0x100000
 J = 0x08000000
@@ -95,3 +95,15 @@ class TestSwitchTargets(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestOverlayMainCalls(unittest.TestCase):
+    def test_only_direct_calls_within_ranges_are_candidates(self):
+        def jal(address):
+            return (3 << 26 | (address >> 2)).to_bytes(4, "little")
+        raw = jal(0x1000) + jal(0x2000) + (2 << 26 | (0x1004 >> 2)).to_bytes(4, "little")
+        self.assertEqual(direct_call_targets(raw, 0x100000, 0, len(raw), [(0x1000, 0x1100)]), [0x1000])
+
+    def test_scan_respects_code_bounds(self):
+        raw = (3 << 26 | (0x1000 >> 2)).to_bytes(4, "little") * 2
+        self.assertEqual(direct_call_targets(raw, 0, 4, 2, [(0x1000, 0x1100)]), [])

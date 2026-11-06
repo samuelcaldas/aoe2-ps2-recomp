@@ -29,6 +29,15 @@ class TestGhidraCommand(unittest.TestCase):
         expected = str(pipeline.function_map_guardrail.DEFAULT_MAX_RETURN_GAP_BYTES)
         self.assertEqual(self.command[mark_index + 1], expected)
 
+    def test_overlay_calls_are_seeded_after_data_marking_and_before_export(self):
+        command = pipeline.build_ghidra_command(
+            Path("/ghidra/support/analyzeHeadless"), Path("/repo/project"), Path("/repo/game.elf"),
+            Path("/repo/exporter/ExportPS2Functions.java"), Path("/repo/out.toml"),
+            Path("/repo/map.csv"), Path("/repo/seeds.txt"))
+        self.assertLess(command.index("MarkDataRegions.java"), command.index("SeedOverlayCalls.java"))
+        self.assertLess(command.index("SeedOverlayCalls.java"), command.index("ExportPS2Functions.java"))
+        self.assertEqual(command[command.index("SeedOverlayCalls.java") + 1], "/repo/seeds.txt")
+
     def test_imports_with_emotion_engine_language(self):
         processor = self.command[self.command.index("-processor") + 1]
         self.assertEqual(processor, pipeline.ee_extension.LANGUAGE_ID)
