@@ -13,6 +13,7 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       openjdk-21-jdk-headless wget unzip ca-certificates git python3 tzdata ninja-build \
       libpulse0 libgl1 libnss3 libxcomposite1 libxcursor1 libxi6 libxtst6 libasound2t64 libxkbfile1 \
+      xvfb x11vnc novnc websockify xdotool x11-apps imagemagick \
  && rm -rf /var/lib/apt/lists/*
 
 ARG CMDLINE_TOOLS_ZIP=commandlinetools-linux-11076708_latest.zip
