@@ -66,10 +66,21 @@ python3 tools/validate_android.py
 - **Container Name**: `aoe2-validate-android`
 - **Output Artifacts**: `build/docker-android/aoe2-recomp-debug.apk`, logcat in `build/android-validation/logcat.txt`, timed screenshots in `.playwright-mcp/android/`.
 
+### 5. Android Live Visual Inspection & Interactive Testing (noVNC)
+Starts a live visual inspection session with the Android emulator running inside the `aoe2-view-android` container with KVM hardware acceleration, streaming the screen and touch/pointer events over noVNC:
+
+```bash
+# Launch noVNC viewer container on port 6082
+python3 tools/view_android_novnc.py --port 6082
+```
+- **Container Name**: `aoe2-view-android`
+- **Access**: Open `http://localhost:6082/vnc.html` for standard desktop browser control or `http://localhost:6082/mobile/` for mobile touch navigation.
+- **Stop**: Press `Ctrl+C` in the terminal to cleanly terminate the container.
+
 ## Container Isolation & Cleanliness
 
 All validation runners enforce:
-- Unique container names (`aoe2-validate-desktop`, `aoe2-validate-switch`, `aoe2-view-switch`, `aoe2-validate-android`).
+- Unique container names (`aoe2-validate-desktop`, `aoe2-validate-switch`, `aoe2-view-switch`, `aoe2-validate-android`, `aoe2-view-android`).
 - Metadata labels (`aoe2.role=validate`, `aoe2.role=view`).
 - Default `-j8` parallelism.
 - Stale container cleanup on boot with fail-fast detection of active duplicates.

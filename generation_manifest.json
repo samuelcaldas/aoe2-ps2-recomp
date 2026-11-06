@@ -2,16 +2,17 @@
   "target_id": "SLES-50282",
   "elf_sha1": "f478e19f2059d52899b691483ef5c7522e30e17c",
   "function_map_source": "ghidra_export",
-  "ps2recomp_commit": "d1403becafb4660ce22798dc1dd041f37e4d9452",
+  "ps2recomp_commit": "71122b0e4be062be128f1c4699c6bec5f9cc1990",
+  "ps2recomp_codegen_tree": "e808f9529cd7a6d6cc00aa0f5222d8f5930f6035",
   "ghidra_version": "ghidra_12.1.4_PUBLIC",
   "java_version": "openjdk version \"25.0.4.1\" 2026-08-18",
   "exporter_script": "third_party/PS2Recomp/ps2xRecomp/tools/ghidra/ExportPS2Functions.java",
   "exporter_script_sha256": "9302f951e52e507d400eca02707e45b6da3b9c4ed55cdffbe600eea6e557081e",
-  "function_map_sha256": "8e244afb9e5e354d760d0f9e09ed9184fb95cff1b5d91fc30a6d0789ef2a11ae",
-  "toml_sha256": "788639b785b0e5d37af5eb8be1a6977024c2138704ba9bebd587c5c3f5e052f9",
-  "timestamp": "2026-10-30T10:42:16.934197+00:00",
-  "exported_function_count": 58552,
-  "generated_cpp_file_count": 58553,
+  "function_map_sha256": "6d9ff8b967e38b8053629c15240398a1cfaa6558b73b85e7533c075aca0e89d4",
+  "toml_sha256": "fd57dd1592c73db7cf2165ea56a00630939d12d31a12756e3239720fe2cd4006",
+  "timestamp": "2026-11-06T13:20:58.766808+00:00",
+  "exported_function_count": 58638,
+  "generated_cpp_file_count": 58639,
   "generated_output_dir": "generated/SLES-50282",
   "data_region_script": "tools/ghidra/MarkDataRegions.java",
   "data_region_script_sha256": "c54bb532e72dd648b66b428e1e2eeb478cbcc256cea17a10fe738d6982fe9151",
@@ -28,7 +29,9 @@
     "analysis/generated/function_map.csv",
     "analysis/generated/SLES-50282.toml",
     "analysis/ghidra",
-    "generated/SLES-50282"
+    "generated/SLES-50282",
+    "analysis/generated/overlay_main_calls.txt"
   ],
-  "ps2recomp_codegen_tree": "e808f9529cd7a6d6cc00aa0f5222d8f5930f6035"
+  "overlay_call_seed_script_sha256": "3d011e3a820fb0623b0463486cc9c4c30e5ad914c4605c6b3f10dc246c5c6115",
+  "overlay_call_seeds_sha256": "b94955059cd04460e5ead983ace9e8bb518b9693b109e41b9c3f90d1c81b0bef"
 }

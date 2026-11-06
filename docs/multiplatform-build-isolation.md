@@ -68,6 +68,7 @@ All containerized build and test drivers enforce unique, non-colliding container
 | **Test** | Switch Validation | `aoe2-validate-switch` | `aoe2-validate-switch` | `aoe2.platform=switch`, `aoe2.role=validate` | `-j8` |
 | **View** | Switch noVNC View | `aoe2-view-switch` | `aoe2-view-switch` | `aoe2.platform=switch`, `aoe2.role=view` | `-j8` |
 | **Test** | Android Validation | `aoe2-validate-android` | `aoe2-validate-android` | `aoe2.platform=android`, `aoe2.role=validate` | `-j8` |
+| **View** | Android noVNC View | `aoe2-view-android` | `aoe2-view-android` | `aoe2.platform=android`, `aoe2.role=view` | `-j8` |
 
 ### Concurrency & Cache Guarantees:
 1. **Container Name Isolation**: Running `docker_build.py --platform desktop`, `docker_build.py --platform android`, and `docker_build.py --platform switch` simultaneously spins up distinct Release containers (`aoe2-build-desktop-release`, `aoe2-build-android-release`, `aoe2-build-switch-release`), avoiding Docker daemon name conflicts.
@@ -88,7 +89,7 @@ In accordance with repository guidelines (`Screenshots only in .playwright-mcp`)
 | :--- | :--- | :--- | :--- |
 | **Desktop / PC** | `.playwright-mcp/pc/` | `desktop-validation-*.png`, `campaign-*.png`, scenario traces | `tools/validate_desktop.py`, `tools/drive_desktop_scenario.py` |
 | **Nintendo Switch** | `.playwright-mcp/switch/` | `screen-*.png`, Ryujinx headless captures, noVNC evidence | `tools/validate_switch.py`, `tools/view_switch_novnc.py` |
-| **Android** | `.playwright-mcp/android/` | `screen-*.png`, adb screencap dumps | `tools/validate_android.py` |
+| **Android** | `.playwright-mcp/android/` | `screen-*.png`, adb screencap dumps, noVNC evidence | `tools/validate_android.py`, `tools/view_android_novnc.py` |
 
 This directory hierarchy ensures that concurrent or sequential validation runs across different target platforms never overwrite or collide with each other's visual evidence.
 
