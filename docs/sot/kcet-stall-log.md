@@ -5,6 +5,31 @@ desktop diagnostic build (`tools/docker_build.py --platform desktop --diagnostic
 Addresses and game symbol names are kept out of this tracked file (see
 `docs/sot/prior-art-and-reuse.md` §4); the local run log is git-ignored.
 
+## Random Map start: audio status wait (2026-11-06)
+
+A Debug desktop run reproduced a black transition after Random Map → Start Game.
+The input path was checked visually with an isolated memory card. Repeated
+backtraces after the click placed the game thread in a bounded guest delay
+inside a sound-status wait; the delay counts to 16,777,216 between status
+queries, with a maximum of 256 queries in this phase. A register snapshot
+showed the fourth iteration in progress, so this is evidence of a very long
+wait rather than proof of an infinite loop. Runtime logging had stopped, but
+that alone did not establish a crash.
+
+The local KCET configuration installed the existing sound replacements. Their
+status handler always returns zero, whereas the first phase of this caller
+waits for status 4; the following phase waits for the status to change away
+from 4. Returning either fixed value cannot satisfy both phases. The current
+handler does not model the sound service's state or play the requested stream.
+
+A separate Release run with the sound replacements removed remained on the
+loading screen at the end of its scripted menu attempt. That observation does
+not establish whether the original service would eventually complete, and is
+not a gameplay pass. A correct fix needs a verified sound-service state and
+completion path, or a semantics-preserving optimization of the bounded delay;
+do not treat a fabricated status or a skipped wait as a confirmed fix. The
+local screenshots, run log, and GDB captures are ignored artifacts.
+
 ## Baseline result (before any new KCET hook)
 
 | Check | Result |
