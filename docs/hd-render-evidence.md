@@ -58,6 +58,9 @@ different routine. The host mapping is window → aspect-fit 640×512 frame →
 
 ### Two-point calibration (1920×1080)
 
+> **Note:** `calibration` now runs the shared Single Player → Random Map flow ([validation-scenarios.md](validation-scenarios.md)) and then the pointer moves; the `campaign` scenario was removed.
+
+
 `AOE2_LOG_POINTER=1 python3 tools/drive_desktop_scenario.py calibration --resolution 1920x1080`
 drives the campaign into the mission and then places the host pointer at the
 window positions of logical points (100, 120) and (520, 380).

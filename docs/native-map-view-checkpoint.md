@@ -22,6 +22,9 @@ The `campaign-auto` scenario preserves the successful profile/menu coordinates a
 
 ## Legacy campaign replay (2026-10-29)
 
+> **Note:** the `campaign` / `campaign-auto` desktop scenarios were removed. Replacement: `random-map-start` ([validation-scenarios.md](validation-scenarios.md)). The commands below record the historical campaign runs.
+
+
 Executed without either map-view environment variable:
 
 ```bash

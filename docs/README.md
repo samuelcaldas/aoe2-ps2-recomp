@@ -74,6 +74,7 @@ Subsystem-specific behavioral specifications:
 - **[`docs/plans/gs-independent-rendering.md`](plans/gs-independent-rendering.md)**: Ordered implementation tasks and acceptance gates for every screen without GS visual processing.
 - **[`docs/plans/expanded-viewport-native-implementation.md`](plans/expanded-viewport-native-implementation.md)**: Experimental map-specific implementation and validation gates.
 - **[`docs/plans/nifty-herding-pudding.md`](plans/nifty-herding-pudding.md)**: Completed RAM-expansion work and its validation record.
+- **[`docs/validation-scenarios.md`](validation-scenarios.md)**: Shared Single Player → Random Map → Start Game validation flow, per-platform input approaches, and measured menu points.
 - **[`docs/native-map-view-checkpoint.md`](native-map-view-checkpoint.md)**: Partial opt-in native map implementation, baseline replay and unresolved mission acceptance.
 
 ---
