@@ -40,7 +40,7 @@ Runs the compiled Switch NRO inside the `aoe2-validate-switch` container using h
 ```bash
 # Build the Debug NRO expected by the validator, then run the probe
 python3 tools/docker_build.py --platform switch --build-type Debug
-python3 tools/validate_switch.py --run-seconds 60 --timeout 120
+python3 tools/validate_switch.py --run-seconds 120
 ```
 - **Container Name**: `aoe2-validate-switch`
 - **Telemetry & Logs**: Captures Ryujinx execution logs, Horizon OS service calls, and frame rates in `build/switch-validation/run.log`; timed screenshots in `.playwright-mcp/switch/`.
