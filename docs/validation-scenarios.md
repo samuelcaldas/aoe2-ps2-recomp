@@ -47,11 +47,15 @@ report a PASS from the marker alone.
 
 ## Platform approach
 
+Preference: on any platform that has a joystick, the joystick drives the UI instead of the mouse or touch.
+The PC validator has no gamepad, so it stays on the mouse.
+
+
 | Platform | Input | Status |
 | :--- | :--- | :--- |
 | PC (desktop Linux, Xvfb) | Mouse: xdotool clicks at the measured points | Implemented. Driver: `tools/drive_desktop_scenario.py random-map-start`. |
-| Nintendo Switch (Ryujinx) | Pad: D-pad and Cross, and calibrated clicks, as the existing gated driver does | Not migrated. `tools/drive_switch_scenario.py` still has the campaign scenarios. |
-| Android (emulator) | Touch: `adb shell input tap` and native `AInputEvent` handling | Not implemented. Requires the native touch path and a live emulator run. |
+| Nintendo Switch (Ryujinx) | **Joystick first:** D-pad and Cross drive the menus. Pointer clicks only where the pad cannot reach the target. | Not migrated. `tools/drive_switch_scenario.py` still has the campaign scenarios. |
+| Android (emulator) | **Joystick first** when a controller is connected; otherwise touch (`adb shell input tap` and native `AInputEvent` handling) | Not implemented. Requires the native touch path and a live emulator run. |
 
 ## Measured points (PC)
 
