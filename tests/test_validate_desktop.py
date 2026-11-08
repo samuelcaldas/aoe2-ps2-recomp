@@ -32,12 +32,12 @@ class TestDesktopValidationPaths(unittest.TestCase):
             with patch.object(validation, "SCREENSHOT_DIR", tmp_path), \
                  patch("subprocess.run") as mock_run:
                 mock_run.return_value = Mock(stdout=b"fake-xwd")
-                dest = validation.capture_screenshot("campaign-auto-map-submitted.png")
+                dest = validation.capture_screenshot("random-map-start-map.png")
                 # Filename must have date fingerprint YYYYMMDD-HHMMSS
                 import re
-                self.assertTrue(re.search(r"campaign-auto-map-submitted-\d{8}-\d{6}(?:-\d+)?\.png$", dest.name))
+                self.assertTrue(re.search(r"random-map-start-map-\d{8}-\d{6}(?:-\d+)?\.png$", dest.name))
                 # Only the original fingerprinted image exists, no symlink
-                canonical = tmp_path / "campaign-auto-map-submitted.png"
+                canonical = tmp_path / "random-map-start-map.png"
                 self.assertFalse(canonical.exists())
                 self.assertFalse(canonical.is_symlink())
 
