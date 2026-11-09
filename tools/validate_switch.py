@@ -47,6 +47,11 @@ MEMORY_LIMIT = "12g"
 CONTAINER_NAME = "aoe2-validate-switch"
 DEFAULT_JOBS = 8
 EXIT_PASS, EXIT_FAIL, EXIT_PREFLIGHT = 0, 1, 2
+SCENARIO_CHOICES = ("smoke", "main-menu", "single-player", "random-map-start")
+REMOVED_SCENARIOS = {
+    "campaign": "use random-map-start",
+    "campaign-auto": "use random-map-start",
+}
 
 
 def ensure_container_clean(name: str) -> None:
@@ -243,10 +248,10 @@ def evidence_passed(
     frames = analyze_frames(screenshots, executor)
     if frames.real_frames < 2 or not frames.changed:
         return False
-    if scenario in ("campaign", "campaign-auto"):
+    if scenario == "random-map-start":
         # A log marker, a filename, and changing pixels cannot establish that
-        # the actual mission map is visible. Campaign acceptance requires
-        # visual inspection; do not report an automated PASS on that basis.
+        # the map is visible. Acceptance requires visual inspection of the
+        # per-checkpoint screenshots; do not report an automated PASS on that basis.
         return False
     return True
 
@@ -335,9 +340,9 @@ def main(argv: list | None = None) -> int:
     )
     parser.add_argument(
         "--scenario",
-        choices=["campaign", "campaign-auto", "smoke"],
-        default="smoke",
-        help="scenario to drive (default: smoke)",
+        choices=[*SCENARIO_CHOICES, *REMOVED_SCENARIOS],
+        default="random-map-start",
+        help="scenario to drive (default: random-map-start)",
     )
     parser.add_argument(
         "--jobs",
@@ -371,6 +376,8 @@ def main(argv: list | None = None) -> int:
         "--dry-run", action="store_true", help="print commands without executing them"
     )
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
+    if args.scenario in REMOVED_SCENARIOS:
+        parser.error(f"scenario {args.scenario!r} was removed; {REMOVED_SCENARIOS[args.scenario]}")
     if args.nro is None:
         args.nro = Path(RELEASE_NRO_PATH if args.build_type == "release" else NRO_PATH)
 

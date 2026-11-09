@@ -42,43 +42,16 @@ BOOT_TO_MENU = [
     ("profile-settle", "wait", None, 10),
 ]
 
+REMOVED_SCENARIOS = {
+    "campaign": "use random-map-start",
+    "campaign-auto": "use random-map-start",
+}
+# random-map-start runs the gated boot here, then the shared pad flow (drive_random_map).
 SCENARIOS = {
     "smoke": BOOT_TO_MENU[:3],
     "main-menu": BOOT_TO_MENU,
     "single-player": BOOT_TO_MENU + [("single-player", "click", (458, 85), 6)],
-    "campaign": BOOT_TO_MENU + [
-        ("single-player", "click", (458, 85), 8),
-        ("campaigns", "click", (418, 86), 15),
-        ("wallace-marker", "click", (221, 77), 15),
-        ("scenario-1", "click", (183, 57), 35),
-        ("briefing", "pad", "cross", 25),
-        ("briefing-next", "pad", "cross", 25),
-        ("mission-loading", "pad", "cross", 40),
-        ("brief-3", "pad", "cross", 25),
-        ("brief-4", "pad", "cross", 25),
-        ("brief-5", "pad", "cross", 35),
-        ("mission", "pad", "cross", 35),
-        ("mission-start", "pad", "cross", 50),
-        ("story-complete", "story-until", None, 12),
-        ("mission-live", "wait", None, 30),
-    ],
-    "campaign-auto": BOOT_TO_MENU + [
-        ("single-player", "click", (458, 85), 8),
-        ("campaigns", "click", (418, 86), 15),
-        ("wallace-marker", "click", (221, 77), 15),
-        ("scenario-1", "click", (183, 57), 35),
-        ("briefing", "pad", "cross", 25),
-        ("briefing-next", "pad", "cross", 25),
-        ("mission-loading", "pad", "cross", 40),
-        ("brief-3", "pad", "cross", 25),
-        ("brief-4", "pad", "cross", 25),
-        ("brief-5", "pad", "cross", 35),
-        ("mission", "pad", "cross", 35),
-        ("mission-start", "pad", "cross", 50),
-        ("story-complete", "story-until", None, 12),
-        ("map-submitted", "map-until", None, 600),
-        ("map-stability", "wait", None, 30),
-    ],
+    "random-map-start": BOOT_TO_MENU,
 }
 
 
@@ -544,6 +517,54 @@ def do_step(display: str, action: str, argument, settle: float, step_name: str =
     time.sleep(settle)
 
 
+def drive_random_map(
+    display: str,
+    log_path: Path,
+    screenshots_dir: Path,
+    mode: str,
+    settle_scale: float,
+    run_seconds: float,
+) -> bool:
+    """Run the shared Single Player -> Random Map -> Start Game flow with the joystick."""
+    from tools.scenarios import (
+        CheckpointRecorder,
+        LogMarkerWatcher,
+        RyujinxPadBackend,
+        ScenarioRunner,
+        random_map_pad_steps,
+    )
+
+    def shoot(name: str) -> Path:
+        path = screenshots_dir / name
+        capture_screenshot(path, display)
+        return path
+
+    def await_state(state: str, timeout: float) -> bool:
+        return wait_for_any_screen_state(display, {state}, timeout=timeout) == state
+
+    def click(point) -> None:
+        wx, wy = to_window_coords(point)
+        do_click(display, wx, wy, 0.4)
+
+    backend = RyujinxPadBackend(
+        send_key=lambda key: send_pad_button(display, key, 0.35),
+        click=click,
+    )
+    watcher = LogMarkerWatcher(log_path, is_alive=lambda: True)
+    recorder = CheckpointRecorder("switch", shoot)
+    runner = ScenarioRunner(
+        backend=backend,
+        await_marker=watcher.await_marker,
+        await_screen=await_state,
+        is_alive=lambda: True,
+        observer=recorder,
+        settle_scale=settle_scale,
+    )
+    result = runner.run(random_map_pad_steps())
+    print(f"[{mode}] random-map-start: passed={result.passed} failed_step={result.failed_step}", flush=True)
+    return result.passed
+
+
 def drive_scenario(
     scenario_name: str,
     mode: str,
@@ -557,7 +578,9 @@ def drive_scenario(
     """Drive the given scenario using controller buttons, saving mode-tagged screenshots."""
     factor = 10 if build_type == "debug" else 1
     log_path = evidence_dir / "run.log"
-    steps = SCENARIOS.get(scenario_name, SCENARIOS["campaign-auto"])
+    if scenario_name in REMOVED_SCENARIOS:
+        raise ValueError(f"scenario {scenario_name!r} was removed; {REMOVED_SCENARIOS[scenario_name]}")
+    steps = SCENARIOS[scenario_name]
     results = {
         "scenario": scenario_name,
         "mode": mode,
@@ -692,14 +715,29 @@ def drive_scenario(
             break
         results["completed_steps"].append(name)
 
-    results["success"] = len(results["completed_steps"]) == len(steps) and (results["map_submitted"] if scenario_name in ("campaign", "campaign-auto") else True)
+    if scenario_name == "random-map-start" and len(results["completed_steps"]) == len(steps):
+        flow_passed = drive_random_map(
+            display,
+            evidence_dir / "run.log",
+            screenshots_dir,
+            mode,
+            settle_scale=speed_factor * factor,
+            run_seconds=run_seconds,
+        )
+        results["map_submitted"] = flow_passed
+        results["completed_steps"].append("random-map-flow")
+        if not flow_passed:
+            results["failed_step"] = "random-map-flow"
+    results["success"] = len(results["completed_steps"]) == len(steps) + (1 if scenario_name == "random-map-start" else 0) and (
+        results["map_submitted"] if scenario_name == "random-map-start" else True
+    )
     return results
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mode", choices=["native", "gs"], default="native", help="rendering mode")
-    parser.add_argument("--scenario", choices=sorted(SCENARIOS), default="campaign-auto", help="scenario")
+    parser.add_argument("--scenario", choices=sorted(SCENARIOS), default="random-map-start", help="scenario")
     parser.add_argument("--display", default=DISPLAY_DEFAULT, help="X11 display")
     parser.add_argument("--evidence", type=Path, default=REPO_ROOT / "build/switch-validation", help="evidence dir")
     parser.add_argument("--screenshots", type=Path, default=REPO_ROOT / ".playwright-mcp/switch", help="shots dir")
