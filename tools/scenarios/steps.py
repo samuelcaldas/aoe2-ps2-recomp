@@ -26,6 +26,8 @@ class StepContext(Protocol):
 
     def await_marker(self, marker: bytes, timeout: float) -> bool: ...
 
+    def await_screen(self, state: str, timeout: float) -> bool: ...
+
 
 class InputBackend(Protocol):
     """Platform strategy: how a logical action reaches the guest."""
@@ -113,6 +115,24 @@ class Press(Step):
 @dataclass(frozen=True, kw_only=True)
 class Wait(Step):
     """Let the guest run for the settle time without input."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class AwaitScreen(Step):
+    """Wait until the detected on-screen state matches; fails on timeout."""
+
+    state: str
+    timeout_seconds: float
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if not self.state:
+            raise ValueError(f"step {self.name!r} needs a screen state")
+        if self.timeout_seconds <= 0:
+            raise ValueError(f"step {self.name!r} needs a positive timeout")
+
+    def perform(self, context: StepContext) -> bool:
+        return context.await_screen(self.state, self.timeout_seconds)
 
 
 @dataclass(frozen=True, kw_only=True)

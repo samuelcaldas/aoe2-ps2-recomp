@@ -9,6 +9,7 @@ from typing import Callable, Sequence
 from tools.scenarios.steps import InputBackend, Step
 
 MarkerWaiter = Callable[[bytes, float], bool]
+ScreenWaiter = Callable[[str, float], bool]
 
 
 @dataclass(frozen=True)
@@ -16,6 +17,10 @@ class RunResult:
     passed: bool
     completed: tuple[str, ...]
     failed_step: str | None = None
+
+
+def _no_screen_detector(state: str, timeout: float) -> bool:
+    raise RuntimeError(f"screen state {state!r} requested but no screen detector is configured")
 
 
 class CheckpointObserver:
@@ -37,6 +42,7 @@ class ScenarioRunner:
         backend: InputBackend,
         await_marker: MarkerWaiter,
         is_alive: Callable[[], bool],
+        await_screen: ScreenWaiter | None = None,
         observer: CheckpointObserver | None = None,
         settle_scale: float = 1.0,
         sleep: Callable[[float], None] = time.sleep,
@@ -46,6 +52,7 @@ class ScenarioRunner:
         self.backend = backend
         self._await_marker = await_marker
         self._is_alive = is_alive
+        self._await_screen = await_screen or _no_screen_detector
         self._observer = observer or CheckpointObserver()
         self._settle_scale = settle_scale
         self._sleep = sleep
@@ -55,6 +62,9 @@ class ScenarioRunner:
 
     def await_marker(self, marker: bytes, timeout: float) -> bool:
         return self._await_marker(marker, timeout * self._settle_scale)
+
+    def await_screen(self, state: str, timeout: float) -> bool:
+        return self._await_screen(state, timeout * self._settle_scale)
 
     def run(self, steps: Sequence[Step]) -> RunResult:
         self.boot()

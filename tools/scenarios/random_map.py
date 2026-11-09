@@ -6,7 +6,7 @@ Platforms differ only in their InputBackend (pointer, pad, touch); the step list
 from __future__ import annotations
 
 from tools.scenarios.layout import CALIBRATION_POINTS, MenuLayout
-from tools.scenarios.steps import AwaitMarker, Hover, Step, Tap, Wait
+from tools.scenarios.steps import AwaitMarker, AwaitScreen, Hover, Press, Step, Tap, Wait
 
 # Printed by the guest's diagnostic TTY when the map is submitted to the renderer.
 MAP_MARKER = b"[map-submit]"
@@ -45,4 +45,40 @@ def calibration_steps() -> tuple[Step, ...]:
     return tuple(
         Hover(name=f"calib-{x}-{y}", point=(x, y), settle_seconds=4)
         for x, y in CALIBRATION_POINTS
+    )
+
+
+# Game Settings focus order for the pad: Difficulty is focused on entry, and OK is the last
+# row. Each press gets a checkpoint so the first live run shows where the focus actually goes.
+GAME_SETTINGS_DOWN_PRESSES = 9
+
+
+def random_map_pad_steps() -> tuple[Step, ...]:
+    """Joystick flow for Switch: D-pad moves focus, Cross selects. No pointer input.
+
+    Screens with a detector (main menu, Single Player submenu) are gated by AwaitScreen. Others
+    rely on the settle time and checkpoints for the visual review.
+    """
+    focus_steps = tuple(
+        Press(
+            name=f"settings-focus-{index}",
+            button="down",
+            settle_seconds=1,
+            checkpoint=True,
+        )
+        for index in range(1, GAME_SETTINGS_DOWN_PRESSES + 1)
+    )
+    return (
+        AwaitScreen(name="main-menu", state="main_menu", timeout_seconds=90, checkpoint=True),
+        Press(name="single-player", button="cross", settle_seconds=5, checkpoint=True),
+        AwaitScreen(name="single-player-menu", state="single_player_menu", timeout_seconds=30, checkpoint=True),
+        Press(name="random-map-hover", button="down", settle_seconds=2, checkpoint=True),
+        Press(name="random-map", button="cross", settle_seconds=15, checkpoint=True),
+        Wait(name="game-settings", settle_seconds=3, checkpoint=True),
+    ) + focus_steps + (
+        Press(name="game-settings-ok", button="cross", settle_seconds=15, checkpoint=True),
+        Wait(name="player-setup", settle_seconds=3, checkpoint=True),
+        Press(name="start-game", button="cross", settle_seconds=15, checkpoint=True),
+        Wait(name="loading", settle_seconds=30, checkpoint=True),
+        AwaitMarker(name="map", marker=MAP_MARKER, timeout_seconds=MAP_TIMEOUT_SECONDS, checkpoint=True),
     )

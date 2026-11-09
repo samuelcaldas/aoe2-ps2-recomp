@@ -58,3 +58,43 @@ class XdotoolMouseBackend:
         self._run(["xdotool", "keydown", button])
         self._sleep(KEY_HOLD_SECONDS)
         self._run(["xdotool", "keyup", button])
+
+
+# Logical button names used by scenario steps -> xdotool key names for the Ryujinx pad mapping
+# (tools/validate_switch.py writes these bindings into the emulator config).
+PAD_KEYS = {
+    "up": "Up",
+    "down": "Down",
+    "left": "Left",
+    "right": "Right",
+    "cross": "z",
+    "circle": "x",
+    "start": "Return",
+    "select": "Minus",
+}
+
+
+class UnsupportedInputError(ValueError):
+    """Raised when a step asks for input the platform does not have."""
+
+
+class RyujinxPadBackend:
+    """Switch: the joystick drives the menus. Pointer taps exist only for the boot sequence,
+    which the pad cannot reach yet; the Random Map flow itself uses presses only."""
+
+    def __init__(self, send_key: Callable[[str], object], click: Callable[[Point], object]) -> None:
+        self._send_key = send_key
+        self._click = click
+
+    def press(self, button: str) -> None:
+        try:
+            key = PAD_KEYS[button]
+        except KeyError as error:
+            raise UnsupportedInputError(f"no pad mapping for {button!r}") from error
+        self._send_key(key)
+
+    def tap(self, point: Point) -> None:
+        self._click(point)
+
+    def hover(self, point: Point) -> None:
+        raise UnsupportedInputError("the pad has no pointer; hover steps are not valid on Switch")
