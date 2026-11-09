@@ -278,3 +278,65 @@ class XdotoolBackendTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RyujinxPadBackendTests(unittest.TestCase):
+    def test_presses_map_to_emulator_keys(self):
+        from tools.scenarios import RyujinxPadBackend
+
+        keys, clicks = [], []
+        backend = RyujinxPadBackend(keys.append, clicks.append)
+        backend.press("down")
+        backend.press("cross")
+        self.assertEqual(keys, ["Down", "z"])
+        self.assertEqual(clicks, [])
+
+    def test_unknown_buttons_and_hover_are_refused(self):
+        from tools.scenarios import RyujinxPadBackend, UnsupportedInputError
+
+        backend = RyujinxPadBackend(lambda key: None, lambda point: None)
+        with self.assertRaises(UnsupportedInputError):
+            backend.press("triangle-of-doom")
+        with self.assertRaises(UnsupportedInputError):
+            backend.hover((1, 1))
+
+    def test_tap_is_the_pointer_fallback_for_boot_only(self):
+        from tools.scenarios import RyujinxPadBackend
+
+        clicks = []
+        RyujinxPadBackend(lambda key: None, clicks.append).tap((251, 350))
+        self.assertEqual(clicks, [(251, 350)])
+
+
+class AwaitScreenTests(unittest.TestCase):
+    def test_awaits_the_detected_state_through_the_runner(self):
+        from tools.scenarios import AwaitScreen, ScenarioRunner
+
+        seen = []
+
+        def detector(state, timeout):
+            seen.append((state, timeout))
+            return state == "main_menu"
+
+        runner = ScenarioRunner(
+            backend=RecordingBackend(),
+            await_marker=lambda marker, timeout: True,
+            await_screen=detector,
+            is_alive=lambda: True,
+            sleep=lambda seconds: None,
+        )
+        result = runner.run((AwaitScreen(name="main-menu", state="main_menu", timeout_seconds=9),))
+        self.assertTrue(result.passed)
+        self.assertEqual(seen, [("main_menu", 9)])
+
+    def test_missing_detector_fails_loudly(self):
+        from tools.scenarios import AwaitScreen, ScenarioRunner
+
+        runner = ScenarioRunner(
+            backend=RecordingBackend(),
+            await_marker=lambda marker, timeout: True,
+            is_alive=lambda: True,
+            sleep=lambda seconds: None,
+        )
+        with self.assertRaises(RuntimeError):
+            runner.run((AwaitScreen(name="main-menu", state="main_menu", timeout_seconds=9),))

@@ -216,7 +216,7 @@ class TestSwitchValidationScript(unittest.TestCase):
                 )
             )
 
-    def test_campaign_rejects_false_positive_if_map_not_reached(self):
+    def test_random_map_start_never_reports_an_automated_map_pass(self):
         with tempfile.TemporaryDirectory() as directory:
             shots = [
                 str(Path(directory) / f"screen-native-{index}.png") for index in (1, 2)
@@ -231,15 +231,16 @@ class TestSwitchValidationScript(unittest.TestCase):
             # Progressing log without [map-submit] and screenshots without map in filename
             self.assertFalse(
                 validation.evidence_passed(
-                    True, PROGRESSING_LOG, shots, magick, scenario="campaign-auto"
+                    True, PROGRESSING_LOG, shots, magick, scenario="random-map-start"
                 )
             )
 
             # A map marker and changing frames do not prove a visible map.
+            # Acceptance is visual, so the automated verdict stays False even with [map-submit].
             map_log = PROGRESSING_LOG + "[map-submit] call=1 area=0x1000\n"
             self.assertFalse(
                 validation.evidence_passed(
-                    True, map_log, shots, magick, scenario="campaign-auto"
+                    True, map_log, shots, magick, scenario="random-map-start"
                 )
             )
 
@@ -255,9 +256,16 @@ class TestSwitchValidationScript(unittest.TestCase):
                     shots,
                     magick,
                     mode="native",
-                    scenario="campaign-auto",
+                    scenario="random-map-start",
                 )
             )
+
+    def test_removed_campaign_scenarios_are_rejected_by_the_validator(self):
+        for name in ("campaign", "campaign-auto"):
+            with self.subTest(name=name):
+                self.assertIn(name, validation.REMOVED_SCENARIOS)
+                self.assertNotIn(name, validation.SCENARIO_CHOICES)
+                self.assertEqual(validation.REMOVED_SCENARIOS[name], "use random-map-start")
 
     def test_native_rejects_observed_guest_framebuffer_and_gs_paths(self):
         shots = [f"screen-native-{index}.png" for index in (1, 2)]

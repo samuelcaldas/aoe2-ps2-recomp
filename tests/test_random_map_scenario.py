@@ -132,3 +132,23 @@ class PlatformNeutralTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PadFlowTests(unittest.TestCase):
+    def test_pad_flow_uses_presses_and_gates_known_screens(self):
+        from tools.scenarios import AwaitScreen, Press, random_map_pad_steps
+
+        steps = random_map_pad_steps()
+        self.assertEqual(steps[0].name, "main-menu")
+        self.assertIsInstance(steps[0], AwaitScreen)
+        self.assertEqual(steps[0].state, "main_menu")
+        self.assertTrue(all(isinstance(s, (Press, Wait, AwaitScreen, AwaitMarker)) for s in steps))
+        self.assertFalse(any(isinstance(s, (Tap, Hover)) for s in steps))
+
+    def test_pad_flow_ends_on_the_map_marker_and_keeps_checkpoints(self):
+        from tools.scenarios import random_map_pad_steps
+
+        steps = random_map_pad_steps()
+        self.assertEqual(steps[-1].name, "map")
+        self.assertEqual(steps[-1].marker, MAP_MARKER)
+        self.assertTrue(all(step.checkpoint for step in steps))
