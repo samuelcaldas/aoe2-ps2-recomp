@@ -54,7 +54,7 @@ The PC validator has no gamepad, so it stays on the mouse.
 | Platform | Input | Status |
 | :--- | :--- | :--- |
 | PC (desktop Linux, Xvfb) | Mouse: xdotool clicks at the measured points | Implemented. Driver: `tools/drive_desktop_scenario.py random-map-start`. |
-| Nintendo Switch (Ryujinx) | **Joystick first:** D-pad and Cross drive the menus. Pointer clicks only where the pad cannot reach the target. | Not migrated. `tools/drive_switch_scenario.py` still has the campaign scenarios. |
+| Nintendo Switch (Ryujinx) | **Joystick first:** D-pad and Cross drive the menus (`RyujinxPadBackend`, `random_map_pad_steps`). Pointer taps only in the boot sequence. | Implemented, not passed. The live run stops in the boot at player-name entry (see below). |
 | Android (emulator) | **Joystick first** when a controller is connected; otherwise touch (`adb shell input tap` and native `AInputEvent` handling) | Not implemented. Requires the native touch path and a live emulator run. |
 
 ## Measured points (PC)
@@ -70,6 +70,13 @@ the logical values are the inverse of that transform.
 | Game Settings neutral (closes the Map Type list) | (91, 290) | (120, 290) | Game Settings capture, empty parchment |
 | Game Settings OK | (249, 408) | (258, 408), box 212–305 × 396–420 | Game Settings capture |
 | Start Game | (289, 409) | (293, 409), box 245–342 × 400–420 | Player setup capture |
+
+## Switch status (2026-11-08)
+
+- `validate_switch.py --scenario random-map-start` is the default. `campaign` and `campaign-auto` are rejected with the "removed" message.
+- The live run (`--mode native`, Ryujinx) stopped in the gated boot at `profile-name-a`. The memory card is empty, so the New Player dialog is needed. `xdotool type` does not reach the PS2 name field, so the name stays empty and the boot stops. The same problem is why the PC driver enters the name with on-screen keyboard clicks. Switch needs the same pad-driven name entry, which is not explored yet.
+- The pad flow after the boot has not run yet. The Game Settings focus steps are assumptions, and the checkpoints from a run will show the real order.
+- `aoe2.iso` is in the persistent Switch sdcard (`build/switch-validation/ryujinx-data/sdcard/switch/aoe2/`). The setup script skips that file, so its origin needs checking. Devices must never receive the disc image.
 
 ## Known blocker: boot state and Start Game
 
